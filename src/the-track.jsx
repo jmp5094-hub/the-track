@@ -1,4 +1,59 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { initializeApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, orderBy, limit } from "firebase/firestore";
+
+// ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCCmWMDZvUgOvQz9fLhxQjd7y64DYSEcw8",
+  authDomain: "the-track-c8138.firebaseapp.com",
+  projectId: "the-track-c8138",
+  storageBucket: "the-track-c8138.firebasestorage.app",
+  messagingSenderId: "870178393224",
+  appId: "1:870178393224:web:eda929bd3d3ae2f8e2e33d",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const auth        = getAuth(firebaseApp);
+const db          = getFirestore(firebaseApp);
+
+// ─── FIREBASE HELPERS ─────────────────────────────────────────────────────────
+// User profile
+const fbGetUser    = async (uid) => { const d = await getDoc(doc(db,"users",uid)); return d.exists() ? d.data() : null; };
+const fbSaveUser   = async (uid, data) => setDoc(doc(db,"users",uid), data, {merge:true});
+const fbUpdateUser = async (uid, data) => updateDoc(doc(db,"users",uid), data);
+
+// Race schedule (shared across all users)
+const fbGetSchedule      = async () => { const d = await getDoc(doc(db,"global","schedule")); return d.exists() ? d.data() : null; };
+const fbSaveSchedule     = async (data) => setDoc(doc(db,"global","schedule"), data);
+const fbGetAuctionSchedule = async () => { const d = await getDoc(doc(db,"global","auctionSchedule")); return d.exists() ? d.data() : null; };
+const fbSaveAuctionSchedule = async (data) => setDoc(doc(db,"global","auctionSchedule"), data);
+
+// Race results (background runner writes, all users read)
+const fbGetRaceResults  = async () => { const d = await getDoc(doc(db,"global","raceResults")); return d.exists() ? d.data().results || {} : {}; };
+const fbSaveRaceResults = async (r) => setDoc(doc(db,"global","raceResults"), {results:r});
+
+// Per-user bets
+const fbGetConfirmed  = async (uid) => { const d = await getDoc(doc(db,"bets",uid)); return d.exists() ? d.data().confirmed || {} : {}; };
+const fbSaveConfirmed = async (uid, c) => setDoc(doc(db,"bets",uid), {confirmed:c});
+const fbGetPending    = async (uid) => { const d = await getDoc(doc(db,"bets",uid)); return d.exists() ? d.data().pending || {} : {}; };
+const fbSavePending   = async (uid, p) => setDoc(doc(db,"bets",uid), {pending:p}, {merge:true});
+
+// Per-user bet history
+const fbGetHistory  = async (uid) => { const d = await getDoc(doc(db,"history",uid)); return d.exists() ? d.data().entries || [] : []; };
+const fbSaveHistory = async (uid, h) => setDoc(doc(db,"history",uid), {entries:h});
+
+// Auctions
+const fbGetAuctions  = async () => { const d = await getDoc(doc(db,"global","auctions")); return d.exists() ? d.data().data || {} : {}; };
+const fbSaveAuctions = async (a) => setDoc(doc(db,"global","auctions"), {data:a});
+
+// Private races
+const fbGetPrivateRaces  = async () => { const d = await getDoc(doc(db,"global","privateRaces")); return d.exists() ? d.data().races || {} : {}; };
+const fbSavePrivateRaces = async (r) => setDoc(doc(db,"global","privateRaces"), {races:r});
+
+// Bank transactions
+const fbGetBankTx  = async (uid) => { const d = await getDoc(doc(db,"bank",uid)); return d.exists() ? d.data().txs || [] : []; };
+const fbSaveBankTx = async (uid, txs) => setDoc(doc(db,"bank",uid), {txs});
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const TRACK_SPACES   = 12;
@@ -134,6 +189,7 @@ const DICE_FACE = (n) => {
 };
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
+// Legacy sync stubs — kept for compatibility, Firebase is source of truth
 const getUsers   = () => { try { return JSON.parse(localStorage.getItem("tt_users")||"{}"); } catch { return {}; } };
 const saveUsers  = u  => localStorage.setItem("tt_users", JSON.stringify(u));
 const getHistory = () => { try { return JSON.parse(localStorage.getItem("tt_history")||"[]"); } catch { return []; } };
@@ -833,19 +889,40 @@ function Confetti() {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 function AuthScreen({ onLogin }) {
   const [mode,setMode]=useState("login");
-  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState("");
-  const go=()=>{
-    setErr("");
-    if(!u.trim()||!p.trim()){setErr("Fill in all fields.");return;}
-    const users=getUsers();
-    if(mode==="register"){
-      if(users[u]){setErr("Username taken.");return;}
-      users[u]={password:p,balance:1000,joined:Date.now()};
-      saveUsers(users); onLogin({username:u,balance:1000});
-    } else {
-      if(!users[u]||users[u].password!==p){setErr("Invalid credentials.");return;}
-      onLogin({username:u,balance:users[u].balance});
+  const [username,setUsername]=useState("");
+  const [email,setEmail]=useState("");
+  const [p,setP]=useState("");
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const go=async()=>{
+    setErr(""); setLoading(true);
+    if(!email.trim()||!p.trim()||(mode==="register"&&!username.trim())){
+      setErr("Fill in all fields."); setLoading(false); return;
     }
+    try {
+      if(mode==="register"){
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), p);
+        const uid = cred.user.uid;
+        await fbSaveUser(uid, { username: username.trim(), email: email.trim(), balance: 1000, joined: Date.now() });
+        onLogin({ uid, username: username.trim(), balance: 1000, email: email.trim() });
+      } else {
+        const cred = await signInWithEmailAndPassword(auth, email.trim(), p);
+        const uid = cred.user.uid;
+        const userData = await fbGetUser(uid);
+        if(!userData){ setErr("Account not found."); setLoading(false); return; }
+        onLogin({ uid, username: userData.username, balance: userData.balance, email: email.trim() });
+      }
+    } catch(e) {
+      const msg = e.code==="auth/email-already-in-use" ? "Email already registered."
+        : e.code==="auth/wrong-password"||e.code==="auth/invalid-credential" ? "Invalid email or password."
+        : e.code==="auth/user-not-found" ? "No account with that email."
+        : e.code==="auth/weak-password" ? "Password must be at least 6 characters."
+        : e.code==="auth/invalid-email" ? "Invalid email address."
+        : "Something went wrong. Try again.";
+      setErr(msg);
+    }
+    setLoading(false);
   };
   return (
     <div style={{minHeight:"100vh",background:"#08081a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -862,18 +939,30 @@ function AuthScreen({ onLogin }) {
           ))}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {[["Username",u,setU,"text"],["Password",p,setP,"password"]].map(([lbl,val,set,type])=>(
-            <div key={lbl}>
-              <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>{lbl}</label>
-              <input type={type} value={val} onChange={e=>set(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
+          {mode==="register" && (
+            <div>
+              <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>Username</label>
+              <input type="text" value={username} onChange={e=>setUsername(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
                 style={{width:"100%",marginTop:4,padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff1a",borderRadius:8,color:"#fff",fontSize:16,outline:"none"}}
                 onFocus={e=>e.target.style.borderColor="#00f5ff"} onBlur={e=>e.target.style.borderColor="#ffffff1a"}/>
             </div>
-          ))}
+          )}
+          <div>
+            <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>Email</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
+              style={{width:"100%",marginTop:4,padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff1a",borderRadius:8,color:"#fff",fontSize:16,outline:"none"}}
+              onFocus={e=>e.target.style.borderColor="#00f5ff"} onBlur={e=>e.target.style.borderColor="#ffffff1a"}/>
+          </div>
+          <div>
+            <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>Password</label>
+            <input type="password" value={p} onChange={e=>setP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
+              style={{width:"100%",marginTop:4,padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff1a",borderRadius:8,color:"#fff",fontSize:16,outline:"none"}}
+              onFocus={e=>e.target.style.borderColor="#00f5ff"} onBlur={e=>e.target.style.borderColor="#ffffff1a"}/>
+          </div>
         </div>
         {err&&<p style={{color:"#ff2d55",marginTop:10,fontSize:13,textAlign:"center"}}>{err}</p>}
-        <button onClick={go} style={{width:"100%",marginTop:20,padding:"14px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#00f5ff,#0080ff)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:14,letterSpacing:3,boxShadow:"0 0 24px #00f5ff44"}}>
-          {mode==="login"?"Enter The Track":"Create Account"}
+        <button onClick={go} disabled={loading} style={{width:"100%",marginTop:20,padding:"14px",borderRadius:10,border:"none",cursor:loading?"not-allowed":"pointer",background:"linear-gradient(135deg,#00f5ff,#0080ff)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:14,letterSpacing:3,boxShadow:"0 0 24px #00f5ff44",opacity:loading?0.7:1}}>
+          {loading?"...":(mode==="login"?"Enter The Track":"Create Account")}
         </button>
         <p style={{color:"#ffffff22",fontSize:11,textAlign:"center",marginTop:12,letterSpacing:1}}>New accounts start with $1,000 demo currency</p>
       </div>
@@ -924,7 +1013,7 @@ function ProfilePanel({ user, schedule, now, onClose, onGoToRace, onBalanceChang
             </button>
             <div>
               <h2 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:20,letterSpacing:2}}>{user.username}</h2>
-              <div style={{color:"#ffffff33",fontSize:11,marginTop:2}}>Member since {new Date(getUsers()[user.username]?.joined||Date.now()).toLocaleDateString()}</div>
+              <div style={{color:"#ffffff33",fontSize:11,marginTop:2}}>Member since {new Date(user?.joined||Date.now()).toLocaleDateString()}</div>
               <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13,marginTop:3}}>${fmt2(user.balance)}</div>
             </div>
           </div>
@@ -1479,7 +1568,7 @@ function BankPanel({ user, onClose, onBalanceChange }) {
   const [tab,    setTab]    = useState("summary"); // summary | deposit | withdraw
   const [amount, setAmount] = useState("");
   const [flash,  setFlash]  = useState(null); // {msg, ok}
-  const txs = getBankTx(user.username);
+  const [txs, setTxs] = useState([]); useEffect(()=>{ if(user?.uid) fbGetBankTx(user.uid).then(setTxs); },[user?.uid]);
 
   // Stats derived from transaction history
   const totalDeposited  = txs.filter(t=>t.type==="deposit" ).reduce((s,t)=>s+t.amount,0);
@@ -4664,8 +4753,9 @@ function App() {
 
   const [user,          setUser]          = useState(null);
   const [screen,        setScreen]        = useState("lobby");
-  const [schedule,      setSchedule]      = useState(()=>generateSchedule());
-  const [auctionSchedule, setAuctionSchedule] = useState(()=>generateAuctionSchedule());
+  const [schedule,      setSchedule]      = useState([]);
+  const [auctionSchedule, setAuctionSchedule] = useState([]);
+  const [scheduleLoaded, setScheduleLoaded] = useState(false);
   const [selectedRace,  setSelectedRace]  = useState(null);
   const [bets,          setBets]          = useState({});
   const [totalPot,      setTotalPot]      = useState(0);
@@ -4681,13 +4771,25 @@ function App() {
   const [devForceStart, setDevForceStart] = useState(false); // 🛠 DEV ONLY
   const [activePrivateRace, setActivePrivateRace] = useState(null); // private race code when racing privately
   const [now,           setNow]           = useState(Date.now());
-  const [userBets,      setUserBets]      = useState(()=>getPending());
+  const [userBets,      setUserBets]      = useState({});
   const [chatMsgs,      setChatMsgs]      = useState([]); // lifted so msgs persist countdown→race
   const [chatOpen,      setChatOpen]      = useState(false);
   const [chatUnread,    setChatUnread]    = useState(0);
   const [devSpeed,      setDevSpeed]      = useState(false); // 🛠 4x time
   const timeOffsetRef   = useRef(0);   // accumulated ms added by speed mode
   const lastTickRef     = useRef(Date.now());
+  const [_cachedRaceResults, _setCachedRaceResults] = useState({});
+
+  // Keep race results cache fresh from Firebase
+  useEffect(()=>{
+    const refresh = async () => {
+      const r = await fbGetRaceResults();
+      _setCachedRaceResults(r);
+    };
+    refresh();
+    const t = setInterval(refresh, 3000);
+    return ()=>clearInterval(t);
+  },[]);
 
   // Clock tick — also mark finished races based on bg results
   useEffect(()=>{
@@ -4699,7 +4801,7 @@ function App() {
       if(devSpeed) timeOffsetRef.current += realElapsed * 3; // 1x real + 3x extra = 4x
       _gameTimeOffset = timeOffsetRef.current;
       setNow(gameNow());
-      const results = getRaceResults();
+      const results = _cachedRaceResults;
       const t2 = gameNow();
       const dropRace = (r) => {
         const res = results[r.id];
@@ -4720,8 +4822,8 @@ function App() {
   // ── Background race runner ────────────────────────────────────────────────
   // Runs all scheduled races silently at their start time, stores results
   useEffect(()=>{
-    const runPending = () => {
-      const results = getRaceResults();
+    const runPending = async () => {
+      const results = await fbGetRaceResults();
       const now2 = gameNow();
       const allRaces = [...schedule, ...auctionSchedule];
       allRaces.forEach(race => {
@@ -4733,8 +4835,10 @@ function App() {
         // First roll fires at ~1.3s after race start, then every ROLL_INTERVAL ms
         const visualFinishAt = actualFireTime + 1300 + rolls * ROLL_INTERVAL;
         results[race.id] = { winner, rolls, finishedAt: now2, visualFinishAt, raceId: race.id };
+        await fbSaveRaceResults(results);
         // Auto-payout any confirmed bets for this race
-        const confirmed = getConfirmed();
+        if(!user?.uid) return;
+        const confirmed = await fbGetConfirmed(user.uid);
         const saved = confirmed[race.id];
         if(saved) {
           const activeBets = saved.bets || {};
@@ -4778,30 +4882,74 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  // Session restore
+  // Firebase auth state listener — handles session restore automatically
   useEffect(()=>{
-    const s=sessionStorage.getItem("tt_session");
-    if(s){try{const{u}=JSON.parse(s);const users=getUsers();if(users[u])setUser({username:u,balance:users[u].balance});}catch{}}
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if(firebaseUser) {
+        const userData = await fbGetUser(firebaseUser.uid);
+        if(userData) {
+          setUser({ uid: firebaseUser.uid, username: userData.username, balance: userData.balance, email: firebaseUser.email });
+          // Load user bets
+          const confirmed = await fbGetConfirmed(firebaseUser.uid);
+          // Convert to pending format for badge
+          setUserBets(confirmed);
+        }
+      } else {
+        setUser(null);
+        setUserBets({});
+      }
+    });
+    return () => unsub();
+  },[]);
+
+  // Load shared schedule from Firebase — generate fresh if expired or missing
+  useEffect(()=>{
+    const initSchedule = async () => {
+      const now2 = gameNow();
+      // Try loading from Firebase
+      const [saved, savedAuction] = await Promise.all([fbGetSchedule(), fbGetAuctionSchedule()]);
+      // Check if schedule is still valid (has future races)
+      const hasValidSchedule = saved?.races?.some(r => r.startTime > now2 - 60*60*1000);
+      const hasValidAuction  = savedAuction?.races?.some(r => r.startTime > now2 - 60*60*1000);
+      if(hasValidSchedule) {
+        setSchedule(saved.races);
+      } else {
+        const newSched = generateSchedule();
+        setSchedule(newSched);
+        fbSaveSchedule({ races: newSched, generatedAt: now2 });
+      }
+      if(hasValidAuction) {
+        setAuctionSchedule(savedAuction.races);
+      } else {
+        const newAuction = generateAuctionSchedule();
+        setAuctionSchedule(newAuction);
+        fbSaveAuctionSchedule({ races: newAuction, generatedAt: now2 });
+      }
+      setScheduleLoaded(true);
+    };
+    initSchedule();
   },[]);
 
   // Sync pending bets to state so navbar badge updates
-  const refreshPending=()=>setUserBets(getPending());
+  const refreshPending=async()=>{
+    if(!user?.uid) return;
+    const c = await fbGetConfirmed(user.uid);
+    setUserBets(c);
+  };
 
   const updateBalance=useCallback((nb)=>{
-    const users=getUsers();
-    if(users[user?.username]){users[user.username].balance=nb;saveUsers(users);}
+    if(user?.uid) fbUpdateUser(user.uid, {balance: nb});
     setUser(u=>u?{...u,balance:nb}:u);
   },[user]);
 
-  const handleLogin=u=>{setUser(u);sessionStorage.setItem("tt_session",JSON.stringify({u:u.username}));};
-  const handleLogout=()=>{sessionStorage.removeItem("tt_session");setUser(null);setScreen("lobby");};
+  const handleLogin=u=>{ setUser(u); };
+  const handleLogout=()=>{ signOut(auth); setUser(null); setScreen("lobby"); };
 
-  const handleEnterRace=(race)=>{
+  const handleEnterRace=async(race)=>{
     const st = raceStatus(race, gameNow());
-    const results = getRaceResults();
+    const results = _cachedRaceResults;
     const bgResult = results[race.id];
 
-    // Already finished with a result — show payout
     if(bgResult !== undefined && st === "finished") {
       setSelectedRace(race);
       setBets({});
@@ -4817,13 +4965,16 @@ function App() {
       setTotalPot(activePot);
       if(bgResult.payout > 0 && !bgResult.paid) {
         updateBalance((user?.balance||0) + bgResult.payout);
-        results[race.id].paid = true;
-        saveRaceResults(results);
-        const hist = getHistory();
-        Object.entries(activeBets).forEach(([hid,a])=>{
-          hist.push({user:user?.username,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[parseInt(hid)]||null,won:parseInt(hid)===bgResult.winner,payout:parseInt(hid)===bgResult.winner?bgResult.payout:0,time:Date.now(),raceName:race.name,raceType:race.type});
-        });
-        saveHistory(hist);
+        const updatedResults = {...results, [race.id]: {...results[race.id], paid: true}};
+        await fbSaveRaceResults(updatedResults);
+        _setCachedRaceResults(updatedResults);
+        if(user?.uid) {
+          const hist = await fbGetHistory(user.uid);
+          Object.entries(activeBets).forEach(([hid,a])=>{
+            hist.push({user:user?.username,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[parseInt(hid)]||null,won:parseInt(hid)===bgResult.winner,payout:parseInt(hid)===bgResult.winner?bgResult.payout:0,time:Date.now(),raceName:race.name,raceType:race.type});
+          });
+          await fbSaveHistory(user.uid, hist);
+        }
       }
       setWinner(bgResult.winner);
       setScreen("payout");
@@ -4853,71 +5004,62 @@ function App() {
 
   // Confirms/locks bets — saves to persistent store, race fires at post time
   // prevPot = amount already deducted for this race on a prior confirm (for edits)
-  const handleAuctionBetsConfirm=(finalBets, pot, prevPot=0)=>{
+  const handleAuctionBetsConfirm=async(finalBets, pot, prevPot=0)=>{
     const raceId = selectedAuctionRace?.id;
     if(!raceId) return;
     const delta = pot - prevPot;
     updateBalance(user.balance - delta);
-    const c=getConfirmed();
+    const c = await fbGetConfirmed(user.uid);
     c[raceId]={ bets:finalBets, pot, raceId };
-    saveConfirmed(c);
+    await fbSaveConfirmed(user.uid, c);
     sfx.betConfirm();
     setBets(finalBets); setTotalPot(pot);
-    setUserBets(getPending());
+    setUserBets(c);
   };
 
-  const handleBetsConfirm=(finalBets, pot, prevPot=0)=>{
-    // Only deduct the DELTA vs what was already reserved for this race
+  const handleBetsConfirm=async(finalBets, pot, prevPot=0)=>{
     const delta = pot - prevPot;
     updateBalance(user.balance - delta);
-    // Remove from draft pending store
-    const p=getPending(); delete p[selectedRace.id]; savePending(p);
-    // Write to confirmed store (persists across navigation)
-    const c=getConfirmed();
+    const c = await fbGetConfirmed(user.uid);
     c[selectedRace.id]={ bets:finalBets, pot, raceId:selectedRace.id };
-    saveConfirmed(c);
+    await fbSaveConfirmed(user.uid, c);
     sfx.betConfirm();
-    setUserBets(getPending());
+    setUserBets(c);
     setBets(finalBets); setTotalPot(pot);
   };
 
   // Called when race clock hits zero
-  const handleRaceStart=useCallback(()=>{
-    // Load confirmed bets for this race from persistent store
-    const c=getConfirmed();
-    const saved=c[selectedRace?.id];
-    if(saved){ setBets(saved.bets); setTotalPot(saved.pot); }
+  const handleRaceStart=useCallback(async()=>{
+    if(user?.uid) {
+      const c = await fbGetConfirmed(user.uid);
+      const saved = c[selectedRace?.id];
+      if(saved){ setBets(saved.bets); setTotalPot(saved.pot); }
+    }
     setScreen("race");
-  },[selectedRace?.id]);
+  },[selectedRace?.id, user?.uid]);
 
-  const handleRaceEnd=useCallback(winnerIdx=>{
+  const handleRaceEnd=useCallback(async(winnerIdx)=>{
     setWinner(winnerIdx);
 
     // ── PRIVATE RACE PATH ──
     if(activePrivateRace) {
-      const allPR = getPrivateRaces();
+      const allPR = await fbGetPrivateRaces();
       const pr    = allPR[activePrivateRace];
       if(pr) {
-        // Calculate pool = sum of all members' pots
         const members = pr.members || {};
         const totalPool = Object.values(members).reduce((s,m)=>s+(parseFloat(m.pot)||0),0);
-        // Calculate odds and payouts per member
         const memberResults = {};
         Object.entries(members).forEach(([uname,mdata])=>{
           const memberBets = mdata.bets || {};
           const myBetAmt   = parseFloat(memberBets[winnerIdx]||0);
-          // Odds: total pool / amount bet on winner by this member
           const totalOnWinner = Object.values(members).reduce((s,m)=>s+(parseFloat(m.bets?.[winnerIdx]||0)),0);
           const payout = totalOnWinner > 0 && myBetAmt > 0 ? (totalPool / totalOnWinner) * myBetAmt : 0;
           memberResults[uname] = { bets: memberBets, pot: mdata.pot||0, payout: parseFloat(payout.toFixed(2)), won: myBetAmt > 0 };
         });
-        // Save winner + results to private race record
         allPR[activePrivateRace] = { ...pr, finished:true, winner:winnerIdx, memberResults, finishedAt:Date.now() };
-        savePrivateRaces(allPR);
-        // Pay out current user
+        await fbSavePrivateRaces(allPR);
         const myResult = memberResults[user?.username];
         if(myResult?.payout > 0) updateBalance((user?.balance||0) + myResult.payout);
-        // Set odds for payout screen compatibility
         const calcOdds = {};
         const totalOnWinnerGlobal = Object.values(members).reduce((s,m)=>s+(parseFloat(m.bets?.[winnerIdx]||0)),0);
         if(totalOnWinnerGlobal > 0) calcOdds[winnerIdx] = parseFloat((totalPool / totalOnWinnerGlobal).toFixed(2));
@@ -4930,7 +5072,7 @@ function App() {
     }
 
     // ── NORMAL RACE PATH ──
-    const c=getConfirmed();
+    const c = user?.uid ? await fbGetConfirmed(user.uid) : {};
     const saved=c[selectedRace?.id];
     const activeBets=saved?.bets||bets;
     const activePot=saved?.pot||totalPot;
@@ -4939,24 +5081,31 @@ function App() {
     setOdds(calcOdds);
     const amt=parseFloat(activeBets[winnerIdx]||0);
     const payout=amt>0&&calcOdds[winnerIdx]?amt*calcOdds[winnerIdx]:0;
-    // Only pay if background runner didn't already pay
-    const bgResults = getRaceResults();
+    const bgResults = _cachedRaceResults;
     const bgResult  = bgResults[selectedRace?.id];
-    if(!bgResult?.paid) {
+    if(!bgResult?.paid && user?.uid) {
       updateBalance((user?.balance||0)+payout);
-      const hist=getHistory();
+      const hist = await fbGetHistory(user.uid);
       Object.entries(activeBets).forEach(([hid,a])=>{
         hist.push({user:user?.username,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[hid]?parseFloat(calcOdds[hid].toFixed(2)):null,won:parseInt(hid)===winnerIdx,payout:parseInt(hid)===winnerIdx?parseFloat(payout.toFixed(2)):0,time:Date.now(),raceName:selectedRace?.name,raceType:selectedRace?.type});
       });
-      saveHistory(hist);
-      // Mark as paid in bg results
-      if(bgResult) { bgResults[selectedRace?.id].paid=true; saveRaceResults(bgResults); }
+      await fbSaveHistory(user.uid, hist);
+      if(bgResult) {
+        const updatedBg = {...bgResults, [selectedRace?.id]:{...bgResult, paid:true}};
+        await fbSaveRaceResults(updatedBg);
+        _setCachedRaceResults(updatedBg);
+      }
     }
-    clearConfirmedRace(selectedRace?.id);
+    // Remove from confirmed
+    if(user?.uid) {
+      const newC = {...c}; delete newC[selectedRace?.id];
+      await fbSaveConfirmed(user.uid, newC);
+      setUserBets(newC);
+    }
     setBets(activeBets); setTotalPot(activePot);
     setSchedule(s=>s.map(r=>r.id===selectedRace?.id?{...r,status:"finished"}:r));
     setScreen("payout");
-  },[bets,totalPot,odds,user,selectedRace,activePrivateRace,updateBalance]);
+  },[bets,totalPot,odds,user,selectedRace,activePrivateRace,updateBalance,_cachedRaceResults]);
 
   // Launch a private race — build a synthetic race object and go straight to RaceScreen
   const handleLaunchPrivateRace = (privateRace) => {
