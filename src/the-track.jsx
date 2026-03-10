@@ -5,7 +5,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query
 
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyCCmWMDZvUgOvQz9fLhxQjd7y64DYSEcw8",
+  apiKey: "AIzaSyCCmWWDZvUgOvQz9fLhxQjd7y64DYSEcw8",
   authDomain: "the-track-c8138.firebaseapp.com",
   projectId: "the-track-c8138",
   storageBucket: "the-track-c8138.firebasestorage.app",
@@ -914,12 +914,16 @@ function AuthScreen({ onLogin }) {
         onLogin({ uid, username: userData.username, balance: userData.balance, email: email.trim() });
       }
     } catch(e) {
+      console.error("Firebase auth error:", e.code, e.message);
       const msg = e.code==="auth/email-already-in-use" ? "Email already registered."
         : e.code==="auth/wrong-password"||e.code==="auth/invalid-credential" ? "Invalid email or password."
         : e.code==="auth/user-not-found" ? "No account with that email."
         : e.code==="auth/weak-password" ? "Password must be at least 6 characters."
         : e.code==="auth/invalid-email" ? "Invalid email address."
-        : "Something went wrong. Try again.";
+        : e.code==="auth/unauthorized-domain" ? "Domain not authorized. Check Firebase settings."
+        : e.code==="auth/operation-not-allowed" ? "Email auth not enabled in Firebase."
+        : e.code==="auth/network-request-failed" ? "Network error. Check connection."
+        : `Error: ${e.code}`;
       setErr(msg);
     }
     setLoading(false);
