@@ -4000,6 +4000,12 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
     ? vw - trackPadX*2 - sideLabelW - 4
     : Math.min(vw - trackPadX*2 - sideLabelW, isMobile ? vw-sideLabelW-16 : 860-sideLabelW);
   const cellSize   = Math.floor(availW / (TRACK_SPACES + 1));
+  // Scale UI elements proportionally to cell size (base cell ~52px on mobile)
+  const cellScale  = Math.max(1, cellSize / 52);
+  const emojiSize  = Math.round(14 * cellScale);
+  const labelSize  = Math.max(9, Math.round(9 * cellScale));
+  const subLabelSize = Math.max(7, Math.round(7 * cellScale));
+  const colNumSize = Math.max(9, Math.round(9 * cellScale));
 
   // Which horses the user has money on
   const betOnHorses = new Set(Object.keys(bets||{}).map(Number).filter(k=>parseFloat(bets[k]||0)>0));
@@ -4098,7 +4104,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:`${trackPadY}px ${trackPadX}px`,overflow:"hidden",position:"relative",zIndex:2}}>
           <div style={{display:"flex",marginBottom:2,marginLeft:sideLabelW+6}}>
             {Array.from({length:phase==="tiebreak"?TIEBREAK_SPACES:TRACK_SPACES}).map((_,ci)=>(
-              <div key={ci} style={{width:cellSize,flexShrink:0,textAlign:"center",fontSize:9,color:
+              <div key={ci} style={{width:cellSize,flexShrink:0,textAlign:"center",fontSize:colNumSize,color:
                 race.type==="hurdle"&&ci===HURDLE_CELL?"#ff6b0077":
                 phase!=="tiebreak"&&race.type!=="down_back"&&race.type!=="magic_dice"&&ci===TRACK_SPACES-1?"#ffd70055":"#ffffff18",
                 fontWeight:race.type==="hurdle"&&ci===HURDLE_CELL?700:400
@@ -4115,20 +4121,20 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             const isHot=onFire[hi];
             const isMoved=movedHorses.includes(hi);
             const flameLayers = isHot ? <>
-              <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:-23,width:46,height:58,borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ff4500dd 0%, #ff6b00aa 40%, transparent 72%)",animation:"flameA 0.45s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
-              <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:-15,width:30,height:46,borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffd700cc 0%, #ff450099 45%, transparent 72%)",animation:"flameB 0.38s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
-              <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:-8,width:16,height:32,borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+              <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-23*cellScale),width:Math.round(46*cellScale),height:Math.round(58*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ff4500dd 0%, #ff6b00aa 40%, transparent 72%)",animation:"flameA 0.45s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+              <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-15*cellScale),width:Math.round(30*cellScale),height:Math.round(46*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffd700cc 0%, #ff450099 45%, transparent 72%)",animation:"flameB 0.38s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+              <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
             </> : null;
             const burstAnim = gateBurst ? "gateBurst 0.5s ease-out" : undefined;
             const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:returning?<span style={{filter:coat,position:"relative",zIndex:2,animation:isMoved?"slideHorseReturn 0.3s ease-out":undefined}}>🐴</span>:<span style={{display:"inline-block",transform:"scaleX(-1)",filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorse 0.3s ease-out":undefined)}}>🐴</span>;
             return (
               <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s"}}>
                 <div style={{width:sideLabelW,flexShrink:0,paddingRight:4,display:"flex",flexDirection:"column"}}>
-                  <span style={{color:isActive?h.color:"#ffffff44",fontWeight:700,fontSize:9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",transition:"color 0.2s",textShadow:isActive?`0 0 8px ${h.color}`:""}}>
+                  <span style={{color:isActive?h.color:"#ffffff44",fontWeight:700,fontSize:labelSize,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",transition:"color 0.2s",textShadow:isActive?`0 0 8px ${h.color}`:""}}>
                     {horseName(race,h.id).split(" ")[0]}
                   </span>
-                  {auctionOwners?.[hi] && <span style={{fontSize:7,color:"#ffd70099",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🔨{auctionOwners[hi].username}</span>}
-                  <span style={{fontSize:8,color:isJumping?"#39ff14":isSkip?"#ff6b00":returning?"#bf5fff":isActive&&!winner?"#00f5ff33":"transparent"}}>
+                  {auctionOwners?.[hi] && <span style={{fontSize:subLabelSize,color:"#ffd70099",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🔨{auctionOwners[hi].username}</span>}
+                  <span style={{fontSize:Math.max(8,Math.round(8*cellScale)),color:isJumping?"#39ff14":isSkip?"#ff6b00":returning?"#bf5fff":isActive&&!winner?"#00f5ff33":"transparent"}}>
                     {isJumping?"🌟":isSkip?"🚧":returning?"◀":""}
                   </span>
                 </div>
@@ -4136,7 +4142,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                   {(()=>{
                     const isHomeFinish=(race.type==="down_back"||race.type==="magic_dice")&&returning;
                     const horseHere=pos===0;
-                    return <div style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,background:horseHere?"rgba(255,255,255,0.06)":isHomeFinish?"rgba(255,215,0,0.06)":"rgba(255,255,255,0.02)",border:isHomeFinish?"1px solid #ffd70033":"1px solid #ffffff0a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,marginRight:2}}>
+                    return <div style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,background:horseHere?"rgba(255,255,255,0.06)":isHomeFinish?"rgba(255,215,0,0.06)":"rgba(255,255,255,0.02)",border:isHomeFinish?"1px solid #ffd70033":"1px solid #ffffff0a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,marginRight:2}}>
                       {horseHere?<span style={{display:"inline-block",transform:"scaleX(-1)",filter:coat}}>🐴</span>:isHomeFinish?"🏁":""}
                     </div>;
                   })()}
@@ -4145,9 +4151,9 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     const isHurdle=race.type==="hurdle"&&ci===HURDLE_CELL;
                     const isFinish=phase==="tiebreak"?ci===TIEBREAK_SPACES-1:(race.type==="down_back"||race.type==="magic_dice")?false:ci===TRACK_SPACES-1;
                     const betGlow = isBet && hasHorse ? `0 0 20px ${h.color}, 0 0 40px ${h.color}88` : hasHorse ? `0 0 14px ${h.color},0 0 28px ${h.color}55` : isHurdle?"0 0 10px #ff6b0066":"none";
-                    return <div key={ci} style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,position:"relative",background:hasHorse?`${h.color}1e`:passed?"rgba(255,255,255,0.015)":ci%2===0?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.018)",border:hasHorse&&isBet?`2px solid ${h.color}`:hasHorse?`2px solid ${h.color}`:isHurdle?"2px solid #ff6b00":isFinish?"1px solid #ffd70033":"1px solid rgba(255,255,255,0.05)",boxShadow:betGlow,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,transition:"box-shadow 0.15s",animation:isHurdle&&!hasHorse?"hurdlePulse 1.2s ease-in-out infinite":isBet&&hasHorse?"betPulse 1.4s ease-in-out infinite":"none","--bet-glow":`0 0 16px ${h.color}, 0 0 32px ${h.color}66`,"--bet-glow-bright":`0 0 28px ${h.color}, 0 0 56px ${h.color}aa`}}>
+                    return <div key={ci} style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,position:"relative",background:hasHorse?`${h.color}1e`:passed?"rgba(255,255,255,0.015)":ci%2===0?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.018)",border:hasHorse&&isBet?`2px solid ${h.color}`:hasHorse?`2px solid ${h.color}`:isHurdle?"2px solid #ff6b00":isFinish?"1px solid #ffd70033":"1px solid rgba(255,255,255,0.05)",boxShadow:betGlow,display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,transition:"box-shadow 0.15s",animation:isHurdle&&!hasHorse?"hurdlePulse 1.2s ease-in-out infinite":isBet&&hasHorse?"betPulse 1.4s ease-in-out infinite":"none","--bet-glow":`0 0 16px ${h.color}, 0 0 32px ${h.color}66`,"--bet-glow-bright":`0 0 28px ${h.color}, 0 0 56px ${h.color}aa`}}>
                       {hasHorse?horseEmoji:isHurdle?"🚧":isFinish?"🏁":""}
-                      {hasHorse&&isBet&&<span style={{position:"absolute",top:1,right:2,fontSize:7,opacity:0.55,lineHeight:1}}>💰</span>}
+                      {hasHorse&&isBet&&<span style={{position:"absolute",top:1,right:2,fontSize:Math.max(7,Math.round(7*cellScale)),opacity:0.55,lineHeight:1}}>💰</span>}
                       {hasHorse&&isMoved&&<>
                         <div style={{position:"absolute",inset:0,overflow:"hidden",borderRadius:4,pointerEvents:"none",zIndex:3}}>
                           <div style={{position:"absolute",top:"30%",left:0,width:"60%",height:1.5,background:`linear-gradient(90deg,transparent,${h.color}cc,transparent)`,animation:"speedLine 0.35s ease-out forwards"}}/>
@@ -4197,9 +4203,9 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                 const isHot=onFire[hi];
                 const isMoved=movedHorses.includes(hi);
                 const flameLayers = isHot ? <>
-                  <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:-23,width:46,height:58,borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ff4500dd 0%, #ff6b00aa 40%, transparent 72%)",animation:"flameA 0.45s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
-                  <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:-15,width:30,height:46,borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffd700cc 0%, #ff450099 45%, transparent 72%)",animation:"flameB 0.38s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
-                  <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:-8,width:16,height:32,borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+                  <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-23*cellScale),width:Math.round(46*cellScale),height:Math.round(58*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ff4500dd 0%, #ff6b00aa 40%, transparent 72%)",animation:"flameA 0.45s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+                  <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-15*cellScale),width:Math.round(30*cellScale),height:Math.round(46*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffd700cc 0%, #ff450099 45%, transparent 72%)",animation:"flameB 0.38s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
+                  <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
                 </> : null;
                 const burstAnim = gateBurst ? "gateBurstPortrait 0.5s ease-out" : undefined;
                 const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:<span style={{filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorseReturn 0.3s ease-out":undefined)}}>🐴</span>;
