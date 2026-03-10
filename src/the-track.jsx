@@ -4562,7 +4562,6 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default 
 // ── Pure background race simulator (no React, no animations) ─────────────────
 function simRace(raceType, condition, seed) {
   const SPACES = 12, TB = 3, HURDLE = 5;
