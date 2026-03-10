@@ -4949,7 +4949,7 @@ function App() {
   const handleLogin=u=>{ setUser(u); };
   const handleLogout=()=>{ signOut(auth); setUser(null); setScreen("lobby"); };
 
-  const handleEnterRace=async(race)=>{
+  const handleEnterRace=async(race)=>{ // async only needed for payout path
     const st = raceStatus(race, gameNow());
     const results = _cachedRaceResults;
     const bgResult = results[race.id];
@@ -5033,14 +5033,12 @@ function App() {
   };
 
   // Called when race clock hits zero
-  const handleRaceStart=useCallback(async()=>{
-    if(user?.uid) {
-      const c = await fbGetConfirmed(user.uid);
-      const saved = c[selectedRace?.id];
-      if(saved){ setBets(saved.bets); setTotalPot(saved.pot); }
-    }
+  const handleRaceStart=useCallback(()=>{
+    // userBets is already loaded and kept in sync — no need to await Firebase here
+    const saved = userBets[selectedRace?.id];
+    if(saved){ setBets(saved.bets); setTotalPot(saved.pot); }
     setScreen("race");
-  },[selectedRace?.id, user?.uid]);
+  },[selectedRace?.id, userBets]);
 
   const handleRaceEnd=useCallback(async(winnerIdx)=>{
     setWinner(winnerIdx);
