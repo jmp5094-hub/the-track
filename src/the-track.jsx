@@ -4826,35 +4826,35 @@ function App() {
       const results = await fbGetRaceResults();
       const now2 = gameNow();
       const allRaces = [...schedule, ...auctionSchedule];
-      allRaces.forEach(race => {
-        if(results[race.id] !== undefined) return; // already done
+      let changed = false;
+      for(const race of allRaces) {
+        if(results[race.id] !== undefined) continue;
         const actualFireTime = race.isAuction ? race.startTime + 30000 : race.startTime;
-        if(actualFireTime > now2) return;
+        if(actualFireTime > now2) continue;
         const { winner, rolls } = simRace(race.type, race.condition||"sunny", race.seed);
-        // visualFinishAt = when the race visually ends based on roll count
-        // First roll fires at ~1.3s after race start, then every ROLL_INTERVAL ms
         const visualFinishAt = actualFireTime + 1300 + rolls * ROLL_INTERVAL;
         results[race.id] = { winner, rolls, finishedAt: now2, visualFinishAt, raceId: race.id };
-        await fbSaveRaceResults(results);
-        // Auto-payout any confirmed bets for this race
-        if(!user?.uid) return;
-        const confirmed = await fbGetConfirmed(user.uid);
-        const saved = confirmed[race.id];
-        if(saved) {
-          const activeBets = saved.bets || {};
-          const activePot  = saved.pot  || 0;
-          const myBet = parseFloat(activeBets[winner] || 0);
-          // totalOnWinner = sum of all bets on the winning horse
-          const totalOnWinner = Object.entries(activeBets).reduce((s,[hid,v])=>parseInt(hid)===winner?s+(parseFloat(v)||0):s, 0);
-          const payout = myBet > 0 && totalOnWinner > 0 ? (activePot / totalOnWinner) * myBet : 0;
-          results[race.id].confirmedBets = activeBets;
-          results[race.id].confirmedPot  = activePot;
-          results[race.id].payout = payout;
-          results[race.id].username = saved.username || null;
-          clearConfirmedRace(race.id);
+        changed = true;
+        // Auto-payout confirmed bets
+        if(user?.uid) {
+          const confirmed = await fbGetConfirmed(user.uid);
+          const saved = confirmed[race.id];
+          if(saved) {
+            const activeBets = saved.bets || {};
+            const activePot  = saved.pot  || 0;
+            const myBet = parseFloat(activeBets[winner] || 0);
+            const totalOnWinner = Object.entries(activeBets).reduce((s,[hid,v])=>parseInt(hid)===winner?s+(parseFloat(v)||0):s, 0);
+            const payout = myBet > 0 && totalOnWinner > 0 ? (activePot / totalOnWinner) * myBet : 0;
+            results[race.id].confirmedBets = activeBets;
+            results[race.id].confirmedPot  = activePot;
+            results[race.id].payout = payout;
+          }
         }
-      });
-      saveRaceResults(results);
+      }
+      if(changed) {
+        await fbSaveRaceResults(results);
+        _setCachedRaceResults(results);
+      }
     };
 
     runPending(); // run immediately
