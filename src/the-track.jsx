@@ -245,8 +245,9 @@ const saveConfirmed = c  => localStorage.setItem("tt_confirmed", JSON.stringify(
 const clearConfirmedRace = raceId => { const c=getConfirmed(); delete c[raceId]; saveConfirmed(c); };
 
 // ── Auction storage ────────────────────────────────────────────────────────────
-const getAuctions  = () => { try { return JSON.parse(localStorage.getItem("tt_auctions")||"{}"); } catch { return {}; } };
-const saveAuctions = a  => localStorage.setItem("tt_auctions", JSON.stringify(a));
+// Auctions are now fully Firestore-backed — these are no-ops kept for safety
+const getAuctions  = () => ({});
+const saveAuctions = () => {};
 
 // ─── HORSE NAME GENERATOR ────────────────────────────────────────────────────
 // Calls Claude API to generate 6 unique funny/creative horse names for a race
@@ -2127,85 +2128,92 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const currentHorseId = race.horseOrder?.[currentSlot] ?? currentSlot;
   const currentHorse   = HORSES[currentHorseId] || HORSES[0];
 
-  // ── Auction data ──────────────────────────────────────────────────────────
-  const [aData, setAData] = useState(()=>getAuctions()[race.id]||{owners:{},bids:{},pot:0});
+  // ── Auction data — real-time from Firestore ──────────────────────────────
+  const [aData, setAData] = useState({owners:{},bids:{},pot:0});
   const [tab, setTab]     = useState("auction");
   const [bidAmount, setBidAmount] = useState("");
   const [soldAnim, setSoldAnim]   = useState(null);
   const soldAnimTimer   = useRef(null);
 
-  // Compute live slot purely from Date.now() — no dependency on `now` prop
   const getLiveSlot = () => {
     const auctOpen = race.startTime - TOTAL_AUCTION * 1000;
-    const elapsed  = (gameNow() - auctOpen) / 1000;
-    const toEnd    = (race.startTime - gameNow()) / 1000;
+    const elapsed  = (Date.now() - auctOpen) / 1000;
+    const toEnd    = (race.startTime - Date.now()) / 1000;
     const live     = elapsed >= 0 && toEnd > 0;
     return live ? Math.min(5, Math.floor(elapsed / AUCTION_BID_SECS)) : (elapsed < 0 ? -1 : 6);
   };
 
-  // shownUpToSlot: tracks the highest slot we've already fired an anim for
-  // Start at current live slot so we don't replay past ones on mount
   const shownUpToSlot = useRef(getLiveSlot());
 
-  // Single interval: polls aData AND checks for slot transitions
+  // Real-time Firestore listener for auction data
+  useEffect(() => {
+    const auctRef = doc(db, "global", "auctions");
+    const unsub = onSnapshot(auctRef, (snap) => {
+      if(snap.exists()) {
+        const allAuctions = snap.data().data || {};
+        const d = allAuctions[race.id] || {owners:{},bids:{},pot:0};
+        setAData({...d});
+      }
+    });
+    return () => unsub();
+  }, [race.id]);
+
+  // Slot transition timer — fires SOLD anim when slot ends
   useEffect(()=>{
-    const fireAnim = (animSlot)=>{
+    const fireAnim = (animSlot, currentData)=>{
       const hid = race.horseOrder?.[animSlot] ?? animSlot;
-      const a = getAuctions();
-      const d = {...(a[race.id]||{})};
-      const bids = d.bids?.[hid]||{};
+      const bids = currentData.bids?.[hid]||{};
       const entries = Object.entries(bids).sort((x,y)=>y[1]-x[1]);
       const winner = entries[0]?.[0]||null;
       const winAmt = entries[0]?.[1]||0;
-      // Finalize owner
-      if(!d.owners) d.owners = {};
-      if(d.owners[hid] === undefined){
-        d.owners[hid] = winner ? {username:winner, amount:winAmt} : null;
-        if(winner) d.pot = (d.pot||0) + winAmt;
-        a[race.id] = d; saveAuctions(a);
-      }
-      setAData({...d});
       if(soldAnimTimer.current) clearTimeout(soldAnimTimer.current);
       setSoldAnim({hi:hid, winner, winAmt, noSale:!winner});
       soldAnimTimer.current = setTimeout(()=>setSoldAnim(null), 2800);
       setBidAmount("");
+      // Finalize owner in Firestore (only if not already set)
+      fbGetAuctions().then(allA => {
+        const d = {...(allA[race.id]||{})};
+        if(d.owners?.[hid] !== undefined) return; // already finalized
+        if(!d.owners) d.owners = {};
+        d.owners[hid] = winner ? {username:winner, amount:winAmt} : null;
+        if(winner) d.pot = (d.pot||0) + winAmt;
+        allA[race.id] = d;
+        fbSaveAuctions(allA);
+      });
     };
 
     const tick = ()=>{
-      // Refresh aData
-      const a = getAuctions();
-      setAData({...(a[race.id]||{owners:{},bids:{},pot:0})});
-      // Check slot transition
       const liveSlot = getLiveSlot();
       while(shownUpToSlot.current < liveSlot && shownUpToSlot.current < 6){
         const ended = shownUpToSlot.current;
         shownUpToSlot.current = ended + 1;
-        fireAnim(ended);
+        fireAnim(ended, aData);
       }
     };
 
     const t = setInterval(tick, 500);
     return ()=>clearInterval(t);
-  },[race.id, race.startTime, race.horseOrder]);
+  },[race.id, race.startTime, race.horseOrder, aData]);
 
   // Finalize all owners at auction end
   useEffect(()=>{
     if(inOdds || raceStarted) {
-      const a = getAuctions();
-      const d = a[race.id]||{};
-      let changed = false;
-      for(let s=0;s<6;s++){
-        const hid = race.horseOrder?.[s]??s;
-        if(d.owners?.[hid] === undefined) {
-          const horseBids = d.bids?.[hid]||{};
-          const entries = Object.entries(horseBids).sort((a,b)=>b[1]-a[1]);
-          if(!d.owners) d.owners={};
-          d.owners[hid] = entries[0] ? {username:entries[0][0],amount:entries[0][1]} : null;
-          if(entries[0]) d.pot=(d.pot||0)+entries[0][1];
-          changed=true;
+      fbGetAuctions().then(allA => {
+        const d = {...(allA[race.id]||{})};
+        let changed = false;
+        for(let s=0;s<6;s++){
+          const hid = race.horseOrder?.[s]??s;
+          if(d.owners?.[hid] === undefined) {
+            const horseBids = d.bids?.[hid]||{};
+            const entries = Object.entries(horseBids).sort((a,b)=>b[1]-a[1]);
+            if(!d.owners) d.owners={};
+            d.owners[hid] = entries[0] ? {username:entries[0][0],amount:entries[0][1]} : null;
+            if(entries[0]) d.pot=(d.pot||0)+entries[0][1];
+            changed=true;
+          }
         }
-      }
-      if(changed){ a[race.id]=d; saveAuctions(a); setAData({...d}); }
+        if(changed){ allA[race.id]=d; fbSaveAuctions(allA); }
+      });
     }
   },[inOdds, raceStarted]);
 
@@ -2229,16 +2237,26 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const timerPct     = slotTimeLeft / AUCTION_BID_SECS;
   const timerColor   = slotTimeLeft<=5?"#ff2d55":slotTimeLeft<=10?"#ffd700":"#00f5ff";
 
-  const doBid = () => {
+  const doBid = async () => {
     const amt = parseFloat(bidAmount);
     if(isNaN(amt)||amt<myMinBid){ sfx.error(); return; }
     if(amt>user.balance){ sfx.error(); return; }
-    const a = getAuctions();
-    const d = a[race.id]||{owners:{},bids:{},pot:0};
-    const newBids = {...(d.bids||{}), [currentHorseId]:{...(d.bids?.[currentHorseId]||{}),[user.username]:amt}};
-    a[race.id]={...d,bids:newBids};
-    saveAuctions(a); setAData({...a[race.id]});
     setBidAmount(""); sfx.betConfirm();
+    // Atomic bid write to Firestore
+    const auctRef = doc(db, "global", "auctions");
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(auctRef);
+      const allA = snap.exists() ? (snap.data().data || {}) : {};
+      const d = {...(allA[race.id]||{owners:{},bids:{},pot:0})};
+      const horseBids = {...(d.bids?.[currentHorseId]||{})};
+      // Only allow if still in correct slot and bid is still highest
+      const topBidNow = Math.max(0, ...Object.values(horseBids).map(Number));
+      if(amt <= topBidNow) return; // outbid already, skip
+      horseBids[user.username] = amt;
+      d.bids = {...(d.bids||{}), [currentHorseId]: horseBids};
+      allA[race.id] = d;
+      tx.set(auctRef, {data: allA});
+    });
   };
 
   // Regular bets — restore from confirmed store if already placed
@@ -5479,8 +5497,7 @@ function App() {
               // For auction races, the visual race starts at startTime+30s (after presentation)
               const raceWithStart = {...r, startTime: r.startTime + 30000};
               setSelectedRace(raceWithStart);
-              const aData=getAuctions()[r.id]||{};
-              setAuctionOwners(aData.owners||null);
+              fbGetAuctions().then(allA => setAuctionOwners((allA[r.id]||{}).owners||null));
               setWinner(null);
               setShowAuction(false);
               setScreen("race");
