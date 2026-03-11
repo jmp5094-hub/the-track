@@ -4061,12 +4061,9 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const [gateBurst, setGateBurst] = useState(false);
   const [showTie, setShowTie] = useState(false);
 
-  // ── Roll-replay engine — reads pre-computed rolls from Firestore ──────────
-  const [rollHistory,    setRollHistory]    = useState(null); // null = loading
-  const [replayIdx,      setReplayIdx]      = useState(-1);   // which roll we're showing
+  // ── Roll-replay engine — clock-driven, self-correcting ──────────────────
   const [positions,      setPositions]      = useState(Array(6).fill(0));
   const [legDone,        setLegDone]        = useState(Array(6).fill(false));
-  const [skipped,        setSkipped]        = useState(Array(6).fill(false));
   const [activeHorses,   setActiveHorses]   = useState([]);
   const [diceResult,     setDiceResult]     = useState(null);
   const [rolling,        setRolling]        = useState(false);
@@ -4081,172 +4078,127 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [onFire,         setOnFire]         = useState(Array(6).fill(false));
   const [movedHorses,    setMovedHorses]    = useState([]);
-  const fireHistoryRef   = useRef(Array(6).fill([]));
-  const onFireRef        = useRef(Array(6).fill(false));
-  const winnerFiredRef   = useRef(false);
-  const computedWinnerRef = useRef(null);
-  const timeoutRef       = useRef(null);
 
-  // Load roll history from Firestore
+  // All mutable race state in one ref — no state deps in the loop
+  const engineRef = useRef({
+    rolls: null, winner: null, lastRollIdx: -1,
+    animating: false, winnerFired: false,
+    fireHistory: Array(6).fill([]), onFire: Array(6).fill(false), gunFired: false,
+  });
+
+  // Load roll history once from Firestore
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      const rolls = await fbGetRaceRolls();
+    const tryLoad = async () => {
+      const allRolls = await fbGetRaceRolls();
       if(cancelled) return;
-      const raceRolls = rolls[race.id];
-      if(raceRolls) {
-        computedWinnerRef.current = raceRolls.winner;
-        setRollHistory(raceRolls.rolls);
+      const rd = allRolls[race.id];
+      if(rd) {
+        engineRef.current.rolls  = rd.rolls;
+        engineRef.current.winner = rd.winner;
       } else {
-        // Cloud function hasn't pre-computed yet — fall back to local sim
-        const { winner: w, rolls: localRolls } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
-        if(!cancelled) { computedWinnerRef.current = w; setRollHistory(localRolls); }
+        const { winner: w, rolls: r } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
+        if(!cancelled){ engineRef.current.rolls = r; engineRef.current.winner = w; }
       }
     };
-    load();
-    // Also poll every 2s in case cloud function hasn't written yet
+    tryLoad();
     const poll = setInterval(async () => {
-      const rolls = await fbGetRaceRolls();
-      if(cancelled) return;
-      if(rolls[race.id] && !rollHistory) {
-        setRollHistory(rolls[race.id].rolls);
-        clearInterval(poll);
-      }
-    }, 2000);
+      if(engineRef.current.rolls || cancelled){ clearInterval(poll); return; }
+      await tryLoad();
+    }, 1500);
     return () => { cancelled = true; clearInterval(poll); };
   }, [race.id]);
 
-  // Start replaying once we have the roll history
+  // Master clock — ticks every 200ms, drives all animation
   useEffect(() => {
-    if(!rollHistory || rollHistory.length === 0) return;
-    const now2 = gameNow();
+    const FIRE_OFFSET = 1300;
     const fireTime = race.isAuction ? race.startTime + 30000 : race.startTime;
-    const elapsed = now2 - fireTime;
-    // How many rolls have already happened?
-    const rollsElapsed = elapsed <= 1300 ? 0 : Math.floor((elapsed - 1300) / ROLL_INTERVAL);
-    const startIdx = Math.min(rollsElapsed, rollHistory.length - 1);
 
-    // Fast-forward to current position
-    if(startIdx > 0) {
-      const fr = rollHistory[startIdx - 1];
-      setPositions([...fr.positions]);
-      setLegDone([...fr.legDone]);
-      setPhase(fr.phase || "main");
-      setRollCount(startIdx);
-    }
+    const tick = () => {
+      const eng = engineRef.current;
+      if(!eng.rolls || eng.winnerFired) return;
+      const now2 = Date.now();
+      const elapsed = now2 - fireTime;
 
-    // Fire gunshot if we're right at the start
-    if(elapsed < 1300 + ROLL_INTERVAL) {
-      const delay = Math.max(0, 700 - elapsed);
-      timeoutRef.current = setTimeout(() => {
+      // Gunshot
+      if(!eng.gunFired && elapsed >= 600 && elapsed < FIRE_OFFSET + ROLL_INTERVAL) {
+        eng.gunFired = true;
         sfx.gunshot();
         setGateBurst(true);
         setTimeout(() => setGateBurst(false), 700);
-      }, delay);
-    }
+      }
+      if(elapsed < FIRE_OFFSET) return;
 
-    setReplayIdx(startIdx);
-  }, [rollHistory]);
+      const targetIdx = Math.min(Math.floor((elapsed - FIRE_OFFSET) / ROLL_INTERVAL), eng.rolls.length - 1);
 
-  // Step through rolls one at a time
-  useEffect(() => {
-    if(replayIdx < 0 || !rollHistory || winner !== null) return;
-    if(replayIdx >= rollHistory.length) {
-      // All rolls done — no winner yet (shouldn't happen)
-      return;
-    }
+      // Catch up silently if we're behind
+      if(targetIdx > eng.lastRollIdx + 1) {
+        const fr = eng.rolls[targetIdx - 1];
+        if(fr){ setPositions([...fr.positions]); setLegDone([...fr.legDone]); setPhase(fr.phase||"main"); setRollCount(targetIdx); }
+        eng.lastRollIdx = targetIdx - 1;
+      }
 
-    const roll = rollHistory[replayIdx];
-    const delay = replayIdx === 0 ? Math.max(600, 1300 - (gameNow() - (race.isAuction ? race.startTime+30000 : race.startTime))) : 0;
+      // Animate next roll
+      if(targetIdx > eng.lastRollIdx && !eng.animating) {
+        const rollIdx = eng.lastRollIdx + 1;
+        const roll = eng.rolls[rollIdx];
+        if(!roll) return;
+        eng.animating  = true;
+        eng.lastRollIdx = rollIdx;
 
-    timeoutRef.current = setTimeout(() => {
-      // Animate dice
-      setRolling(true);
-      setOverlayVisible(true);
-      setActiveHorses([]);
-      setDiceResult({...roll, moves:[], isDoubles:false});
+        setRolling(true); setOverlayVisible(true); setActiveHorses([]);
+        setDiceResult({...roll, moves:[], isDoubles:false});
 
-      let flashes = 0;
-      const flashInt = setInterval(() => {
+        let flashes = 0;
         const nd = roll.dice.length;
-        setDiceResult(d => ({...d, dice: Array.from({length:nd}, ()=>Math.floor(Math.random()*6)+1)}));
-        sfx.diceRoll();
-        flashes++;
-        if(flashes >= 8) {
-          clearInterval(flashInt);
-          setDiceResult({...roll});
-          setActiveHorses(roll.moves.filter(m=>m.steps>0).map(m=>m.horse));
-          setRolling(false);
-          setMudDie(roll.mudDieIdx ?? null);
-          setFogDie(roll.fogDieIdx ?? null);
-          setOverlayVisible(true);
-          sfx.diceSettle();
-          if(roll.isDoubles && race.type !== "magic_dice") sfx.doubles();
-          setTimeout(() => setOverlayVisible(false), 1500);
+        const flashInt = setInterval(() => {
+          setDiceResult(d => ({...d, dice: Array.from({length:nd}, ()=>Math.floor(Math.random()*6)+1)}));
+          sfx.diceRoll();
+          if(++flashes >= 6) {
+            clearInterval(flashInt);
+            setDiceResult({...roll});
+            setActiveHorses(roll.moves.filter(m=>m.steps>0).map(m=>m.horse));
+            setRolling(false);
+            setMudDie(roll.mudDieIdx??null); setFogDie(roll.fogDieIdx??null);
+            sfx.diceSettle();
+            if(roll.isDoubles && race.type!=="magic_dice") sfx.doubles();
+            setTimeout(()=>setOverlayVisible(false), 800);
 
-          setTimeout(() => {
-            // Apply positions from pre-computed roll
-            setPositions([...roll.positions]);
-            setLegDone([...roll.legDone]);
-            setPhase(roll.phase || "main");
-            setRollCount(replayIdx + 1);
-            if(roll.phase === "tiebreak") setTieHorses(roll.tieHorses || null);
+            setTimeout(() => {
+              setPositions([...roll.positions]); setLegDone([...roll.legDone]);
+              setPhase(roll.phase||"main"); setRollCount(rollIdx+1);
+              if(roll.phase==="tiebreak"&&roll.tieHorses) setTieHorses(roll.tieHorses);
 
-            // Hurdle jumps
-            const jumpers = roll.moves.filter(m => m.steps>0 && skipped[m.horse]).map(m=>m.horse);
-            if(jumpers.length > 0) {
-              setJumpingHorses(jumpers); sfx.hurdleJump();
-              setTimeout(()=>setJumpingHorses([]), 900);
-            } else {
-              const totalSteps = roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);
-              if(totalSteps>0) setTimeout(()=>sfx.horseMove(Math.min(totalSteps,3)),80);
-            }
-            // Fog sliders
-            const sliders = roll.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
-            if(sliders.length>0){ setSlidingHorses(sliders); setTimeout(()=>setSlidingHorses([]),800); }
-            setTimeout(()=>{ setMudDie(null); setFogDie(null); }, 1400);
+              const jumpers=roll.moves.filter(m=>m.steps>0&&m.jump).map(m=>m.horse);
+              if(jumpers.length>0){setJumpingHorses(jumpers);sfx.hurdleJump();setTimeout(()=>setJumpingHorses([]),900);}
+              else{const ts=roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);if(ts>0)setTimeout(()=>sfx.horseMove(Math.min(ts,3)),80);}
+              const sliders=roll.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
+              if(sliders.length>0){setSlidingHorses(sliders);setTimeout(()=>setSlidingHorses([]),800);}
+              setTimeout(()=>{setMudDie(null);setFogDie(null);},1000);
 
-            // 🔥 Fire tracking
-            const rawDice = roll.dice;
-            const newFireHist = fireHistoryRef.current.map((hist,hi) => {
-              const appeared = rawDice.includes(hi+1);
-              return [...hist, appeared].slice(-3);
-            });
-            const newOnFire = newFireHist.map((hist,hi) => {
-              if(hist.length < 3) return onFireRef.current[hi];
-              if(hist.every(v=>v===true))  return true;
-              if(hist.every(v=>v===false)) return false;
-              return onFireRef.current[hi];
-            });
-            fireHistoryRef.current = newFireHist;
-            onFireRef.current = newOnFire;
-            setOnFire([...newOnFire]);
+              const newFH=eng.fireHistory.map((h,hi)=>[...h,roll.dice.includes(hi+1)].slice(-3));
+              const newOF=newFH.map((h,hi)=>{if(h.length<3)return eng.onFire[hi];if(h.every(v=>v))return true;if(h.every(v=>!v))return false;return eng.onFire[hi];});
+              eng.fireHistory=newFH; eng.onFire=newOF; setOnFire([...newOF]);
 
-            // Speed lines
-            const moved = roll.moves.filter(m=>m.steps>0).map(m=>m.horse);
-            setMovedHorses(moved);
-            setTimeout(()=>setMovedHorses([]),500);
+              const moved=roll.moves.filter(m=>m.steps>0).map(m=>m.horse);
+              setMovedHorses(moved); setTimeout(()=>setMovedHorses([]),500);
 
-            // Check if this is the last roll (winner)
-            const isLastRoll = replayIdx === rollHistory.length - 1;
-            if(isLastRoll && !winnerFiredRef.current) {
-              winnerFiredRef.current = true;
-              const w = computedWinnerRef.current ?? 0;
-              setWinner(w);
-              sfx.finishLine();
-              setTimeout(() => onRaceEnd(w), 2600);
-            } else if(!isLastRoll) {
-              setReplayIdx(idx => idx + 1);
-            }
-          }, 1800);
-        }
-      }, DICE_ANIM/8);
-    }, delay);
+              if(rollIdx===eng.rolls.length-1 && !eng.winnerFired){
+                eng.winnerFired=true;
+                const w=eng.winner??0;
+                setWinner(w); sfx.finishLine(); setTimeout(()=>onRaceEnd(w),2600);
+              }
+              eng.animating=false;
+            }, 500);
+          }
+        }, DICE_ANIM/6);
+      }
+    };
 
-    return () => { if(timeoutRef.current) clearTimeout(timeoutRef.current); };
-  }, [replayIdx, rollHistory]);
+    const interval = setInterval(tick, 200);
+    return () => clearInterval(interval);
+  }, [race.id, race.startTime, race.isAuction, race.type, race.condition, race.seed, onRaceEnd]);
 
-  useEffect(() => () => { if(timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
 
   // Re-render on orientation change only — ignore keyboard-triggered resize events
   const [, forceUpdate] = useState(0);
