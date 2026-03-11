@@ -232,7 +232,7 @@ function generateSchedule(now) {
       startTime: cursor, status: "upcoming",
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId), seed,
     });
-    cursor += (3 + Math.floor(Math.random() * 9)) * 60 * 1000;
+    cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
   }
   return races;
 }
@@ -252,7 +252,7 @@ function generateAuctionSchedule(now) {
       startTime: cursor, status: "upcoming", isAuction: true, horseOrder,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId), seed,
     });
-    cursor += (3 + Math.floor(Math.random() * 9)) * 60 * 1000;
+    cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
   }
   return races;
 }
@@ -363,7 +363,7 @@ exports.raceSchedulerHttp = onRequest(async (req, res) => {
   const allRaces = [...schedule, ...auctionSched];
   const upcoming = allRaces.filter(r => {
     const ft = r.isAuction ? r.startTime + 30000 : r.startTime;
-    return ft > now && ft <= now + 10*60*1000;
+    return ft > now && ft <= now + 3 * 60 * 1000;
   });
   const rollsSnap = await db.doc("global/raceRolls").get();
   const rollsDoc  = rollsSnap.exists ? rollsSnap.data() : {};

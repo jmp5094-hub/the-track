@@ -713,7 +713,7 @@ function generateSchedule() {
       coats:     pickHorseCoats(raceId),
       seed:      Math.floor(Math.random() * 2147483647) + 1,
     });
-    cursor += (3 + Math.floor(Math.random()*9)) * 60*1000;
+    cursor += (1 + Math.floor(Math.random()*5)) * 60*1000;
   }
   return races;
 }
@@ -744,7 +744,7 @@ function generateAuctionSchedule() {
       horseOrder,
       seed:      Math.floor(Math.random() * 2147483647) + 1,
     });
-    cursor += (3 + Math.floor(Math.random()*9)) * 60*1000;
+    cursor += (1 + Math.floor(Math.random()*5)) * 60*1000;
   }
   return races;
 }
