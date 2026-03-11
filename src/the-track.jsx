@@ -61,7 +61,7 @@ const fbSaveBankTx = async (uid, txs) => setDoc(doc(db,"bank",uid), {txs});
 const TRACK_SPACES   = 12;
 const BET_CLOSE_SECS = 30;          // betting closes 30s before race
 const BET_OPEN_HOURS = 3;           // betting opens 3 hours before race
-const ROLL_INTERVAL  = 2000;        // ms between rolls (slower = readable)
+const ROLL_INTERVAL  = 3200;        // ms between rolls (slower = readable)
 const DICE_ANIM      = 700;         // ms dice spinning
 const TIEBREAK_SPACES = 3;
 
@@ -4151,7 +4151,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         const flashInt = setInterval(() => {
           setDiceResult(d => ({...d, dice: Array.from({length:nd}, ()=>Math.floor(Math.random()*6)+1)}));
           sfx.diceRoll();
-          if(++flashes >= 6) {
+          if(++flashes >= 8) {
             clearInterval(flashInt);
             setDiceResult({...roll});
             setActiveHorses(roll.moves.filter(m=>m.steps>0).map(m=>m.horse));
@@ -4188,7 +4188,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
               eng.animating=false;
             }, 500);
           }
-        }, DICE_ANIM/6);
+        }, DICE_ANIM/5);
       }
     };
 

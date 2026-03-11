@@ -7,7 +7,7 @@ const db = admin.firestore();
 // ─── CONSTANTS (must match frontend) ─────────────────────────────────────────
 const TRACK_SPACES   = 12;
 const BET_CLOSE_SECS = 30;
-const ROLL_INTERVAL  = 2000;
+const ROLL_INTERVAL  = 3200;
 const HURDLE_CELL    = 5;
 
 const RACE_TYPES = ["standard","down_back","hurdle","magic_dice","triple_dice"];
