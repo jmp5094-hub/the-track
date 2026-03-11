@@ -61,8 +61,8 @@ const fbSaveBankTx = async (uid, txs) => setDoc(doc(db,"bank",uid), {txs});
 const TRACK_SPACES   = 12;
 const BET_CLOSE_SECS = 30;          // betting closes 30s before race
 const BET_OPEN_HOURS = 3;           // betting opens 3 hours before race
-const ROLL_INTERVAL  = 3200;        // ms between rolls (slower = readable)
-const DICE_ANIM      = 700;         // ms dice spinning
+const ROLL_INTERVAL  = 4500;        // ms between rolls (slower = readable)
+const DICE_ANIM      = 1000;        // ms dice spinning
 const TIEBREAK_SPACES = 3;
 
 const HORSES = [
@@ -4151,7 +4151,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         const flashInt = setInterval(() => {
           setDiceResult(d => ({...d, dice: Array.from({length:nd}, ()=>Math.floor(Math.random()*6)+1)}));
           sfx.diceRoll();
-          if(++flashes >= 8) {
+          if(++flashes >= 10) {
             clearInterval(flashInt);
             setDiceResult({...roll});
             setActiveHorses(roll.moves.filter(m=>m.steps>0).map(m=>m.horse));
@@ -4159,7 +4159,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             setMudDie(roll.mudDieIdx??null); setFogDie(roll.fogDieIdx??null);
             sfx.diceSettle();
             if(roll.isDoubles && race.type!=="magic_dice") sfx.doubles();
-            setTimeout(()=>setOverlayVisible(false), 800);
+            setTimeout(()=>setOverlayVisible(false), 1400);
 
             setTimeout(() => {
               setPositions([...roll.positions]); setLegDone([...roll.legDone]);
@@ -4186,9 +4186,9 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                 setWinner(w); sfx.finishLine(); setTimeout(()=>onRaceEnd(w),2600);
               }
               eng.animating=false;
-            }, 500);
+            }, 1200);
           }
-        }, DICE_ANIM/5);
+        }, DICE_ANIM/8);
       }
     };
 
