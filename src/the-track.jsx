@@ -2958,6 +2958,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     const spBets  = sharedPot?.betsPerHorse || {};
     const oddsData = HORSES.map(h=>{
       const totalOnHorse = parseFloat(spBets[h.id]||0);
+      // Show actual odds if bets exist, otherwise show "—" placeholder
       return { h, odds: totalOnHorse > 0 && spTotal > 0 ? parseFloat((spTotal / totalOnHorse).toFixed(2)) : null };
     });
     // Sort ascending = favourite first (lowest odds = most bet on)
@@ -3139,9 +3140,16 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
         {/* Horse bet cards */}
         {canBet&&(
           <>
-            <div style={{textAlign:"center",marginBottom:14,padding:"10px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10}}>
-              <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>TOTAL BET </span>
-              <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:20}}>${fmt2(confirmed?totalBet:totalBet)}</span>
+            <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+              <div style={{textAlign:"left"}}>
+                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>YOUR BET</div>
+                <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:18}}>${fmt2(totalBet)}</div>
+              </div>
+              <div style={{width:1,height:32,background:"rgba(255,255,255,0.08)"}}/>
+              <div style={{textAlign:"right"}}>
+                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>🌐 LIVE POT</div>
+                <div style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:18,textShadow:"0 0 10px #00f5ff66"}}>${fmt2(sharedPot?.totalPot||0)}</div>
+              </div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
               {HORSES.map(h=>{
@@ -3220,8 +3228,8 @@ function OddsRevealScreen({ race, bets, totalPot, odds }) {
       <p style={{color:"#ffffff44",marginBottom:28,letterSpacing:2,fontFamily:"'Orbitron',monospace",fontSize:16}}>RACE STARTS IN {count}…</p>
       <div style={{width:"100%",maxWidth:460}}>
         <div style={{background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70033",borderRadius:10,padding:"12px 18px",marginBottom:16,textAlign:"center"}}>
-          <span style={{color:"#ffffff55"}}>TOTAL POT </span>
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:22}}>${fmt2(totalPot)}</span>
+          <span style={{color:"#ffffff55",fontSize:12,letterSpacing:2}}>🌐 LIVE POT </span>
+          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:26,textShadow:"0 0 16px #ffd70066"}}>${fmt2(sharedPot?.totalPot||totalPot)}</span>
         </div>
         {HORSES.map(h=>(
           <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:6,background:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${h.color}33`}}>
@@ -4392,7 +4400,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           {phase==="tiebreak" && <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:1,animation:"racingBlink 0.6s infinite"}}>🔥 TIE-BREAKER!</span>}
           {race.condition&&race.condition!=="sunny"&&<span style={{background:`${cond.color}22`,border:`1px solid ${cond.color}55`,borderRadius:20,padding:"2px 10px",color:cond.color,fontSize:11,fontWeight:700,letterSpacing:1}}>{cond.icon} {cond.label.toUpperCase()}</span>}
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:isMobile?13:17,textShadow:"0 0 12px #ffd70066"}}>POT ${fmt2(totalPot)}</span>
+          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:isMobile?13:17,textShadow:"0 0 12px #ffd70066"}}>🌐 POT ${fmt2(totalPot)}</span>
         </div>
       </div>
 
@@ -5212,7 +5220,13 @@ function App() {
       setAuctionSchedule(newAuction);
       await fbSaveAuctionSchedule({ races: newAuction, generatedAt: now2 });
     });
-    return () => { unsubSched(); unsubAuction(); };
+    // Real-time shared pot listener
+    const unsubPots = onSnapshot(doc(db,"global","racePots"), (snap) => {
+      if(snap.exists()) setSharedPot(snap.data());
+      else setSharedPot({});
+    });
+
+    return () => { unsubSched(); unsubAuction(); unsubPots(); };
   },[]);
 
   // Sync pending bets to state so navbar badge updates
