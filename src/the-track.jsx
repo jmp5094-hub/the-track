@@ -29,9 +29,11 @@ const fbSaveSchedule     = async (data) => setDoc(doc(db,"global","schedule"), d
 const fbGetAuctionSchedule = async () => { const d = await getDoc(doc(db,"global","auctionSchedule")); return d.exists() ? d.data() : null; };
 const fbSaveAuctionSchedule = async (data) => setDoc(doc(db,"global","auctionSchedule"), data);
 
-// Race results (background runner writes, all users read)
+// Race results (legacy — kept for payout tracking)
 const fbGetRaceResults  = async () => { const d = await getDoc(doc(db,"global","raceResults")); return d.exists() ? d.data().results || {} : {}; };
 const fbSaveRaceResults = async (r) => setDoc(doc(db,"global","raceResults"), {results:r});
+// Roll histories — pre-computed by Cloud Function, read by all clients for replay
+const fbGetRaceRolls    = async () => { const d = await getDoc(doc(db,"global","raceRolls")); return d.exists() ? d.data() : {}; };
 
 // Per-user bets
 const fbGetConfirmed  = async (uid) => { const d = await getDoc(doc(db,"bets",uid)); return d.exists() ? d.data().confirmed || {} : {}; };
@@ -4056,11 +4058,201 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
 // ─── RACE SCREEN ──────────────────────────────────────────────────────────────
 function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, auctionOwners }) {
   const rt = RACE_TYPES[race.type];
-  const handleWinner = useCallback(w=>onRaceEnd(w),[onRaceEnd]);
   const [gateBurst, setGateBurst] = useState(false);
   const [showTie, setShowTie] = useState(false);
-  const handleGunshot = useCallback(()=>{ setGateBurst(true); setTimeout(()=>setGateBurst(false), 700); },[]);
-  const { positions,legDone,skipped,activeHorses,diceResult,rolling,rollCount,winner,tieHorses,phase,jumpingHorses,slidingHorses,mudDie,fogDie,overlayVisible,onFire,movedHorses } = useRaceEngine(race.type, handleWinner, race.condition||"sunny", handleGunshot, race.seed||null, race.startTime||null, race.nowMs||null);
+
+  // ── Roll-replay engine — reads pre-computed rolls from Firestore ──────────
+  const [rollHistory,    setRollHistory]    = useState(null); // null = loading
+  const [replayIdx,      setReplayIdx]      = useState(-1);   // which roll we're showing
+  const [positions,      setPositions]      = useState(Array(6).fill(0));
+  const [legDone,        setLegDone]        = useState(Array(6).fill(false));
+  const [skipped,        setSkipped]        = useState(Array(6).fill(false));
+  const [activeHorses,   setActiveHorses]   = useState([]);
+  const [diceResult,     setDiceResult]     = useState(null);
+  const [rolling,        setRolling]        = useState(false);
+  const [rollCount,      setRollCount]      = useState(0);
+  const [winner,         setWinner]         = useState(null);
+  const [tieHorses,      setTieHorses]      = useState(null);
+  const [phase,          setPhase]          = useState("main");
+  const [jumpingHorses,  setJumpingHorses]  = useState([]);
+  const [slidingHorses,  setSlidingHorses]  = useState([]);
+  const [mudDie,         setMudDie]         = useState(null);
+  const [fogDie,         setFogDie]         = useState(null);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [onFire,         setOnFire]         = useState(Array(6).fill(false));
+  const [movedHorses,    setMovedHorses]    = useState([]);
+  const fireHistoryRef   = useRef(Array(6).fill([]));
+  const onFireRef        = useRef(Array(6).fill(false));
+  const winnerFiredRef   = useRef(false);
+  const timeoutRef       = useRef(null);
+
+  // Load roll history from Firestore
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const rolls = await fbGetRaceRolls();
+      if(cancelled) return;
+      const raceRolls = rolls[race.id];
+      if(raceRolls) {
+        setRollHistory(raceRolls.rolls);
+      } else {
+        // Cloud function hasn't pre-computed yet — fall back to local sim
+        const { winner: w, rolls: localRolls } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
+        if(!cancelled) setRollHistory(localRolls);
+      }
+    };
+    load();
+    // Also poll every 2s in case cloud function hasn't written yet
+    const poll = setInterval(async () => {
+      const rolls = await fbGetRaceRolls();
+      if(cancelled) return;
+      if(rolls[race.id] && !rollHistory) {
+        setRollHistory(rolls[race.id].rolls);
+        clearInterval(poll);
+      }
+    }, 2000);
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [race.id]);
+
+  // Start replaying once we have the roll history
+  useEffect(() => {
+    if(!rollHistory || rollHistory.length === 0) return;
+    const now2 = gameNow();
+    const fireTime = race.isAuction ? race.startTime + 30000 : race.startTime;
+    const elapsed = now2 - fireTime;
+    // How many rolls have already happened?
+    const rollsElapsed = elapsed <= 1300 ? 0 : Math.floor((elapsed - 1300) / ROLL_INTERVAL);
+    const startIdx = Math.min(rollsElapsed, rollHistory.length - 1);
+
+    // Fast-forward to current position
+    if(startIdx > 0) {
+      const fr = rollHistory[startIdx - 1];
+      setPositions([...fr.positions]);
+      setLegDone([...fr.legDone]);
+      setPhase(fr.phase || "main");
+      setRollCount(startIdx);
+    }
+
+    // Fire gunshot if we're right at the start
+    if(elapsed < 1300 + ROLL_INTERVAL) {
+      const delay = Math.max(0, 700 - elapsed);
+      timeoutRef.current = setTimeout(() => {
+        sfx.gunshot();
+        setGateBurst(true);
+        setTimeout(() => setGateBurst(false), 700);
+      }, delay);
+    }
+
+    setReplayIdx(startIdx);
+  }, [rollHistory]);
+
+  // Step through rolls one at a time
+  useEffect(() => {
+    if(replayIdx < 0 || !rollHistory || winner !== null) return;
+    if(replayIdx >= rollHistory.length) {
+      // All rolls done — no winner yet (shouldn't happen)
+      return;
+    }
+
+    const roll = rollHistory[replayIdx];
+    const delay = replayIdx === 0 ? Math.max(600, 1300 - (gameNow() - (race.isAuction ? race.startTime+30000 : race.startTime))) : 0;
+
+    timeoutRef.current = setTimeout(() => {
+      // Animate dice
+      setRolling(true);
+      setOverlayVisible(true);
+      setActiveHorses([]);
+      setDiceResult({...roll, moves:[], isDoubles:false});
+
+      let flashes = 0;
+      const flashInt = setInterval(() => {
+        const nd = roll.dice.length;
+        setDiceResult(d => ({...d, dice: Array.from({length:nd}, ()=>Math.floor(Math.random()*6)+1)}));
+        sfx.diceRoll();
+        flashes++;
+        if(flashes >= 8) {
+          clearInterval(flashInt);
+          setDiceResult({...roll});
+          setActiveHorses(roll.moves.filter(m=>m.steps>0).map(m=>m.horse));
+          setRolling(false);
+          setMudDie(roll.mudDieIdx ?? null);
+          setFogDie(roll.fogDieIdx ?? null);
+          setOverlayVisible(true);
+          sfx.diceSettle();
+          if(roll.isDoubles && race.type !== "magic_dice") sfx.doubles();
+          setTimeout(() => setOverlayVisible(false), 1500);
+
+          setTimeout(() => {
+            // Apply positions from pre-computed roll
+            setPositions([...roll.positions]);
+            setLegDone([...roll.legDone]);
+            setPhase(roll.phase || "main");
+            setRollCount(replayIdx + 1);
+            if(roll.phase === "tiebreak") setTieHorses(roll.tieHorses || null);
+
+            // Hurdle jumps
+            const jumpers = roll.moves.filter(m => m.steps>0 && skipped[m.horse]).map(m=>m.horse);
+            if(jumpers.length > 0) {
+              setJumpingHorses(jumpers); sfx.hurdleJump();
+              setTimeout(()=>setJumpingHorses([]), 900);
+            } else {
+              const totalSteps = roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);
+              if(totalSteps>0) setTimeout(()=>sfx.horseMove(Math.min(totalSteps,3)),80);
+            }
+            // Fog sliders
+            const sliders = roll.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
+            if(sliders.length>0){ setSlidingHorses(sliders); setTimeout(()=>setSlidingHorses([]),800); }
+            setTimeout(()=>{ setMudDie(null); setFogDie(null); }, 1400);
+
+            // 🔥 Fire tracking
+            const rawDice = roll.dice;
+            const newFireHist = fireHistoryRef.current.map((hist,hi) => {
+              const appeared = rawDice.includes(hi+1);
+              return [...hist, appeared].slice(-3);
+            });
+            const newOnFire = newFireHist.map((hist,hi) => {
+              if(hist.length < 3) return onFireRef.current[hi];
+              if(hist.every(v=>v===true))  return true;
+              if(hist.every(v=>v===false)) return false;
+              return onFireRef.current[hi];
+            });
+            fireHistoryRef.current = newFireHist;
+            onFireRef.current = newOnFire;
+            setOnFire([...newOnFire]);
+
+            // Speed lines
+            const moved = roll.moves.filter(m=>m.steps>0).map(m=>m.horse);
+            setMovedHorses(moved);
+            setTimeout(()=>setMovedHorses([]),500);
+
+            // Check if this is the last roll (winner)
+            const isLastRoll = replayIdx === rollHistory.length - 1;
+            if(isLastRoll && !winnerFiredRef.current) {
+              // Determine winner from final positions
+              const rollsDoc = rollHistory;
+              // Get winner from the cloud-computed result
+              fbGetRaceRolls().then(allRolls => {
+                const raceData = allRolls[race.id];
+                const w = raceData?.winner ?? 0;
+                if(!winnerFiredRef.current) {
+                  winnerFiredRef.current = true;
+                  setWinner(w);
+                  sfx.finishLine();
+                  setTimeout(() => onRaceEnd(w), 2600);
+                }
+              });
+            } else if(!isLastRoll) {
+              setReplayIdx(idx => idx + 1);
+            }
+          }, 1800);
+        }
+      }, DICE_ANIM/8);
+    }, delay);
+
+    return () => { if(timeoutRef.current) clearTimeout(timeoutRef.current); };
+  }, [replayIdx, rollHistory]);
+
+  useEffect(() => () => { if(timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
 
   // Re-render on orientation change only — ignore keyboard-triggered resize events
   const [, forceUpdate] = useState(0);
@@ -4747,6 +4939,79 @@ function simRace(raceType, condition, seed) {
   }
   return { winner: 0, rolls: iters }; // fallback
 }
+// ─── LOCAL RACE SIMULATOR (fallback if cloud function hasn't run yet) ────────
+function simulateRaceWithHistory(raceType, condition, seed) {
+  const die = makeSeededDie(seed);
+  const SPACES = TRACK_SPACES;
+  const HURDLE = HURDLE_CELL + 1;
+  const pos = Array(6).fill(0);
+  const leg = Array(6).fill(false);
+  const skip = Array(6).fill(false);
+  let phase = "main", tieHorses = null;
+  const rollHistory = [];
+
+  const rollDice = (rc) => {
+    const nd = raceType==="triple_dice" ? 3 : 2;
+    const dice = Array.from({length:nd}, die);
+    const isDoubles = nd===2 && dice[0]===dice[1];
+    let moves=[], mudDieIdx=null, fogDieIdx=null, noDoubles=false;
+    if(phase==="tiebreak") {
+      dice.forEach(d=>{ const hi=Math.min(d-1,5); if(tieHorses.includes(hi)) moves.push({horse:hi,steps:1}); });
+    } else if(raceType==="magic_dice") {
+      moves.push({horse:Math.min(dice[0]-1,5), steps:dice[1]});
+    } else if(condition==="rain"&&(rc+1)%3===0) {
+      const si=dice[0]<=dice[1]?0:1; mudDieIdx=si; noDoubles=true;
+      dice.forEach((d,di)=>{ if(di!==si) moves.push({horse:Math.min(d-1,5),steps:1}); });
+    } else if(condition==="fog"&&(rc+1)%4===0) {
+      const fi=rc%nd; fogDieIdx=fi; noDoubles=true;
+      dice.forEach((d,di)=>{ const h=Math.min(d-1,5); moves.push({horse:h,steps:di===fi?-1:1,fog:di===fi}); });
+    } else if(isDoubles) {
+      moves.push({horse:Math.min(dice[0]-1,5),steps:2});
+    } else {
+      dice.forEach(d=>moves.push({horse:Math.min(d-1,5),steps:1}));
+    }
+    return {dice,isDoubles:isDoubles&&!noDoubles,moves,mudDieIdx,fogDieIdx};
+  };
+
+  const applyMv = (moves, isDoubles) => {
+    const fin=[];
+    moves.forEach(({horse,steps})=>{
+      if(skip[horse]){skip[horse]=false;return;}
+      if(raceType==="down_back"||raceType==="magic_dice") {
+        if(!leg[horse]){const dest=pos[horse]+steps;if(dest>=SPACES){leg[horse]=true;pos[horse]=Math.max(0,SPACES-(dest-SPACES));if(pos[horse]<=0)fin.push(horse);}else pos[horse]=dest;}
+        else{pos[horse]=Math.max(0,pos[horse]-steps);if(pos[horse]<=0)fin.push(horse);}
+      } else if(raceType==="hurdle") {
+        const hp=HURDLE;
+        if(pos[horse]===hp-1){if(isDoubles){pos[horse]=hp+1;skip[horse]="jump";}}
+        else{const dest=pos[horse]+steps;pos[horse]=dest>=hp&&pos[horse]<hp-1?hp-1:dest===hp?hp-1:Math.min(SPACES,dest);if(pos[horse]>=SPACES)fin.push(horse);}
+      } else {
+        if(steps<0)pos[horse]=Math.max(0,pos[horse]+steps);
+        else{pos[horse]=Math.min(SPACES,pos[horse]+steps);if(pos[horse]>=SPACES)fin.push(horse);}
+      }
+    });
+    skip.forEach((s,i)=>{if(s==="jump")skip[i]=false;});
+    return fin;
+  };
+
+  let iters=0, winner=null;
+  while(iters++<2000&&winner===null) {
+    const rc=rollHistory.length;
+    const roll=rollDice(rc);
+    const fin=applyMv(roll.moves,roll.isDoubles);
+    rollHistory.push({dice:roll.dice,isDoubles:roll.isDoubles,moves:roll.moves,mudDieIdx:roll.mudDieIdx,fogDieIdx:roll.fogDieIdx,positions:[...pos],legDone:[...leg],phase});
+    if(fin.length===1){winner=fin[0];}
+    else if(fin.length>1){
+      phase="tiebreak";tieHorses=[...fin];for(let i=0;i<6;i++)pos[i]=0;
+      let tb=0;
+      while(tb++<500){const tr=rollDice(rollHistory.length);const tf=applyMv(tr.moves,tr.isDoubles);
+        rollHistory.push({dice:tr.dice,isDoubles:tr.isDoubles,moves:tr.moves,mudDieIdx:tr.mudDieIdx,fogDieIdx:tr.fogDieIdx,positions:[...pos],legDone:[...leg],phase:"tiebreak"});
+        if(tf.length>0){winner=tf[0];break;}}
+      if(winner===null)winner=fin[0];
+    }
+  }
+  return {winner:winner??0, rolls:rollHistory};
+}
+
 function App() {
   // Prevent iOS auto-zoom on input focus by ensuring viewport doesn't scale
   useEffect(()=>{
@@ -4784,14 +5049,19 @@ function App() {
   const lastTickRef     = useRef(Date.now());
   const [_cachedRaceResults, _setCachedRaceResults] = useState({});
 
-  // Keep race results cache fresh from Firebase
+  // Keep race rolls cache fresh — used for payout tracking and finished status
   useEffect(()=>{
     const refresh = async () => {
-      const r = await fbGetRaceResults();
-      _setCachedRaceResults(r);
+      const r = await fbGetRaceRolls();
+      // Convert to results format for payout compatibility
+      const results = {};
+      Object.entries(r).forEach(([id,data])=>{
+        results[id] = { winner: data.winner, visualFinishAt: data.visualFinishAt, finishedAt: data.computedAt };
+      });
+      _setCachedRaceResults(results);
     };
     refresh();
-    const t = setInterval(refresh, 3000);
+    const t = setInterval(refresh, 5000);
     return ()=>clearInterval(t);
   },[]);
 
@@ -4906,32 +5176,33 @@ function App() {
     return () => unsub();
   },[]);
 
-  // Load shared schedule from Firebase — generate fresh if expired or missing
+  // Real-time schedule listener — all users see the same races instantly
   useEffect(()=>{
-    const initSchedule = async () => {
-      const now2 = gameNow();
-      // Try loading from Firebase
-      const [saved, savedAuction] = await Promise.all([fbGetSchedule(), fbGetAuctionSchedule()]);
-      // Check if schedule is still valid (has future races)
-      const hasValidSchedule = saved?.races?.some(r => r.startTime > now2 - 60*60*1000);
-      const hasValidAuction  = savedAuction?.races?.some(r => r.startTime > now2 - 60*60*1000);
-      if(hasValidSchedule) {
-        setSchedule(saved.races);
-      } else {
-        const newSched = generateSchedule();
-        setSchedule(newSched);
-        fbSaveSchedule({ races: newSched, generatedAt: now2 });
+    const now2 = gameNow();
+    // Subscribe to schedule changes in real-time
+    const unsubSched = onSnapshot(doc(db,"global","schedule"), async (snap) => {
+      if(snap.exists()) {
+        const data = snap.data();
+        const hasValid = data.races?.some(r => r.startTime > now2 - 60*60*1000);
+        if(hasValid) { setSchedule(data.races); setScheduleLoaded(true); return; }
       }
-      if(hasValidAuction) {
-        setAuctionSchedule(savedAuction.races);
-      } else {
-        const newAuction = generateAuctionSchedule();
-        setAuctionSchedule(newAuction);
-        fbSaveAuctionSchedule({ races: newAuction, generatedAt: now2 });
-      }
+      // Generate new schedule if missing/expired
+      const newSched = generateSchedule();
+      setSchedule(newSched);
+      await fbSaveSchedule({ races: newSched, generatedAt: now2 });
       setScheduleLoaded(true);
-    };
-    initSchedule();
+    });
+    const unsubAuction = onSnapshot(doc(db,"global","auctionSchedule"), async (snap) => {
+      if(snap.exists()) {
+        const data = snap.data();
+        const hasValid = data.races?.some(r => r.startTime > now2 - 60*60*1000);
+        if(hasValid) { setAuctionSchedule(data.races); return; }
+      }
+      const newAuction = generateAuctionSchedule();
+      setAuctionSchedule(newAuction);
+      await fbSaveAuctionSchedule({ races: newAuction, generatedAt: now2 });
+    });
+    return () => { unsubSched(); unsubAuction(); };
   },[]);
 
   // Sync pending bets to state so navbar badge updates
