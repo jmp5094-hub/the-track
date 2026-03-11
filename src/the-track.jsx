@@ -3110,12 +3110,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
                 );
               })}
             </div>
-            {/* 🛠 DEV ONLY — remove before launch */}
-            <div style={{textAlign:"center",marginBottom:12}}>
-              <button onClick={onDevForceStart} style={{padding:"8px 20px",borderRadius:8,border:"2px dashed #ff6b0066",background:"rgba(255,107,0,0.08)",color:"#ff6b00",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontSize:11,letterSpacing:2}}>
-                🛠 DEV: FORCE START RACE
-              </button>
-            </div>
+
 
             {/* Always show action area while betting is open */}
             <div style={{textAlign:"center"}}>
@@ -4078,6 +4073,8 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [onFire,         setOnFire]         = useState(Array(6).fill(false));
   const [movedHorses,    setMovedHorses]    = useState([]);
+
+  const skipped = Array(6).fill(false); // hurdle skip state (visual only)
 
   // All mutable race state in one ref — no state deps in the loop
   const engineRef = useRef({
