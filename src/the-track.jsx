@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, orderBy, limit } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, orderBy, limit, runTransaction, increment } from "firebase/firestore";
 
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -56,6 +56,45 @@ const fbSavePrivateRaces = async (r) => setDoc(doc(db,"global","privateRaces"), 
 // Bank transactions
 const fbGetBankTx  = async (uid) => { const d = await getDoc(doc(db,"bank",uid)); return d.exists() ? d.data().txs || [] : []; };
 const fbSaveBankTx = async (uid, txs) => setDoc(doc(db,"bank",uid), {txs});
+
+// ── Shared race pots — all users contribute and read the same pot ──────────
+const fbGetRacePot = async (raceId) => {
+  const d = await getDoc(doc(db,"global","racePots"));
+  return d.exists() ? (d.data()[raceId] || null) : null;
+};
+// Atomically add/update a user's bet contribution to the shared pot
+const fbContributeToRacePot = async (raceId, uid, betsByHorse, pot, prevPot=0) => {
+  const potRef = doc(db,"global","racePots");
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(potRef);
+    const allPots = snap.exists() ? snap.data() : {};
+    const existing = allPots[raceId] || { totalPot:0, betsPerHorse:{}, contributors:{} };
+    // Remove previous contribution from this user
+    const prev = existing.contributors[uid] || { pot:0, bets:{} };
+    const newBetsPerHorse = {...existing.betsPerHorse};
+    Object.entries(prev.bets).forEach(([hid,amt]) => {
+      newBetsPerHorse[hid] = Math.max(0, (newBetsPerHorse[hid]||0) - amt);
+    });
+    // Add new contribution
+    Object.entries(betsByHorse).forEach(([hid,amt]) => {
+      newBetsPerHorse[hid] = (newBetsPerHorse[hid]||0) + (parseFloat(amt)||0);
+    });
+    const newTotalPot = (existing.totalPot - (prev.pot||0)) + pot;
+    const newContributors = {...existing.contributors, [uid]: {pot, bets:betsByHorse}};
+    tx.set(potRef, {
+      ...allPots,
+      [raceId]: { totalPot: newTotalPot, betsPerHorse: newBetsPerHorse, contributors: newContributors }
+    });
+  });
+};
+const fbClearRacePot = async (raceId) => {
+  const potRef = doc(db,"global","racePots");
+  const snap = await getDoc(potRef);
+  if(!snap.exists()) return;
+  const data = snap.data();
+  delete data[raceId];
+  await setDoc(potRef, data);
+};
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const TRACK_SPACES   = 12;
@@ -2768,7 +2807,7 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets }) {
 // confirmedBets: bets that have been locked in (balance already deducted)
 // onConfirmBets: called once when user locks bets — just saves, no race start
 // onRaceStart: called when clock hits zero
-function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBets, confirmedPot, onRaceStart, devForceStart, onDevForceStart, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
+function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBets, confirmedPot, sharedPot, onRaceStart, devForceStart, onDevForceStart, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
   const rt = RACE_TYPES[race.type];
 
   // live clock — re-render every second
@@ -2896,14 +2935,12 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     const displayBets  = betsAlreadyIn ? confirmedBets : (confirmed ? localBets : {});
     const enteredEarly = enteredEarlyRef.current;
 
-    // Build odds: use actual confirmed pot if available, else equal distribution
-    const confirmedData = getConfirmed()[race.id];
-    const pot = confirmedData?.pot || 0;
-    const horseBets = confirmedData?.bets || {};
-    const totalPotCalc = pot;
+    // Build odds from shared pot — reflects ALL users' bets combined
+    const spTotal = sharedPot?.totalPot || 0;
+    const spBets  = sharedPot?.betsPerHorse || {};
     const oddsData = HORSES.map(h=>{
-      const betAmt = parseFloat(horseBets[h.id]||0);
-      return { h, odds: betAmt > 0 && totalPotCalc > 0 ? parseFloat((totalPotCalc / betAmt).toFixed(2)) : null };
+      const totalOnHorse = parseFloat(spBets[h.id]||0);
+      return { h, odds: totalOnHorse > 0 && spTotal > 0 ? parseFloat((spTotal / totalOnHorse).toFixed(2)) : null };
     });
     // Sort ascending = favourite first (lowest odds = most bet on)
     const sortedOdds = [...oddsData].sort((a,b)=>{ if(a.odds===null) return 1; if(b.odds===null) return -1; return a.odds-b.odds; });
@@ -3911,6 +3948,19 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
+  // ── Subscribe to Firestore chat in real time ──────────────────────────────
+  useEffect(() => {
+    if(!raceId) return;
+    const chatRef = doc(db, "chat", raceId);
+    const unsub = onSnapshot(chatRef, (snap) => {
+      if(snap.exists()) {
+        const msgs2 = snap.data().msgs || [];
+        setMsgs(msgs2);
+      }
+    });
+    return () => unsub();
+  }, [raceId]);
+
   // Auto-scroll on new messages
   useEffect(()=>{
     if(open) {
@@ -3929,18 +3979,19 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
     }
   },[open]);
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
     if(!text) return;
-    const msg = {
-      id: Date.now(),
-      user: user?.username || "Guest",
-      text,
-      ts: Date.now(),
-    };
-    setMsgs(m=>[...m, msg]);
     setInput("");
-    // TODO: Firebase — push msg to races/{raceId}/chat
+    const chatRef = doc(db, "chat", raceId);
+    const msg = { id: Date.now(), user: user?.username||"Guest", text, ts: Date.now() };
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(chatRef);
+      const existing = snap.exists() ? (snap.data().msgs || []) : [];
+      // Keep last 100 messages
+      const updated = [...existing, msg].slice(-100);
+      tx.set(chatRef, { msgs: updated });
+    });
   };
 
   const fmt = (ts) => {
@@ -4971,6 +5022,7 @@ function App() {
   const [selectedRace,  setSelectedRace]  = useState(null);
   const [bets,          setBets]          = useState({});
   const [totalPot,      setTotalPot]      = useState(0);
+  const [sharedPot,     setSharedPot]     = useState({}); // { [raceId]: {totalPot, betsPerHorse} }
   const [odds,          setOdds]          = useState({});
   const [winner,        setWinner]        = useState(null);
   const [showMyBets,    setShowMyBets]    = useState(false);
@@ -5235,9 +5287,12 @@ function App() {
   const handleBetsConfirm=async(finalBets, pot, prevPot=0)=>{
     const delta = pot - prevPot;
     updateBalance(user.balance - delta);
+    // Save user's private bet record
     const c = await fbGetConfirmed(user.uid);
     c[selectedRace.id]={ bets:finalBets, pot, raceId:selectedRace.id };
     await fbSaveConfirmed(user.uid, c);
+    // Write to shared pot so all users see combined pot + odds
+    await fbContributeToRacePot(selectedRace.id, user.uid, finalBets, pot, prevPot);
     sfx.betConfirm();
     setUserBets(c);
     setBets(finalBets); setTotalPot(pot);
@@ -5288,12 +5343,19 @@ function App() {
     const c = user?.uid ? await fbGetConfirmed(user.uid) : {};
     const saved=c[selectedRace?.id];
     const activeBets=saved?.bets||bets;
-    const activePot=saved?.pot||totalPot;
+    // Use shared pot for odds — all users contributed
+    const sp = sharedPot[selectedRace?.id];
+    const sharedTotalPot = sp?.totalPot || saved?.pot || totalPot;
+    const sharedBetsPerHorse = sp?.betsPerHorse || {};
     const calcOdds={};
-    if(activePot>0) HORSES.forEach(h=>{if(activeBets[h.id]>0)calcOdds[h.id]=activePot/activeBets[h.id];});
+    HORSES.forEach(h=>{
+      const totalOnHorse = sharedBetsPerHorse[h.id] || 0;
+      if(totalOnHorse>0) calcOdds[h.id]=parseFloat((sharedTotalPot/totalOnHorse).toFixed(2));
+    });
     setOdds(calcOdds);
-    const amt=parseFloat(activeBets[winnerIdx]||0);
-    const payout=amt>0&&calcOdds[winnerIdx]?amt*calcOdds[winnerIdx]:0;
+    const activePot=sharedTotalPot;
+    const myBetAmt=parseFloat(activeBets[winnerIdx]||0);
+    const payout=myBetAmt>0&&calcOdds[winnerIdx]?myBetAmt*calcOdds[winnerIdx]:0;
     const bgResults = _cachedRaceResults;
     const bgResult  = bgResults[selectedRace?.id];
     if(!bgResult?.paid && user?.uid) {
@@ -5309,12 +5371,13 @@ function App() {
         _setCachedRaceResults(updatedBg);
       }
     }
-    // Remove from confirmed
+    // Remove from confirmed and clear shared pot
     if(user?.uid) {
       const newC = {...c}; delete newC[selectedRace?.id];
       await fbSaveConfirmed(user.uid, newC);
       setUserBets(newC);
     }
+    await fbClearRacePot(selectedRace?.id);
     setBets(activeBets); setTotalPot(activePot);
     setSchedule(s=>s.map(r=>r.id===selectedRace?.id?{...r,status:"finished"}:r));
     setScreen("payout");
@@ -5428,8 +5491,8 @@ function App() {
         </div>
       )}
       {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets}/>}
-      {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
-      {screen==="race"   && liveSelectedRace && <RaceScreen race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
+      {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} sharedPot={sharedPot[liveSelectedRace?.id]||null} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
+      {screen==="race"   && liveSelectedRace && <RaceScreen race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={sharedPot[liveSelectedRace?.id]?.totalPot||totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
       {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onPlayAgain={()=>handleEnterRace(liveSelectedRace)} onLobby={goLobby}/>}
       {screen==="private-payout"  && liveSelectedRace && winner!==null && <PrivatePayoutScreen race={liveSelectedRace} winner={winner} user={user} onLobby={goLobby}/>}
     </div>
