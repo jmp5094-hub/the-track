@@ -3881,7 +3881,7 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
             } else {
               timeout=setTimeout(doRoll, ROLL_INTERVAL - DICE_ANIM - 120);
             }
-          }, 1800);
+          }, 1600);
         }
       }, DICE_ANIM/8);
     };
@@ -4084,6 +4084,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const fireHistoryRef   = useRef(Array(6).fill([]));
   const onFireRef        = useRef(Array(6).fill(false));
   const winnerFiredRef   = useRef(false);
+  const computedWinnerRef = useRef(null);
   const timeoutRef       = useRef(null);
 
   // Load roll history from Firestore
@@ -4094,11 +4095,12 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       if(cancelled) return;
       const raceRolls = rolls[race.id];
       if(raceRolls) {
+        computedWinnerRef.current = raceRolls.winner;
         setRollHistory(raceRolls.rolls);
       } else {
         // Cloud function hasn't pre-computed yet — fall back to local sim
         const { winner: w, rolls: localRolls } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
-        if(!cancelled) setRollHistory(localRolls);
+        if(!cancelled) { computedWinnerRef.current = w; setRollHistory(localRolls); }
       }
     };
     load();
@@ -4228,19 +4230,11 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             // Check if this is the last roll (winner)
             const isLastRoll = replayIdx === rollHistory.length - 1;
             if(isLastRoll && !winnerFiredRef.current) {
-              // Determine winner from final positions
-              const rollsDoc = rollHistory;
-              // Get winner from the cloud-computed result
-              fbGetRaceRolls().then(allRolls => {
-                const raceData = allRolls[race.id];
-                const w = raceData?.winner ?? 0;
-                if(!winnerFiredRef.current) {
-                  winnerFiredRef.current = true;
-                  setWinner(w);
-                  sfx.finishLine();
-                  setTimeout(() => onRaceEnd(w), 2600);
-                }
-              });
+              winnerFiredRef.current = true;
+              const w = computedWinnerRef.current ?? 0;
+              setWinner(w);
+              sfx.finishLine();
+              setTimeout(() => onRaceEnd(w), 2600);
             } else if(!isLastRoll) {
               setReplayIdx(idx => idx + 1);
             }
@@ -5037,15 +5031,14 @@ function App() {
   const [showAuction,   setShowAuction]   = useState(false);
   const [auctionOwners, setAuctionOwners] = useState(null);
   const [selectedAuctionRace, setSelectedAuctionRace] = useState(null);
-  const [devForceStart, setDevForceStart] = useState(false); // 🛠 DEV ONLY
+
   const [activePrivateRace, setActivePrivateRace] = useState(null); // private race code when racing privately
   const [now,           setNow]           = useState(Date.now());
   const [userBets,      setUserBets]      = useState({});
   const [chatMsgs,      setChatMsgs]      = useState([]); // lifted so msgs persist countdown→race
   const [chatOpen,      setChatOpen]      = useState(false);
   const [chatUnread,    setChatUnread]    = useState(0);
-  const [devSpeed,      setDevSpeed]      = useState(false); // 🛠 4x time
-  const timeOffsetRef   = useRef(0);   // accumulated ms added by speed mode
+  const timeOffsetRef   = useRef(0);
   const lastTickRef     = useRef(Date.now());
   const [_cachedRaceResults, _setCachedRaceResults] = useState({});
 
@@ -5068,27 +5061,25 @@ function App() {
   // Clock tick — also mark finished races based on bg results
   useEffect(()=>{
     const t=setInterval(()=>{
-      // 4x speed: add 3 extra seconds of offset per real second
       const realNow = Date.now();
-      const realElapsed = realNow - lastTickRef.current;
       lastTickRef.current = realNow;
-      if(devSpeed) timeOffsetRef.current += realElapsed * 3; // 1x real + 3x extra = 4x
-      _gameTimeOffset = timeOffsetRef.current;
+      _gameTimeOffset = 0; // server-timed races — no local offset
       setNow(gameNow());
       const results = _cachedRaceResults;
       const t2 = gameNow();
       const dropRace = (r) => {
+        if(r.status === "finished") return r;
         const res = results[r.id];
-        if(!res) return r; // not finished yet — keep
-        // Stay live until visual race has finished + 30s grace to click in for results
+        if(!res) return r;
         const visualDone = res.visualFinishAt || res.finishedAt || 0;
-        return t2 > visualDone + 30000 ? {...r, status:"finished"} : r;
+        if(visualDone > 0 && t2 > visualDone + 30000) return {...r, status:"finished"};
+        return r;
       };
       setSchedule(s=>s.map(dropRace));
       setAuctionSchedule(s=>s.map(dropRace));
     },1000);
     return()=>clearInterval(t);
-  },[devSpeed]);
+  },[]);
 
 
 
@@ -5264,7 +5255,7 @@ function App() {
     if(saved){ setBets(saved.bets); setTotalPot(saved.pot); }
     setSelectedRace(race);
     setWinner(null);
-    setDevForceStart(false);
+
     setChatMsgs([]);
     setChatOpen(false);
     setChatUnread(0);
@@ -5412,7 +5403,7 @@ function App() {
     setBets({});
     setTotalPot(0);
     setActivePrivateRace(null);
-    setDevForceStart(false);
+
     setShowAuction(false);
     setSelectedAuctionRace(null);
     setShowPrivate(false);
@@ -5446,10 +5437,7 @@ function App() {
     <div style={{minHeight:"100vh",background:"#08081a"}}>
       <style>{GS}</style>
       <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>setShowAuction(true)} onBank={()=>setShowBank(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
-      {/* 🛠 DEV: 4x speed toggle */}
-      <div onClick={()=>setDevSpeed(v=>!v)} style={{position:"fixed",bottom:20,right:20,zIndex:9999,padding:"8px 14px",borderRadius:20,background:devSpeed?"rgba(255,107,0,0.9)":"rgba(255,255,255,0.08)",border:devSpeed?"2px solid #ff6b00":"2px dashed #ffffff33",color:devSpeed?"#fff":"#ffffff44",cursor:"pointer",fontSize:12,fontFamily:"'Orbitron',monospace",fontWeight:700,letterSpacing:1,backdropFilter:"blur(8px)",userSelect:"none",boxShadow:devSpeed?"0 0 20px #ff6b0066":"none",transition:"all 0.2s"}}>
-        {devSpeed?"⚡ 4X ON":"⚡ 4X"}
-      </div>
+
       {showBank    && <BankPanel user={user} onClose={()=>setShowBank(false)} onBalanceChange={updateBalance}/>}
       {showProfile && <ProfilePanel user={user} schedule={schedule} now={now} onClose={()=>setShowProfile(false)} onBalanceChange={updateBalance}/>}
       {showPrivate && <PrivateRacesPanel user={user} onClose={()=>setShowPrivate(false)} onLaunchPrivateRace={handleLaunchPrivateRace}/>}
@@ -5491,7 +5479,7 @@ function App() {
         </div>
       )}
       {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets}/>}
-      {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} onRaceStart={handleRaceStart} devForceStart={devForceStart} onDevForceStart={()=>setDevForceStart(true)} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
+      {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
       {screen==="race"   && liveSelectedRace && <RaceScreen race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
       {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onPlayAgain={()=>handleEnterRace(liveSelectedRace)} onLobby={goLobby}/>}
       {screen==="private-payout"  && liveSelectedRace && winner!==null && <PrivatePayoutScreen race={liveSelectedRace} winner={winner} user={user} onLobby={goLobby}/>}
