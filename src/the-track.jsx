@@ -2735,7 +2735,7 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets }) {
       <div style={{maxWidth:880,margin:"0 auto",padding:"20px 16px 0"}}>
         <div style={{textAlign:"center",marginBottom:28}}>
           <h1 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:26,letterSpacing:5,textShadow:"0 0 24px #00f5ff"}}>RACE LOBBY</h1>
-          <p style={{color:"#ffffff33",fontSize:13,marginTop:4}}>Betting opens up to 3 hours early — pick your races</p>
+          <p style={{color:"#ffffff33",fontSize:13,marginTop:4}}>Betting opens up to 3 hours early — pick your race and place your bets</p>
         </div>
         {sections.map(sec=>{
           const races=withStatus.filter(sec.filter);
