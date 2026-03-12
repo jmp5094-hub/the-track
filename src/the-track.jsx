@@ -4871,8 +4871,7 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
         ))}
       </div>
       <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.5s forwards"}}>
-        <button onClick={onLobby} style={{padding:"13px 28px",borderRadius:12,border:"1px solid #00f5ff44",background:"transparent",color:"#00f5ff",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2}}>🏠 LOBBY</button>
-        <button onClick={onPlayAgain} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#00f5ff,#39ff14)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #00f5ff66"}}>🏇 BET AGAIN</button>
+        <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#00f5ff,#39ff14)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #00f5ff66"}}>🏠 BACK TO LOBBY</button>
       </div>
     </div>
   );

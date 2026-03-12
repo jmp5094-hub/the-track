@@ -165,8 +165,9 @@ function simulateRaceWithHistory(raceType, condition, seed) {
           if(pos[horse] >= SPACES) finishers.push(horse);
         }
       } else {
+        const limit = phase === "tiebreak" ? TIEBREAK_SPACES : SPACES;
         if(steps < 0) pos[horse] = Math.max(0, pos[horse]+steps);
-        else { pos[horse] = Math.min(SPACES, pos[horse]+steps); if(pos[horse]>=SPACES) finishers.push(horse); }
+        else { pos[horse] = Math.min(limit, pos[horse]+steps); if(pos[horse]>=limit) finishers.push(horse); }
       }
     });
     skip.forEach((s,i) => { if(s==="jump") skip[i]=false; });
