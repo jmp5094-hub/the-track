@@ -3000,8 +3000,14 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
           </div>
         </div>
 
-        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:20,animation:"racingBlink 1s infinite"}}>
+        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:12,animation:"racingBlink 1s infinite"}}>
           {countdown<=0?"LOADING RACE…":"BETS CLOSED — RACE STARTING"}
+        </div>
+
+        {/* Live pot display */}
+        <div style={{marginBottom:20,padding:"10px 28px",background:"rgba(255,215,0,0.07)",border:"1px solid #ffd70033",borderRadius:12,textAlign:"center"}}>
+          <div style={{color:"#ffffff44",fontSize:10,letterSpacing:3,marginBottom:3}}>🌐 LIVE POT</div>
+          <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:28,fontWeight:900,textShadow:"0 0 20px #ffd70066"}}>${fmt2(spTotal||0)}</div>
         </div>
 
         {/* Odds reveal — stage card swipes in from right at fixed height, hangs, then list grows below */}
@@ -4400,7 +4406,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           {phase==="tiebreak" && <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:1,animation:"racingBlink 0.6s infinite"}}>🔥 TIE-BREAKER!</span>}
           {race.condition&&race.condition!=="sunny"&&<span style={{background:`${cond.color}22`,border:`1px solid ${cond.color}55`,borderRadius:20,padding:"2px 10px",color:cond.color,fontSize:11,fontWeight:700,letterSpacing:1}}>{cond.icon} {cond.label.toUpperCase()}</span>}
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:isMobile?13:17,textShadow:"0 0 12px #ffd70066"}}>🌐 POT ${fmt2(totalPot)}</span>
+          <span style={{color:totalPot>0?"#ffd700":"#ffffff44",fontFamily:"'Orbitron',monospace",fontSize:isMobile?13:17,textShadow:totalPot>0?"0 0 12px #ffd70066":"none"}}>🌐 POT ${fmt2(totalPot)}</span>
         </div>
       </div>
 
