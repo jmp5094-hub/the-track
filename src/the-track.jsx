@@ -1825,7 +1825,7 @@ function MuteButton({ size=28 }) {
 }
 
 // ─── NAVBAR ───────────────────────────────────────────────────────────────────
-function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions, onLogout, onBank, pendingCount }) {
+function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions, onLogout, onBank, onHowTo, pendingCount }) {
   const profile  = getProfile(user.username);
   const avatar   = profile.avatar || "🏇";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1844,6 +1844,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
     ["🎫","Active Bets",    onMyBets,        pendingCount>0?pendingCount:null],
     ["👤","Profile",        onProfile,       null],
     ["🏦","Bank",           onBank,          null],
+    ["❓","How It Works",   onHowTo,         null],
     ["⬡", "Sign Out",   onLogout,         null],
   ];
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
@@ -1946,6 +1947,8 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
           <span style={{fontSize:13}}>🏦</span>
           <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(user.balance)}</span>
         </button>
+        <button onClick={onHowTo} style={{background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:6,color:"#00f5ff88",padding:"5px 8px",cursor:"pointer",fontSize:11,transition:"all 0.15s",fontFamily:"'Orbitron',monospace",letterSpacing:1,fontWeight:700}}
+          onMouseEnter={e=>{e.currentTarget.style.color="#00f5ff";e.currentTarget.style.background="rgba(0,245,255,0.12)";}}          onMouseLeave={e=>{e.currentTarget.style.color="#00f5ff88";e.currentTarget.style.background="rgba(0,245,255,0.06)";}}>❓ HOW TO</button>
         <button onClick={onLogout} style={{background:"rgba(255,45,85,0.08)",border:"1px solid #ff2d5533",borderRadius:6,color:"#ff2d5588",padding:"5px 8px",cursor:"pointer",fontSize:11,transition:"all 0.15s"}}
           onMouseEnter={e=>{e.currentTarget.style.color="#ff2d55";e.currentTarget.style.background="rgba(255,45,85,0.15)";}}
           onMouseLeave={e=>{e.currentTarget.style.color="#ff2d5588";e.currentTarget.style.background="rgba(255,45,85,0.08)";}}>
@@ -4877,6 +4880,254 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
   );
 }
 
+
+// ─── HOW IT WORKS PANEL ───────────────────────────────────────────────────────
+function HowItWorksPanel({ onClose }) {
+  const [tab, setTab] = useState("basics");
+
+  const TABS = [
+    { id:"basics",    icon:"🏇", label:"The Basics"  },
+    { id:"racetypes", icon:"🎲", label:"Race Types"  },
+    { id:"weather",   icon:"🌦", label:"Weather"     },
+    { id:"auctions",  icon:"🔨", label:"Auctions"    },
+    { id:"bank",      icon:"🏦", label:"Bank"        },
+  ];
+
+  const Section = ({icon, title, children}) => (
+    <div style={{marginBottom:24,background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"16px 18px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <span style={{fontSize:22}}>{icon}</span>
+        <span style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:14,letterSpacing:2,fontWeight:700}}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+
+  const Row = ({label, value, color="#ffffffbb"}) => (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"7px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+      <span style={{color:"#ffffff55",fontSize:13,flex:1}}>{label}</span>
+      <span style={{color,fontSize:13,fontWeight:600,textAlign:"right",maxWidth:"55%"}}>{value}</span>
+    </div>
+  );
+
+  const Tag = ({color, label}) => (
+    <span style={{display:"inline-block",background:`${color}22`,border:`1px solid ${color}55`,borderRadius:20,padding:"2px 10px",color,fontSize:11,fontWeight:700,letterSpacing:1,marginRight:6,marginBottom:6}}>{label}</span>
+  );
+
+  const OddsExample = () => {
+    const [bets, setBets] = useState({0:100, 1:50, 2:200});
+    const total = Object.values(bets).reduce((s,v)=>s+v,0);
+    const horses = [{id:0,name:"War Horse Emoji",color:"#ff6b6b"},{id:1,name:"Velvet Underground",color:"#a78bfa"},{id:2,name:"Double Bogey",color:"#34d399"}];
+    return (
+      <div style={{background:"rgba(0,0,0,0.3)",borderRadius:10,padding:"12px 14px",marginTop:10}}>
+        <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>LIVE EXAMPLE — adjust bets to see odds change</div>
+        {horses.map(h => {
+          const myBet = bets[h.id]||0;
+          const odds = myBet > 0 ? (total/myBet).toFixed(2) : "—";
+          return (
+            <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <span style={{color:h.color,fontSize:12,fontWeight:700,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</span>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <span style={{color:"#ffffff44",fontSize:11}}>$</span>
+                <input type="number" min="0" value={myBet}
+                  onChange={e=>setBets(b=>({...b,[h.id]:Math.max(0,parseInt(e.target.value)||0)}))}
+                  style={{width:60,padding:"3px 6px",background:"rgba(255,255,255,0.07)",border:`1px solid ${h.color}44`,borderRadius:6,color:"#fff",fontSize:13,outline:"none",textAlign:"right"}}/>
+              </div>
+              <span style={{fontFamily:"'Orbitron',monospace",color:myBet>0?"#ffd700":"#ffffff22",fontSize:14,fontWeight:900,minWidth:48,textAlign:"right"}}>{myBet>0?`${odds}x`:"—"}</span>
+            </div>
+          );
+        })}
+        <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",marginTop:8,paddingTop:8,display:"flex",justifyContent:"space-between"}}>
+          <span style={{color:"#ffffff44",fontSize:12}}>Total pot</span>
+          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14,fontWeight:900}}>${total}</span>
+        </div>
+        <div style={{color:"#ffffff33",fontSize:11,marginTop:8}}>If you bet $100 on War Horse and win → ${(total/(bets[0]||1)).toFixed(2)} × $100 = <span style={{color:"#39ff14",fontWeight:700}}>${((total/(bets[0]||1))*100).toFixed(2)}</span></div>
+      </div>
+    );
+  };
+
+  const RaceTypeCard = ({icon, name, color, tag, desc, mechanics}) => (
+    <div style={{marginBottom:14,background:`${color}08`,border:`1px solid ${color}22`,borderRadius:12,padding:"14px 16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+        <span style={{fontSize:24}}>{icon}</span>
+        <div>
+          <div style={{color,fontFamily:"'Orbitron',monospace",fontSize:13,fontWeight:700,letterSpacing:1}}>{name}</div>
+          <div style={{color:`${color}88`,fontSize:11,marginTop:1}}>{tag}</div>
+        </div>
+      </div>
+      <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.5,marginBottom:8}}>{desc}</div>
+      <div style={{color:"#ffffff55",fontSize:12,lineHeight:1.6,fontStyle:"italic"}}>{mechanics}</div>
+    </div>
+  );
+
+  const WeatherCard = ({icon, name, color, effect, tip}) => (
+    <div style={{marginBottom:12,display:"flex",gap:12,background:`${color}08`,border:`1px solid ${color}22`,borderRadius:12,padding:"12px 14px"}}>
+      <span style={{fontSize:28,flexShrink:0}}>{icon}</span>
+      <div>
+        <div style={{color,fontFamily:"'Orbitron',monospace",fontSize:12,fontWeight:700,letterSpacing:1,marginBottom:4}}>{name}</div>
+        <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.5,marginBottom:4}}>{effect}</div>
+        <div style={{color:"#ffffff44",fontSize:11,fontStyle:"italic"}}>💡 {tip}</div>
+      </div>
+    </div>
+  );
+
+  const renderTab = () => {
+    if(tab === "basics") return (
+      <div>
+        <Section icon="🏁" title="HOW A RACE WORKS">
+          <Row label="Track length" value="20 spaces — first to reach the end wins"/>
+          <Row label="Race interval" value="Races fire every 1–5 minutes"/>
+          <Row label="Betting window" value="Open until the countdown hits zero"/>
+          <Row label="Race duration" value="~3–5 minutes depending on dice rolls"/>
+          <Row label="Payout" value="Credited instantly after the winner crosses the line"/>
+        </Section>
+        <Section icon="💰" title="BETTING">
+          <Row label="How to bet" value="Pick any horse(s), enter a dollar amount, hit CONFIRM"/>
+          <Row label="Multiple bets" value="You can bet on multiple horses in the same race"/>
+          <Row label="Minimum bet" value="$1 per horse"/>
+          <Row label="Editing" value="You can edit bets anytime until the window closes"/>
+          <Row label="Pot" value="All users' bets combine into one shared pot"/>
+        </Section>
+        <Section icon="📊" title="ODDS & PAYOUTS">
+          <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.6,marginBottom:10}}>
+            Odds are <span style={{color:"#00f5ff",fontWeight:700}}>pari-mutuel</span> — the more money bet on a horse, the lower the payout. The pot is shared proportionally among winning bettors.
+          </div>
+          <div style={{background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff22",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
+            <div style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:11,letterSpacing:2,marginBottom:4}}>THE FORMULA</div>
+            <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14}}>Odds = Total Pot ÷ Amount Bet on Winner</div>
+            <div style={{color:"#ffffff44",fontSize:12,marginTop:4}}>Payout = Your Bet × Odds</div>
+          </div>
+          <OddsExample/>
+        </Section>
+      </div>
+    );
+
+    if(tab === "racetypes") return (
+      <div>
+        <RaceTypeCard icon="🎲" name="STANDARD" color="#00f5ff" tag="2 dice · classic"
+          desc="Two dice are rolled each turn. Each die moves the matching horse one space. Doubles moves that horse two spaces."
+          mechanics="Dice 1–6 = Horses 1–6. Roll a 3 and a 5 → Horse 3 and Horse 5 each move 1 space. Roll double 4s → Horse 4 moves 2 spaces."/>
+        <RaceTypeCard icon="🎯" name="TRIPLE DICE" color="#a78bfa" tag="3 dice · more action"
+          desc="Three dice rolled every turn — more movement, faster races, more horses in play each roll."
+          mechanics="Same as Standard but with 3 dice. No doubles bonus — just 3 independent moves per roll."/>
+        <RaceTypeCard icon="✨" name="MAGIC DICE" color="#ffd700" tag="2 dice · wild card"
+          desc="Die 1 picks the horse. Die 2 decides how many spaces it moves. One horse could leap forward 6 spaces in a single roll."
+          mechanics="Die 1 (1–6) = which horse. Die 2 (1–6) = spaces moved. Huge swings possible — any horse can bolt from last to first."/>
+        <RaceTypeCard icon="↩️" name="DOWN & BACK" color="#ff6b6b" tag="2 dice · two legs"
+          desc="Horses race to the far end, then turn around and race back. First to return to start wins. Strategy shifts at the halfway point."
+          mechanics="Horses advance to space 20, then reverse direction. Once a horse turns, it heads back toward 0. First to reach 0 on the return wins."/>
+        <RaceTypeCard icon="🚧" name="HURDLES" color="#39ff14" tag="2 dice · obstacles"
+          desc="A hurdle sits at space 10. Horses must clear it with doubles — otherwise they stop in front and wait. A well-timed doubles roll can leap over the field."
+          mechanics="Any horse reaching the hurdle stops unless doubles were rolled. On doubles, the horse clears the hurdle and lands 2 ahead. Horses pile up, then burst through."/>
+      </div>
+    );
+
+    if(tab === "weather") return (
+      <div>
+        <div style={{color:"#ffffff44",fontSize:13,marginBottom:16,lineHeight:1.6}}>
+          Weather conditions are assigned randomly when the schedule generates. They affect how dice moves work — same race, different chaos.
+        </div>
+        <WeatherCard icon="☀️" name="SUNNY" color="#ffd700"
+          effect="Standard conditions. No modifiers. Dice rolls apply normally."
+          tip="Baseline race — pure luck and odds. Great for learning the game."/>
+        <WeatherCard icon="🌧️" name="RAIN (MUD)" color="#60a5fa"
+          effect="Every 3rd roll, one die becomes the MUD DIE. That horse slips and doesn't move — only the other horse advances."
+          tip="Mud slows the field unpredictably. Favourites can stall. Long shots love the rain."/>
+        <WeatherCard icon="🌫️" name="FOG" color="#94a3b8"
+          effect="Every 4th roll, one die becomes the FOG DIE. That horse slides BACKWARD one space instead of forward."
+          tip="Fog can erase a lead instantly. Bet spreads work well here — one horse sliding back can flip the race."/>
+      </div>
+    );
+
+    if(tab === "auctions") return (
+      <div>
+        <Section icon="🔨" title="HOW AUCTIONS WORK">
+          <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.6,marginBottom:12}}>
+            Auction races let you <span style={{color:"#ffd700",fontWeight:700}}>own a horse</span> by outbidding other players. Winning bidders become the horse's owner — their name appears on the track during the race.
+          </div>
+          <Row label="Auction format" value="6 horses auctioned one at a time, 30 seconds each"/>
+          <Row label="Bidding" value="Place a bid higher than the current top bid to take the lead"/>
+          <Row label="One owner per horse" value="Once you own a horse you can't bid on others"/>
+          <Row label="No sale" value="If nobody bids on a horse, it runs unowned"/>
+          <Row label="After auction" value="30-second presentation showing owners + odds"/>
+        </Section>
+        <Section icon="💵" title="AUCTION BETTING">
+          <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.6,marginBottom:10}}>
+            Owning a horse doesn't automatically mean you win money. You still need to <span style={{color:"#00f5ff",fontWeight:700}}>place a bet</span> on it (or any horse) in the bets tab during the auction.
+          </div>
+          <Row label="Ownership" value="Bragging rights + name on the track"/>
+          <Row label="Winning bid cost" value="Deducted from your balance when you win the auction"/>
+          <Row label="Payout" value="Same pari-mutuel odds as regular races"/>
+          <Row label="Strategy" value="Bid high to own a horse, bet smart to profit"/>
+        </Section>
+      </div>
+    );
+
+    if(tab === "bank") return (
+      <div>
+        <Section icon="🏦" title="YOUR BANK">
+          <Row label="Starting balance" value="$1,000 when you create your account"/>
+          <Row label="Deposits" value="Add funds to your betting balance anytime"/>
+          <Row label="Withdrawals" value="Move winnings out to your bank"/>
+          <Row label="Transaction history" value="Full log of all deposits, withdrawals, and transfers"/>
+        </Section>
+        <Section icon="💡" title="TIPS">
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {[
+              ["Spread your bets","Betting on multiple horses in the same race hedges your risk — especially in weather races."],
+              ["Watch the pot","A growing pot means competition. More bettors = bigger payouts if you pick right."],
+              ["Long shots pay","A horse nobody else bet on pays massive odds if it wins. High risk, huge reward."],
+              ["Auction early","First horses auctioned often go cheap — later horses get more competition."],
+              ["Weather changes odds","Rain and fog shake up favourites. Reconsider your picks when conditions are rough."],
+            ].map(([title,desc])=>(
+              <div key={title} style={{background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px",borderLeft:"3px solid #00f5ff44"}}>
+                <div style={{color:"#00f5ff",fontWeight:700,fontSize:13,marginBottom:3}}>{title}</div>
+                <div style={{color:"#ffffff66",fontSize:12,lineHeight:1.5}}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 12px 12px",overflowY:"auto"}}>
+      <div style={{width:"100%",maxWidth:560,background:"#0d0d1f",border:"1px solid rgba(0,245,255,0.15)",borderRadius:20,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,0.8)"}}>
+        {/* Header */}
+        <div style={{padding:"20px 20px 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #00f5ff66"}}>HOW IT WORKS</div>
+            <div style={{color:"#ffffff33",fontSize:12,marginTop:2,letterSpacing:1}}>The Track — Player Guide</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#ffffff66",cursor:"pointer",width:32,height:32,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",gap:4,padding:"14px 16px 0",overflowX:"auto",scrollbarWidth:"none"}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              flexShrink:0,padding:"7px 14px",borderRadius:8,border:"none",cursor:"pointer",
+              background:tab===t.id?"rgba(0,245,255,0.15)":"rgba(255,255,255,0.04)",
+              color:tab===t.id?"#00f5ff":"#ffffff55",
+              fontFamily:"'Orbitron',monospace",fontSize:10,letterSpacing:1,fontWeight:700,
+              borderBottom:tab===t.id?"2px solid #00f5ff":"2px solid transparent",
+              transition:"all 0.15s",
+            }}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{padding:"16px 16px 24px",maxHeight:"70vh",overflowY:"auto"}}>
+          {renderTab()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 // ── Pure background race simulator (no React, no animations) ─────────────────
 function simRace(raceType, condition, seed) {
@@ -5058,6 +5309,7 @@ function App() {
   const [winner,        setWinner]        = useState(null);
   const [showMyBets,    setShowMyBets]    = useState(false);
   const [showBank,      setShowBank]      = useState(false);
+  const [showHowTo,     setShowHowTo]     = useState(false);
   const [showProfile,   setShowProfile]   = useState(false);
   const [showPrivate,   setShowPrivate]   = useState(false);
   const [showAuction,   setShowAuction]   = useState(false);
@@ -5485,9 +5737,10 @@ function App() {
   return (
     <div style={{minHeight:"100vh",background:"#08081a"}}>
       <style>{GS}</style>
-      <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>setShowAuction(true)} onBank={()=>setShowBank(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
+      <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>setShowAuction(true)} onBank={()=>setShowBank(true)} onHowTo={()=>setShowHowTo(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
 
       {showBank    && <BankPanel user={user} onClose={()=>setShowBank(false)} onBalanceChange={updateBalance}/>}
+      {showHowTo   && <HowItWorksPanel onClose={()=>setShowHowTo(false)}/>}
       {showProfile && <ProfilePanel user={user} schedule={schedule} now={now} onClose={()=>setShowProfile(false)} onBalanceChange={updateBalance}/>}
       {showPrivate && <PrivateRacesPanel user={user} onClose={()=>setShowPrivate(false)} onLaunchPrivateRace={handleLaunchPrivateRace}/>}
       {showMyBets&& (
