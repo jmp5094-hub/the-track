@@ -2737,15 +2737,6 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets }) {
           <h1 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:26,letterSpacing:5,textShadow:"0 0 24px #00f5ff"}}>RACE LOBBY</h1>
           <p style={{color:"#ffffff33",fontSize:13,marginTop:4}}>Betting opens up to 3 hours early — pick your races</p>
         </div>
-        {/* Type Legend */}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginBottom:28}}>
-          {Object.entries(RACE_TYPES).map(([k,rt])=>(
-            <div key={k} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:20,background:`${rt.color}0d`,border:`1px solid ${rt.color}33`}}>
-              <span style={{fontSize:15}}>{rt.icon}</span>
-              <span style={{color:rt.color,fontSize:12,fontWeight:700,letterSpacing:1}}>{rt.label}</span>
-            </div>
-          ))}
-        </div>
         {sections.map(sec=>{
           const races=withStatus.filter(sec.filter);
           if(!races.length) return null;
