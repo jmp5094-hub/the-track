@@ -100,12 +100,11 @@ const fbClearRacePot = async (raceId) => {
 const TRACK_SPACES   = 12;
 const BET_CLOSE_SECS = 30;          // betting closes 30s before race
 const BET_OPEN_HOURS = 3;           // betting opens 3 hours before race
-const ROLL_INTERVAL    = 5200;  // ms between roll starts — must match cloud function
-const DICE_FLASH_DUR   = 900;   // ms dice spin/flash
-const DICE_HOLD_DUR    = 1300;  // ms dice stay visible after settling
-const HORSE_MOVE_DELAY = 300;   // ms after dice settle before horses slide
-const NEXT_ROLL_PAUSE  = 900;   // ms after horses land before next roll
-// derived — keeps cloud function in sync (total cycle = ROLL_INTERVAL)
+const ROLL_INTERVAL    = 3200;  // ms between roll starts — must match cloud function
+const DICE_FLASH_DUR   = 500;   // ms dice spin/flash
+const DICE_HOLD_DUR    = 600;   // ms dice stay visible after settling
+const HORSE_MOVE_DELAY = 0;     // horses move simultaneously with dice fade
+const NEXT_ROLL_PAUSE  = 200;   // tiny pause after horses land before next roll
 const DICE_ANIM        = DICE_FLASH_DUR; // alias used in flash loop
 const TIEBREAK_SPACES  = 3;
 
@@ -4269,11 +4268,13 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         setRolling(true); setOverlayVisible(true); setActiveHorses([]);
         setDiceResult({...roll, moves:[], isDoubles:false});
 
-        // Timing: flash(900ms) → hold(300ms) → horses move(500ms) → unlock(400ms) = 2100ms
-        const FLASH_DUR  = 900;
-        const HOLD_DUR   = 300;
-        const MOVE_DUR   = 500;
-        const DONE_PAUSE = 400;
+        // Cycle: flash(500ms) → dice fully visible+readable(600ms) → setOverlayVisible(false) AND setPositions AT SAME TIME
+        //        horse slideHorse anim is 300ms → 200ms after horse lands → next roll fires
+        //        Total visible cycle: ~1600ms, feels punchy and flowing
+        const FLASH_DUR  = 500;   // dice spin
+        const HOLD_DUR   = 600;   // dice fully readable before anything moves
+        const MOVE_DUR   = 300;   // matches slideHorse 0.3s CSS anim
+        const DONE_PAUSE = 200;   // brief breath after horses land
 
         let flashes = 0;
         const nd = roll.dice.length;
@@ -4490,7 +4491,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
               <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
             </> : null;
             const burstAnim = gateBurst ? "gateBurst 0.5s ease-out" : undefined;
-            const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:returning?<span style={{filter:coat,position:"relative",zIndex:2,animation:isMoved?"slideHorseReturn 0.3s ease-out":undefined}}>🐴</span>:<span style={{display:"inline-block",transform:"scaleX(-1)",filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorse 0.3s ease-out":undefined)}}>🐴</span>;
+            const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:returning?<span style={{filter:coat,position:"relative",zIndex:2,animation:isMoved?"slideHorseReturn 0.25s ease-out":undefined}}>🐴</span>:<span style={{display:"inline-block",transform:"scaleX(-1)",filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorse 0.25s ease-out":undefined)}}>🐴</span>;
             return (
               <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s"}}>
                 <div style={{width:sideLabelW,flexShrink:0,paddingRight:4,display:"flex",flexDirection:"column"}}>
@@ -4544,7 +4545,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         return (
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",zIndex:2}}>
             {/* Dice overlay — fixed on top of track, no layout space */}
-            <div style={{position:"fixed",top:64,left:0,right:0,display:"flex",justifyContent:"center",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.3s ease-in-out"}}>
+            <div style={{position:"fixed",top:64,left:0,right:0,display:"flex",justifyContent:"center",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.22s ease-out"}}>
               {winner!==null?(
                 <div style={{background:"rgba(6,6,20,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"8px 24px",textAlign:"center",boxShadow:`0 0 28px ${HORSES[winner].color}44`,alignSelf:"center"}}>
                   <div style={{fontFamily:"'Orbitron',monospace",color:HORSES[winner].color,fontSize:15,letterSpacing:3,textShadow:`0 0 14px ${HORSES[winner].color}`}}>🏆 {horseName(race,winner).split(" ")[0].toUpperCase()} WINS!</div>
@@ -4572,7 +4573,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                   <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
                 </> : null;
                 const burstAnim = gateBurst ? "gateBurstPortrait 0.5s ease-out" : undefined;
-                const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:<span style={{filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorseReturn 0.3s ease-out":undefined)}}>🐴</span>;
+                const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:<span style={{filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorseReturn 0.25s ease-out":undefined)}}>🐴</span>;
                 const isDownBackType=(race.type==="down_back"||race.type==="magic_dice");
                 const atFinish=phase==="tiebreak"?pos>=TIEBREAK_SPACES:isDownBackType?returning&&pos<=0:pos>=TRACK_SPACES;
                 const atTurnaround=phase!=="tiebreak"&&isDownBackType&&pos>=TRACK_SPACES;
@@ -4634,7 +4635,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
       {/* DICE OVERLAY — landscape only */}
       {isLandscape && (
-        <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.3s ease-in-out"}}>
+        <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.22s ease-out"}}>
           {winner!==null?(
             <div style={{background:"rgba(6,6,20,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"10px 28px",textAlign:"center",boxShadow:`0 0 32px ${HORSES[winner].color}44`}}>
               <div style={{fontFamily:"'Orbitron',monospace",color:HORSES[winner].color,fontSize:16,letterSpacing:3,textShadow:`0 0 16px ${HORSES[winner].color}`}}>
