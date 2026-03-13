@@ -2010,13 +2010,21 @@ function Modal({ title, accent="#00f5ff", onClose, children, wide }) {
 }
 
 // ─── MY BETS PANEL ────────────────────────────────────────────────────────────
-function MyBetsPanel({ username, schedule, auctionSchedule, now, onClose, onGoToRace, userBalance, onBalanceChange }) {
+function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, onGoToRace, userBalance, onBalanceChange }) {
+  const [tab, setTab] = useState("active");
   const [pending, setPending] = useState(getPending());
+  const [history, setHistory] = useState(null); // null = not loaded yet
+
+  // Load history when History tab opened
+  useEffect(()=>{
+    if(tab === "history" && history === null && uid) {
+      fbGetHistory(uid).then(h => setHistory([...h].reverse())); // newest first
+    }
+  }, [tab, uid]);
 
   const myRaces = useMemo(()=>{
     const result=[];
     const confirmed=getConfirmed();
-    // Draft bets (editable)
     Object.entries(pending).forEach(([raceId,horseBets])=>{
       const race=schedule.find(r=>r.id===raceId)||auctionSchedule.find(r=>r.id===raceId);
       if(!race) return;
@@ -2025,9 +2033,8 @@ function MyBetsPanel({ username, schedule, auctionSchedule, now, onClose, onGoTo
       const totalBet=Object.values(horseBets).reduce((s,v)=>s+(parseFloat(v)||0),0);
       result.push({race,horseBets,totalBet,st,isConfirmed:false});
     });
-    // Confirmed bets (locked, read-only)
     Object.entries(confirmed).forEach(([raceId,data])=>{
-      if(result.find(r=>r.race.id===raceId)) return; // already in list
+      if(result.find(r=>r.race.id===raceId)) return;
       const race=schedule.find(r=>r.id===raceId)||auctionSchedule.find(r=>r.id===raceId);
       if(!race) return;
       const st=raceStatus(race,now);
@@ -2060,74 +2067,143 @@ function MyBetsPanel({ username, schedule, auctionSchedule, now, onClose, onGoTo
     return t;
   },[pending,schedule,now]);
 
+  // Group history by race for display
+  const historyByRace = useMemo(()=>{
+    if(!history) return [];
+    const map = {};
+    history.forEach(h => {
+      const key = h.raceName + "_" + Math.floor((h.time||0)/60000); // group by race+minute
+      if(!map[key]) map[key] = { raceName:h.raceName, raceType:h.raceType, time:h.time, bets:[], won:false, totalPayout:0, totalBet:0 };
+      map[key].bets.push(h);
+      map[key].totalBet += parseFloat(h.amount)||0;
+      if(h.won) { map[key].won = true; map[key].totalPayout += parseFloat(h.payout)||0; }
+    });
+    return Object.values(map).sort((a,b)=>(b.time||0)-(a.time||0));
+  }, [history]);
+
   return (
-    <Modal title="🎫 MY ACTIVE BETS" accent="#00f5ff" onClose={onClose} wide>
-      {myRaces.length===0 && <p style={{color:"#ffffff33",textAlign:"center",padding:40}}>No active bets. Head to the lobby to place some!</p>}
+    <Modal title="🎫 BETS" accent="#00f5ff" onClose={onClose} wide>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:4,marginBottom:18,borderBottom:"1px solid rgba(255,255,255,0.08)",paddingBottom:12}}>
+        {[["active","Active Bets"],["history","History"]].map(([id,lbl])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{padding:"6px 18px",borderRadius:8,border:"none",cursor:"pointer",background:tab===id?"rgba(0,245,255,0.15)":"rgba(255,255,255,0.04)",color:tab===id?"#00f5ff":"#ffffff55",fontFamily:"'Orbitron',monospace",fontSize:11,letterSpacing:1,fontWeight:700,borderBottom:tab===id?"2px solid #00f5ff":"2px solid transparent",transition:"all 0.15s"}}>
+            {lbl}{id==="active"&&myRaces.length>0?<span style={{marginLeft:6,background:"#ff2d55",color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:9}}>{myRaces.length}</span>:null}
+          </button>
+        ))}
+      </div>
+
+      {/* Balance */}
       <div style={{marginBottom:16,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{color:"#ffffff55",fontSize:13}}>Balance</span>
         <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:16}}>${fmt2(userBalance)}</span>
       </div>
-      {myRaces.map(({race,horseBets,totalBet,st,isConfirmed})=>{
-        const rt=RACE_TYPES[race.type];
-        const secsToStart=Math.floor((race.startTime-now)/1000);
-        const canEdit=st==="betting" && !isConfirmed;
-        return (
-          <div key={race.id} style={{marginBottom:16,padding:"14px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${rt.color}33`,borderRadius:12,animation:"slideIn 0.2s ease-out"}}>
-            {/* Header */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:8,flexWrap:"wrap"}}>
-              <div>
-                <div style={{color:"#fff",fontWeight:700,fontSize:15}}>{rt.icon} {race.name}</div>
-                <div style={{display:"flex",gap:8,alignItems:"center",marginTop:3,flexWrap:"wrap"}}>
-                  <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
-                  {isConfirmed
-                    ? <span style={{background:"rgba(0,245,255,0.12)",border:"1px solid #00f5ff33",borderRadius:10,padding:"1px 8px",color:"#00f5ff",fontSize:10,fontWeight:700,letterSpacing:1}}>✓ LOCKED IN</span>
-                    : <span style={{background:"rgba(255,215,0,0.1)",border:"1px solid #ffd70033",borderRadius:10,padding:"1px 8px",color:"#ffd700",fontSize:10,fontWeight:700,letterSpacing:1}}>DRAFT</span>
-                  }
+
+      {/* ── ACTIVE BETS TAB ── */}
+      {tab==="active" && <>
+        {myRaces.length===0 && <p style={{color:"#ffffff33",textAlign:"center",padding:40}}>No active bets. Head to the lobby to place some!</p>}
+        {myRaces.map(({race,horseBets,totalBet,st,isConfirmed})=>{
+          const rt=RACE_TYPES[race.type];
+          const secsToStart=Math.floor((race.startTime-now)/1000);
+          const canEdit=st==="betting" && !isConfirmed;
+          return (
+            <div key={race.id} style={{marginBottom:16,padding:"14px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${rt.color}33`,borderRadius:12,animation:"slideIn 0.2s ease-out"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:8,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{color:"#fff",fontWeight:700,fontSize:15}}>{rt.icon} {race.name}</div>
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginTop:3,flexWrap:"wrap"}}>
+                    <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
+                    {isConfirmed
+                      ? <span style={{background:"rgba(0,245,255,0.12)",border:"1px solid #00f5ff33",borderRadius:10,padding:"1px 8px",color:"#00f5ff",fontSize:10,fontWeight:700,letterSpacing:1}}>✓ LOCKED IN</span>
+                      : <span style={{background:"rgba(255,215,0,0.1)",border:"1px solid #ffd70033",borderRadius:10,padding:"1px 8px",color:"#ffd700",fontSize:10,fontWeight:700,letterSpacing:1}}>DRAFT</span>
+                    }
+                  </div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  {st==="betting" && <div style={{color:"#39ff14",fontSize:12,fontFamily:"'Orbitron',monospace"}}>OPEN — {fmtCD(secsToStart)}</div>}
+                  {st==="locked"  && <div style={{color:"#ffd700",fontSize:12,fontFamily:"'Orbitron',monospace"}}>LOCKED 🔒</div>}
+                  {st==="racing"  && <div style={{color:"#ff2d55",fontSize:12,fontFamily:"'Orbitron',monospace",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
+                  {st==="upcoming"&& <div style={{color:"#ffffff55",fontSize:12,fontFamily:"'Orbitron',monospace"}}>{fmtCD(secsToStart)}</div>}
+                  <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>🕐 {fmtTime(new Date(race.startTime))}</div>
                 </div>
               </div>
-              <div style={{textAlign:"right"}}>
-                {st==="betting" && <div style={{color:"#39ff14",fontSize:12,fontFamily:"'Orbitron',monospace"}}>OPEN — {fmtCD(secsToStart)}</div>}
-                {st==="locked"  && <div style={{color:"#ffd700",fontSize:12,fontFamily:"'Orbitron',monospace"}}>LOCKED 🔒</div>}
-                {st==="racing"  && <div style={{color:"#ff2d55",fontSize:12,fontFamily:"'Orbitron',monospace",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
-                {st==="upcoming"&& <div style={{color:"#ffffff55",fontSize:12,fontFamily:"'Orbitron',monospace"}}>{fmtCD(secsToStart)}</div>}
-                <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>🕐 {fmtTime(new Date(race.startTime))}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+                {Object.entries(horseBets).map(([hid,amt])=>{
+                  const h=HORSES[parseInt(hid)];
+                  return (
+                    <div key={hid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"rgba(255,255,255,0.03)",borderRadius:8,border:`1px solid ${h.color}33`}}>
+                      <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,background:`${h.color}18`,border:`1.5px solid ${h.color}`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
+                      <HorseName race={race} horseId={h.id} style={{flex:1,color:h.color,fontWeight:600,fontSize:13}}/>
+                      {canEdit ? (
+                        <>
+                          <div style={{position:"relative"}}>
+                            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:"#ffd70077",fontSize:13,pointerEvents:"none"}}>$</span>
+                            <input type="number" min="1" value={amt} onChange={e=>updateBet(race.id,hid,e.target.value)}
+                              style={{width:80,padding:"6px 6px 6px 20px",background:"rgba(255,255,255,0.07)",border:"1px solid #ffffff18",borderRadius:6,color:"#fff",fontSize:14,outline:"none"}}/>
+                          </div>
+                          <button onClick={()=>updateBet(race.id,hid,"")} style={{background:"rgba(255,45,85,0.15)",border:"1px solid #ff2d5533",borderRadius:6,color:"#ff2d55",padding:"5px 8px",cursor:"pointer",fontSize:11}}>✕</button>
+                        </>
+                      ) : (
+                        <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14}}>${fmt2(parseFloat(amt))}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                <span style={{color:"#ffffff55",fontSize:12}}>Total: <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace"}}>${fmt2(totalBet)}</span></span>
+                <div style={{display:"flex",gap:8}}>
+                  {canEdit && !isConfirmed && <button onClick={()=>removeBet(race.id)} style={{background:"rgba(255,45,85,0.1)",border:"1px solid #ff2d5533",borderRadius:7,color:"#ff2d55",padding:"6px 12px",cursor:"pointer",fontSize:12,letterSpacing:1}}>✕ Remove</button>}
+                  <button onClick={()=>{onClose();onGoToRace(race);}} style={{background:`${rt.color}18`,border:`1px solid ${rt.color}44`,borderRadius:7,color:rt.color,padding:"6px 12px",cursor:"pointer",fontSize:12,letterSpacing:1}}>View Race →</button>
+                </div>
               </div>
             </div>
-            {/* Horse bets */}
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
-              {Object.entries(horseBets).map(([hid,amt])=>{
-                const h=HORSES[parseInt(hid)];
-                return (
-                  <div key={hid} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"rgba(255,255,255,0.03)",borderRadius:8,border:`1px solid ${h.color}33`}}>
-                    <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,background:`${h.color}18`,border:`1.5px solid ${h.color}`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-                    <HorseName race={race} horseId={h.id} style={{flex:1,color:h.color,fontWeight:600,fontSize:13}}/>
-                    {canEdit ? (
-                      <>
-                        <div style={{position:"relative"}}>
-                          <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:"#ffd70077",fontSize:13,pointerEvents:"none"}}>$</span>
-                          <input type="number" min="1" value={amt} onChange={e=>updateBet(race.id,hid,e.target.value)}
-                            style={{width:80,padding:"6px 6px 6px 20px",background:"rgba(255,255,255,0.07)",border:"1px solid #ffffff18",borderRadius:6,color:"#fff",fontSize:14,outline:"none"}}/>
-                        </div>
-                        <button onClick={()=>updateBet(race.id,hid,"")} style={{background:"rgba(255,45,85,0.15)",border:"1px solid #ff2d5533",borderRadius:6,color:"#ff2d55",padding:"5px 8px",cursor:"pointer",fontSize:11}}>✕</button>
-                      </>
-                    ) : (
-                      <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14}}>${fmt2(parseFloat(amt))}</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Footer */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-              <span style={{color:"#ffffff55",fontSize:12}}>Total: <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace"}}>${fmt2(totalBet)}</span></span>
-              <div style={{display:"flex",gap:8}}>
-                {canEdit && !isConfirmed && <button onClick={()=>removeBet(race.id)} style={{background:"rgba(255,45,85,0.1)",border:"1px solid #ff2d5533",borderRadius:7,color:"#ff2d55",padding:"6px 12px",cursor:"pointer",fontSize:12,letterSpacing:1}}>✕ Remove</button>}
-                <button onClick={()=>{onClose();onGoToRace(race);}} style={{background:`${rt.color}18`,border:`1px solid ${rt.color}44`,borderRadius:7,color:rt.color,padding:"6px 12px",cursor:"pointer",fontSize:12,letterSpacing:1}}>View Race →</button>
+          );
+        })}
+      </>}
+
+      {/* ── HISTORY TAB ── */}
+      {tab==="history" && <>
+        {history===null && <div style={{textAlign:"center",padding:40,color:"#ffffff33"}}>Loading...</div>}
+        {history!==null && historyByRace.length===0 && <div style={{textAlign:"center",padding:40,color:"#ffffff33"}}>No race history yet.</div>}
+        {history!==null && historyByRace.map((race,i)=>{
+          const rt = RACE_TYPES[race.raceType] || RACE_TYPES.standard;
+          const net = race.totalPayout - race.totalBet;
+          return (
+            <div key={i} style={{marginBottom:12,padding:"13px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${race.won?"#39ff1433":"#ff2d5522"}`,borderRadius:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div>
+                  <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{rt.icon} {race.raceName||"Race"}</div>
+                  <div style={{color:rt.color,fontSize:11,fontWeight:600,marginTop:2}}>{rt.label}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontFamily:"'Orbitron',monospace",fontSize:14,fontWeight:900,color:race.won?"#39ff14":"#ff2d55"}}>{race.won?`+$${fmt2(race.totalPayout)}`:"Lost"}</div>
+                  <div style={{color:"#ffffff33",fontSize:10,marginTop:2}}>{race.time ? new Date(race.time).toLocaleDateString()+' '+new Date(race.time).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : ""}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {race.bets.map((b,bi)=>{
+                  const h=HORSES[b.horseId]||HORSES[0];
+                  return (
+                    <div key={bi} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",background:"rgba(255,255,255,0.02)",borderRadius:6,border:`1px solid ${h.color}22`}}>
+                      <span style={{color:h.color,fontSize:11,fontWeight:700,flex:1}}>{h.name}</span>
+                      <span style={{color:"#ffffff55",fontSize:11}}>Bet ${fmt2(b.amount)}</span>
+                      {b.odds&&<span style={{color:"#ffffff33",fontSize:10}}>{b.odds}x</span>}
+                      {b.won
+                        ? <span style={{color:"#39ff14",fontSize:11,fontWeight:700}}>✓ +${fmt2(b.payout)}</span>
+                        : <span style={{color:"#ff2d5566",fontSize:11}}>✗</span>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",justifyContent:"space-between"}}>
+                <span style={{color:"#ffffff44",fontSize:11}}>Total bet: <span style={{color:"#ffd700"}}>${fmt2(race.totalBet)}</span></span>
+                <span style={{color:"#ffffff44",fontSize:11}}>Net: <span style={{color:net>=0?"#39ff14":"#ff2d55",fontWeight:700}}>{net>=0?"+":""}${fmt2(net)}</span></span>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </>}
     </Modal>
   );
 }
@@ -5838,7 +5914,7 @@ function App() {
       {showPrivate && <PrivateRacesPanel user={user} onClose={()=>setShowPrivate(false)} onLaunchPrivateRace={handleLaunchPrivateRace}/>}
       {showMyBets&& (
         <MyBetsPanel
-          username={user.username} schedule={schedule} auctionSchedule={auctionSchedule} now={now}
+          username={user.username} uid={user.uid} schedule={schedule} auctionSchedule={auctionSchedule} now={now}
           onClose={()=>setShowMyBets(false)}
           onGoToRace={race=>{setShowMyBets(false);setSelectedRace(race);setScreen("detail");}}
           userBalance={user.balance}
