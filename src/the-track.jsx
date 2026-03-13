@@ -1830,6 +1830,48 @@ function MuteButton({ size=28 }) {
 }
 
 // ─── NAVBAR ───────────────────────────────────────────────────────────────────
+function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(()=>{
+    const handler = (e) => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return ()=>document.removeEventListener("mousedown", handler);
+  },[]);
+
+  const items = [
+    { icon:"👤", label:"Profile",    fn: onProfile },
+    { icon:"🏦", label:"Bank",       fn: onBank    },
+    { icon:"❓",  label:"How It Works", fn: onHowTo },
+    { icon:"🚪", label:"Sign Out",   fn: onLogout, danger: true },
+  ];
+
+  return (
+    <div ref={ref} style={{position:"relative",flexShrink:0}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px",background:open?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:20,cursor:"pointer",transition:"all 0.15s"}}
+        onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}
+        onMouseLeave={e=>{ if(!open) e.currentTarget.style.background="rgba(255,255,255,0.05)"; }}>
+        <span style={{fontSize:15}}>{avatar}</span>
+        <span style={{color:"#fff",fontSize:12,fontWeight:600,letterSpacing:1,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.username}</span>
+        <span style={{color:"#ffffff44",fontSize:9,marginLeft:2}}>{open?"▲":"▼"}</span>
+      </button>
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,minWidth:160,background:"rgba(8,8,26,0.98)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",zIndex:400,animation:"slideIn 0.12s ease-out"}}>
+          {items.map(({icon,label,fn,danger})=>(
+            <button key={label} onClick={()=>{ setOpen(false); fn(); }} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid rgba(255,255,255,0.05)",cursor:"pointer",textAlign:"left"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.07)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{fontSize:14}}>{icon}</span>
+              <span style={{color:danger?"#ff2d55":"#ffffffcc",fontSize:13,fontWeight:600}}>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions, onLogout, onBank, onHowTo, pendingCount }) {
   const profile  = getProfile(user.username);
   const avatar   = profile.avatar || "🏇";
@@ -1940,25 +1982,16 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
         ))}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-        <button onClick={onProfile} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,cursor:"pointer",transition:"all 0.15s"}}
-          onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";}}
-          onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.borderColor="rgba(255,255,255,0.1)";}}>
-          <span style={{fontSize:15}}>{avatar}</span>
-          <span style={{color:"#fff",fontSize:12,fontWeight:600,letterSpacing:1}}>{user.username}</span>
-        </button>
-        <button onClick={onBank} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(255,215,0,0.08)",border:"1px solid #ffd70033",borderRadius:8,cursor:"pointer",transition:"all 0.15s"}}
+        <button onClick={onBank} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(255,215,0,0.08)",border:"1px solid #ffd70033",borderRadius:8,cursor:"pointer",transition:"all 0.15s",flexShrink:0}}
           onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,215,0,0.16)";e.currentTarget.style.borderColor="#ffd70066";}}
           onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,215,0,0.08)";e.currentTarget.style.borderColor="#ffd70033";}}>
           <span style={{fontSize:13}}>🏦</span>
           <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(user.balance)}</span>
         </button>
-        <button onClick={onHowTo} style={{background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:6,color:"#00f5ff88",padding:"5px 8px",cursor:"pointer",fontSize:11,transition:"all 0.15s",fontFamily:"'Orbitron',monospace",letterSpacing:1,fontWeight:700}}
-          onMouseEnter={e=>{e.currentTarget.style.color="#00f5ff";e.currentTarget.style.background="rgba(0,245,255,0.12)";}}          onMouseLeave={e=>{e.currentTarget.style.color="#00f5ff88";e.currentTarget.style.background="rgba(0,245,255,0.06)";}}>❓ HOW TO</button>
-        <button onClick={onLogout} style={{background:"rgba(255,45,85,0.08)",border:"1px solid #ff2d5533",borderRadius:6,color:"#ff2d5588",padding:"5px 8px",cursor:"pointer",fontSize:11,transition:"all 0.15s"}}
-          onMouseEnter={e=>{e.currentTarget.style.color="#ff2d55";e.currentTarget.style.background="rgba(255,45,85,0.15)";}}
-          onMouseLeave={e=>{e.currentTarget.style.color="#ff2d5588";e.currentTarget.style.background="rgba(255,45,85,0.08)";}}>
-          ⬡ Out
-        </button>
+        <button onClick={onHowTo} style={{width:30,height:30,background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:6,color:"#00f5ff88",cursor:"pointer",fontSize:16,fontWeight:700,transition:"all 0.15s",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+          onMouseEnter={e=>{e.currentTarget.style.color="#00f5ff";e.currentTarget.style.background="rgba(0,245,255,0.14)";}}
+          onMouseLeave={e=>{e.currentTarget.style.color="#00f5ff88";e.currentTarget.style.background="rgba(0,245,255,0.06)";}}>?</button>
+        <UserMenu avatar={avatar} user={user} onProfile={onProfile} onBank={onBank} onHowTo={onHowTo} onLogout={onLogout}/>
         <MuteButton/>
       </div>
     </div>
