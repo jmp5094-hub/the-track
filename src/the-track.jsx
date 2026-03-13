@@ -5244,6 +5244,13 @@ function simulateRaceWithHistory(raceType, condition, seed) {
     const fin=[];
     moves.forEach(({horse,steps})=>{
       if(skip[horse]){skip[horse]=false;return;}
+      // In tiebreak, only tieHorses run and track is TIEBREAK_SPACES long
+      if(phase==="tiebreak") {
+        if(!tieHorses.includes(horse)) return;
+        pos[horse]=Math.min(TIEBREAK_SPACES, pos[horse]+Math.abs(steps));
+        if(pos[horse]>=TIEBREAK_SPACES) fin.push(horse);
+        return;
+      }
       if(raceType==="down_back"||raceType==="magic_dice") {
         if(!leg[horse]){const dest=pos[horse]+steps;if(dest>=SPACES){leg[horse]=true;pos[horse]=Math.max(0,SPACES-(dest-SPACES));if(pos[horse]<=0)fin.push(horse);}else pos[horse]=dest;}
         else{pos[horse]=Math.max(0,pos[horse]-steps);if(pos[horse]<=0)fin.push(horse);}
@@ -5268,7 +5275,8 @@ function simulateRaceWithHistory(raceType, condition, seed) {
     rollHistory.push({dice:roll.dice,isDoubles:roll.isDoubles,moves:roll.moves,mudDieIdx:roll.mudDieIdx,fogDieIdx:roll.fogDieIdx,positions:[...pos],legDone:[...leg],phase});
     if(fin.length===1){winner=fin[0];}
     else if(fin.length>1){
-      phase="tiebreak";tieHorses=[...fin];for(let i=0;i<6;i++)pos[i]=0;
+      phase="tiebreak"; tieHorses=[...fin];
+      for(let i=0;i<6;i++) pos[i]=0; // reset all — only tieHorses will move in applyMv
       let tb=0;
       while(tb++<500){const tr=rollDice(rollHistory.length);const tf=applyMv(tr.moves,tr.isDoubles);
         rollHistory.push({dice:tr.dice,isDoubles:tr.isDoubles,moves:tr.moves,mudDieIdx:tr.mudDieIdx,fogDieIdx:tr.fogDieIdx,positions:[...pos],legDone:[...leg],phase:"tiebreak"});
@@ -5315,18 +5323,17 @@ function App() {
   const [chatUnread,    setChatUnread]    = useState(0);
   const timeOffsetRef   = useRef(0);
   const lastTickRef     = useRef(Date.now());
-  const [_cachedRaceResults, _setCachedRaceResults] = useState({});
+  const _cachedRaceResultsRef = useRef({});
 
-  // Keep race rolls cache fresh — used for payout tracking and finished status
+  // Keep race results cache fresh — use a ref so clock interval always sees latest value
   useEffect(()=>{
     const refresh = async () => {
       const r = await fbGetRaceRolls();
-      // Convert to results format for payout compatibility
       const results = {};
       Object.entries(r).forEach(([id,data])=>{
         results[id] = { winner: data.winner, visualFinishAt: data.visualFinishAt, finishedAt: data.computedAt };
       });
-      _setCachedRaceResults(results);
+      _cachedRaceResultsRef.current = results;
     };
     refresh();
     const t = setInterval(refresh, 5000);
@@ -5336,11 +5343,10 @@ function App() {
   // Clock tick — also mark finished races based on bg results
   useEffect(()=>{
     const t=setInterval(()=>{
-      const realNow = Date.now();
-      lastTickRef.current = realNow;
-      _gameTimeOffset = 0; // server-timed races — no local offset
+      lastTickRef.current = Date.now();
+      _gameTimeOffset = 0;
       setNow(gameNow());
-      const results = _cachedRaceResults;
+      const results = _cachedRaceResultsRef.current;
       const t2 = gameNow();
       const dropRace = (r) => {
         if(r.status === "finished") return r;
@@ -5780,4 +5786,3 @@ function App() {
 }
 
 export default App;
- 
