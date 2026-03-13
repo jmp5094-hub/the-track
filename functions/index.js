@@ -313,23 +313,27 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
   }
 
   // ── 3. Mark finished races ────────────────────────────────────────────────
+  // Max possible race duration: 60 rolls * ROLL_INTERVAL + 10s buffer
+  const MAX_RACE_MS = 60 * ROLL_INTERVAL + 10000;
+
+  const shouldBeFinished = (r) => {
+    if(r.status === "finished") return false;
+    const fireTime = r.isAuction ? r.startTime + 30000 : r.startTime;
+    const rollData = rollsDoc[r.id];
+    // If we have roll data, use the exact visualFinishAt
+    if(rollData && now > rollData.visualFinishAt + 30000) return true;
+    // If no roll data but race started long enough ago, mark finished anyway
+    if(now > fireTime + MAX_RACE_MS) return true;
+    return false;
+  };
+
   let schedChanged = false;
   const updatedSchedule = schedule.map(r => {
-    if(r.status === "finished") return r;
-    const rollData = rollsDoc[r.id];
-    if(rollData && now > rollData.visualFinishAt + 30000) {
-      schedChanged = true;
-      return {...r, status: "finished"};
-    }
+    if(shouldBeFinished(r)) { schedChanged = true; return {...r, status:"finished"}; }
     return r;
   });
   const updatedAuction = auctionSched.map(r => {
-    if(r.status === "finished") return r;
-    const rollData = rollsDoc[r.id];
-    if(rollData && now > rollData.visualFinishAt + 30000) {
-      schedChanged = true;
-      return {...r, status: "finished"};
-    }
+    if(shouldBeFinished(r)) { schedChanged = true; return {...r, status:"finished"}; }
     return r;
   });
 
