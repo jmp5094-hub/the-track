@@ -5500,7 +5500,7 @@ function App() {
 
   const handleEnterRace=async(race)=>{ // async only needed for payout path
     const st = raceStatus(race, gameNow());
-    const results = _cachedRaceResults;
+    const results = _cachedRaceResultsRef.current;
     const bgResult = results[race.id];
 
     if(bgResult !== undefined && st === "finished") {
@@ -5642,7 +5642,7 @@ function App() {
     const activePot=sharedTotalPot;
     const myBetAmt=parseFloat(activeBets[winnerIdx]||0);
     const payout=myBetAmt>0&&calcOdds[winnerIdx]?myBetAmt*calcOdds[winnerIdx]:0;
-    const bgResults = _cachedRaceResults;
+    const bgResults = _cachedRaceResultsRef.current;
     const bgResult  = bgResults[selectedRace?.id];
     if(!bgResult?.paid && user?.uid) {
       updateBalance((user?.balance||0)+payout);
@@ -5667,7 +5667,7 @@ function App() {
     setBets(activeBets); setTotalPot(activePot);
     setSchedule(s=>s.map(r=>r.id===selectedRace?.id?{...r,status:"finished"}:r));
     setScreen("payout");
-  },[bets,totalPot,odds,user,selectedRace,activePrivateRace,updateBalance,_cachedRaceResults]);
+  },[bets,totalPot,odds,user,selectedRace,activePrivateRace,updateBalance,]);
 
   // Launch a private race — build a synthetic race object and go straight to RaceScreen
   const handleLaunchPrivateRace = (privateRace) => {
