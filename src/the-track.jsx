@@ -100,9 +100,14 @@ const fbClearRacePot = async (raceId) => {
 const TRACK_SPACES   = 12;
 const BET_CLOSE_SECS = 30;          // betting closes 30s before race
 const BET_OPEN_HOURS = 3;           // betting opens 3 hours before race
-const ROLL_INTERVAL  = 4500;        // ms between rolls (slower = readable)
-const DICE_ANIM      = 1000;        // ms dice spinning
-const TIEBREAK_SPACES = 3;
+const ROLL_INTERVAL    = 5200;  // ms between roll starts — must match cloud function
+const DICE_FLASH_DUR   = 900;   // ms dice spin/flash
+const DICE_HOLD_DUR    = 1300;  // ms dice stay visible after settling
+const HORSE_MOVE_DELAY = 300;   // ms after dice settle before horses slide
+const NEXT_ROLL_PAUSE  = 900;   // ms after horses land before next roll
+// derived — keeps cloud function in sync (total cycle = ROLL_INTERVAL)
+const DICE_ANIM        = DICE_FLASH_DUR; // alias used in flash loop
+const TIEBREAK_SPACES  = 3;
 
 const HORSES = [
   { id:0, name:"Neon Phantom",   color:"#00f5ff" },
@@ -3796,31 +3801,48 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
   },[]);
 
   useEffect(()=>{
+    // ── Timing layout (one full cycle = ROLL_INTERVAL ms) ────────────────────
+    // [0ms]       doRoll called → dice start flashing
+    // [DICE_FLASH_DUR]  dice settle → show final values + active horses
+    // [+HORSE_MOVE_DELAY]  dice overlay fades, horses slide
+    // [+HORSE_MOVE_DUR]  horses landed, dice stay visible a bit longer
+    // [+NEXT_ROLL_PAUSE]  dice clear, brief pause
+    // [= ROLL_INTERVAL]  next doRoll fires
+    //
+    // DICE_FLASH_DUR(900) + HORSE_MOVE_DELAY(300) + HORSE_MOVE_DUR(600) + NEXT_ROLL_PAUSE(900)
+    //   = 2700ms of animation — leaves 2500ms of total cycle as slack/display time
+    // Total cycle ROLL_INTERVAL = 5200ms
+
     let timeout;
+    const timeouts = []; // track all timeouts for cleanup
+    const T = (fn, ms) => { const id = setTimeout(fn, ms); timeouts.push(id); return id; };
 
     const doRoll = () => {
       if(!ref.current.running) return;
-      const rc     = ref.current.rollCount;
-      const ph     = ref.current.phase;
-      const tieH   = ref.current.tieHorses||null;
+      const rc  = ref.current.rollCount;
+      const ph  = ref.current.phase;
+      const tieH = ref.current.tieHorses || null;
 
       const dr = buildRoll(raceType, rc, ref.current.positions, ref.current.legDone, ref.current.skipped, ph, tieH, condition);
 
-      // animate — hide moves/active horses until dice settle
+      // ── Phase 1: Dice flash ─────────────────────────────────────────────────
       setRolling(true);
-      setOverlayVisible(true); // show overlay during roll too
+      setOverlayVisible(true);
       setActiveHorses([]);
-      setDiceResult({...dr, rollCount:rc, moves:[], isDoubles:false, wildMove:null}); // blank moves while rolling
+      setDiceResult({...dr, rollCount:rc, moves:[], isDoubles:false, wildMove:null});
 
-      // flash dice values
-      let flashes=0;
-      const flashInt=setInterval(()=>{
-        const fakeDice=Array.from({length:dr.dice.length},()=>rng());
-        setDiceResult(d=>({...d,dice:fakeDice}));
+      const flashCount = 8;
+      const flashEvery = Math.floor(DICE_FLASH_DUR / flashCount);
+      let flashes = 0;
+      const flashInt = setInterval(()=>{
+        const fakeDice = Array.from({length:dr.dice.length}, ()=>rng());
+        setDiceResult(d=>({...d, dice:fakeDice}));
         sfx.diceRoll();
         flashes++;
-        if(flashes>=8){
+        if(flashes >= flashCount) {
           clearInterval(flashInt);
+
+          // ── Phase 2: Dice settle — show final values ──────────────────────
           setDiceResult({...dr, rollCount:rc});
           setActiveHorses(dr.moves.filter(m=>m.steps>0).map(m=>m.horse));
           setRolling(false);
@@ -3830,118 +3852,115 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
           sfx.diceSettle();
           if(dr.isDoubles && raceType!=="magic_dice") sfx.doubles();
 
-          // Show overlay for 1.5s, fade out 300ms, then move horses
-          setTimeout(()=>setOverlayVisible(false), 1500);
+          // ── Phase 3: Horses move (after short hold so you read the dice) ──
+          T(()=>{
+            setOverlayVisible(false); // dice start fading as horses move
 
-          setTimeout(()=>{
-            const applyResult=applyMoves(dr.moves, ref.current.positions, ref.current.legDone, ref.current.skipped, raceType, ph, tieH, dr.isDoubles);
-            const {newPos,newLeg,newSkip,winner:w}=applyResult;
-            // Detect hurdle jumps before clearing the skip flag
-            const jumpers = newSkip.map((s,i)=>s==="jump"?i:-1).filter(i=>i>=0);
-            // Clear jump markers so they don't persist
+            const applyResult = applyMoves(dr.moves, ref.current.positions, ref.current.legDone, ref.current.skipped, raceType, ph, tieH, dr.isDoubles);
+            const {newPos,newLeg,newSkip,winner:w} = applyResult;
+            const jumpers   = newSkip.map((s,i)=>s==="jump"?i:-1).filter(i=>i>=0);
             const cleanSkip = newSkip.map(s=>s==="jump"?false:s);
 
-            ref.current.positions=newPos;
-            ref.current.legDone=newLeg;
-            ref.current.skipped=cleanSkip;
-            ref.current.rollCount=rc+1;
+            ref.current.positions = newPos;
+            ref.current.legDone   = newLeg;
+            ref.current.skipped   = cleanSkip;
+            ref.current.rollCount = rc + 1;
             setPositions([...newPos]);
             setLegDone([...newLeg]);
             setSkipped([...cleanSkip]);
-            setRollCount(rc+1);
+            setRollCount(rc + 1);
 
-            // 🔥 Fire tracking — each horse's number is (horseId + 1), i.e. horse 0 = die face 1
-            // For each horse, record whether their number appeared in this roll's dice
-            const rawDice = dr.dice; // actual final dice values
+            // Fire tracking
+            const rawDice = dr.dice;
             const newFireHistory = ref.current.fireHistory.map((hist, hi) => {
-              const horseNum = hi + 1; // horse 0 watches for die face 1, etc.
-              const appeared = rawDice.includes(horseNum);
-              const updated = [...hist, appeared].slice(-3); // keep last 3
-              return updated;
+              const appeared = rawDice.includes(hi + 1);
+              return [...hist, appeared].slice(-3);
             });
             const newOnFire = newFireHistory.map((hist, hi) => {
-              if(hist.length < 3) return ref.current.onFire[hi]; // not enough data yet
-              const allPresent  = hist.every(v => v === true);
-              const allAbsent   = hist.every(v => v === false);
-              if(allPresent)  return true;  // 3 consecutive hits → ON FIRE
-              if(allAbsent)   return false; // 3 consecutive misses → fire dies
-              return ref.current.onFire[hi]; // mixed → keep current state
+              if(hist.length < 3) return ref.current.onFire[hi];
+              if(hist.every(v=>v===true))  return true;
+              if(hist.every(v=>v===false)) return false;
+              return ref.current.onFire[hi];
             });
             ref.current.fireHistory = newFireHistory;
-            ref.current.onFire = newOnFire;
+            ref.current.onFire      = newOnFire;
             setOnFire([...newOnFire]);
 
-            // Track which horses moved for speed line effect
+            // Speed lines
             const moved = dr.moves.filter(m=>m.steps>0).map(m=>m.horse);
             setMovedHorses(moved);
-            setTimeout(()=>setMovedHorses([]), 500);
-            if(jumpers.length>0){
+            T(()=>setMovedHorses([]), HORSE_MOVE_DUR + 100);
+
+            // Sounds
+            if(jumpers.length > 0) {
               setJumpingHorses(jumpers);
               sfx.hurdleJump();
-              setTimeout(()=>setJumpingHorses([]),900);
+              T(()=>setJumpingHorses([]), 900);
             } else {
-              const totalSteps = dr.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);
-              if(totalSteps>0) setTimeout(()=>sfx.horseMove(Math.min(totalSteps,3)),80);
+              const totalSteps = dr.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0), 0);
+              if(totalSteps > 0) T(()=>sfx.horseMove(Math.min(totalSteps,3)), 80);
             }
-            // Fog sliding horses
+
+            // Fog slides
             const sliders = dr.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
-            if(sliders.length>0){
+            if(sliders.length > 0) {
               setSlidingHorses(sliders);
-              setTimeout(()=>setSlidingHorses([]),800);
+              T(()=>setSlidingHorses([]), 800);
             }
-            // Clear mud/fog die markers after a moment
-            setTimeout(()=>{ setMudDie(null); setFogDie(null); }, 1400);
+
+            // Clear weather die markers
+            T(()=>{ setMudDie(null); setFogDie(null); }, HORSE_MOVE_DUR + 200);
+
             // Turn-around sound
             const newTurners = newLeg.filter((l,i)=>l && !ref.current.legDone[i]);
-            if(newTurners.length>0) setTimeout(()=>sfx.turnAround(),100);
+            if(newTurners.length > 0) T(()=>sfx.turnAround(), 100);
 
-            if(w!==null && ref.current.winner===null) {
-              if(ph==="tiebreak") {
-                // tiebreak resolved
-                ref.current.winner=w;
-                ref.current.running=false;
-                setWinner(w);
-                sfx.finishLine();
-                sfx.win();
-                setTimeout(()=>onWinner(w),2600);
-              } else {
-                // check for multi-winner (tie)
-                const potentialWinners=[w];
-                // check if any other horse also reached finish this same roll
-                newPos.forEach((p,hi)=>{
-                  if(hi!==w){
-                    const goalMet = raceType==="down_back"
-                      ? (p<=0 && newLeg[hi])
-                      : (p>=TRACK_SPACES);
-                    if(goalMet) potentialWinners.push(hi);
-                  }
-                });
-                if(potentialWinners.length>1) {
-                  // TIE! start tiebreak
-                  const tbPos = HORSES.map(()=>0);
-                  ref.current.positions=tbPos;
-                  ref.current.phase="tiebreak";
-                  ref.current.tieHorses=potentialWinners;
-                  ref.current.rollCount=0;
-                  setPositions([...tbPos]);
-                  setPhase("tiebreak");
-                  setTieHorses(potentialWinners);
-                  setRollCount(0);
-                  timeout=setTimeout(doRoll,2400); // wait for tie overlay to finish
-                } else {
-                  ref.current.winner=w;
-                  ref.current.running=false;
+            // ── Phase 4: After horses land — schedule next roll or end ──────
+            T(()=>{
+              if(w !== null && ref.current.winner === null) {
+                if(ph === "tiebreak") {
+                  ref.current.winner = w;
+                  ref.current.running = false;
                   setWinner(w);
                   sfx.finishLine();
-                  setTimeout(()=>onWinner(w),2600);
+                  sfx.win();
+                  T(()=>onWinner(w), 2600);
+                } else {
+                  const potentialWinners = [w];
+                  newPos.forEach((p,hi)=>{
+                    if(hi !== w) {
+                      const goalMet = raceType==="down_back" ? (p<=0 && newLeg[hi]) : (p>=TRACK_SPACES);
+                      if(goalMet) potentialWinners.push(hi);
+                    }
+                  });
+                  if(potentialWinners.length > 1) {
+                    const tbPos = HORSES.map(()=>0);
+                    ref.current.positions  = tbPos;
+                    ref.current.phase      = "tiebreak";
+                    ref.current.tieHorses  = potentialWinners;
+                    ref.current.rollCount  = 0;
+                    setPositions([...tbPos]);
+                    setPhase("tiebreak");
+                    setTieHorses(potentialWinners);
+                    setRollCount(0);
+                    T(doRoll, 2400);
+                  } else {
+                    ref.current.winner  = w;
+                    ref.current.running = false;
+                    setWinner(w);
+                    sfx.finishLine();
+                    T(()=>onWinner(w), 2600);
+                  }
                 }
+              } else {
+                // Next roll — fire at the top of the next ROLL_INTERVAL cycle
+                T(doRoll, NEXT_ROLL_PAUSE);
               }
-            } else {
-              timeout=setTimeout(doRoll, ROLL_INTERVAL - DICE_ANIM - 120);
-            }
-          }, 1600);
+            }, HORSE_MOVE_DUR);
+
+          }, HORSE_MOVE_DELAY);
         }
-      }, DICE_ANIM/8);
+      }, flashEvery);
     };
 
     // If already fast-forwarded to a winner, fire immediately
@@ -3949,20 +3968,36 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
       timeout = setTimeout(()=>onWinner(ref.current.winner), 100);
       return ()=>{ clearTimeout(timeout); };
     }
-    // If joining mid-race (positions already set), skip the intro pause and gunshot
-    const alreadyStarted = ref.current.rollCount > 0;
-    if(alreadyStarted) {
+
+    // If joining mid-race: compute how far into the current roll cycle we are
+    // and delay first doRoll to align with the next roll boundary
+    if(ref.current.rollCount > 0 && raceStartTime) {
+      const elapsed   = Date.now() - raceStartTime;
+      const firstRollAt = 1300; // ~1.3s after race start
+      const intoRace  = Math.max(0, elapsed - firstRollAt);
+      const cyclePos  = intoRace % ROLL_INTERVAL; // ms into current roll cycle
+      const msUntilNextRoll = ROLL_INTERVAL - cyclePos;
+      // If we're already most of the way through a cycle (>80%), just wait for next
+      // If we're early in a cycle (<30%), fire immediately so user sees something
+      const delay = cyclePos < ROLL_INTERVAL * 0.3 ? 200 : msUntilNextRoll;
+      timeout = setTimeout(doRoll, Math.max(200, delay));
+    } else if(ref.current.rollCount > 0) {
       timeout = setTimeout(doRoll, 200);
     } else {
-      // Suspense pause → gunshot → brief hold → first dice roll
-      timeout=setTimeout(()=>{
+      // Fresh start: suspense pause → gunshot → first roll
+      timeout = setTimeout(()=>{
         sfx.gunshot();
         if(onGunshot) onGunshot();
-        timeout=setTimeout(doRoll, 600);
+        timeout = setTimeout(doRoll, 600);
       }, 700);
     }
-    return()=>{ ref.current.running=false; clearTimeout(timeout); };
-  },[raceType, onWinner, buildRoll, applyMoves]);
+
+    return ()=>{
+      ref.current.running = false;
+      clearTimeout(timeout);
+      timeouts.forEach(clearTimeout);
+    };
+  },[raceType, onWinner, buildRoll, applyMoves, raceStartTime]);
 
   return {positions,legDone,skipped,activeHorses,diceResult,rolling,rollCount,winner,tieHorses,phase,jumpingHorses,slidingHorses,mudDie,fogDie,overlayVisible,onFire,movedHorses};
 }
