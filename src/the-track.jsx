@@ -1981,16 +1981,12 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
           </button>
         ))}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-        <button onClick={onBank} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(255,215,0,0.08)",border:"1px solid #ffd70033",borderRadius:8,cursor:"pointer",transition:"all 0.15s",flexShrink:0}}
-          onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,215,0,0.16)";e.currentTarget.style.borderColor="#ffd70066";}}
-          onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,215,0,0.08)";e.currentTarget.style.borderColor="#ffd70033";}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+        {/* Balance — display only */}
+        <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70022",borderRadius:8}}>
           <span style={{fontSize:13}}>🏦</span>
           <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(user.balance)}</span>
-        </button>
-        <button onClick={onHowTo} style={{width:30,height:30,background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:6,color:"#00f5ff88",cursor:"pointer",fontSize:16,fontWeight:700,transition:"all 0.15s",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-          onMouseEnter={e=>{e.currentTarget.style.color="#00f5ff";e.currentTarget.style.background="rgba(0,245,255,0.14)";}}
-          onMouseLeave={e=>{e.currentTarget.style.color="#00f5ff88";e.currentTarget.style.background="rgba(0,245,255,0.06)";}}>?</button>
+        </div>
         <UserMenu avatar={avatar} user={user} onProfile={onProfile} onBank={onBank} onHowTo={onHowTo} onLogout={onLogout}/>
         <MuteButton/>
       </div>
