@@ -2071,8 +2071,12 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
   const historyByRace = useMemo(()=>{
     if(!history) return [];
     const map = {};
+    const seen = new Set(); // deduplicate by raceId+horseId
     history.forEach(h => {
-      const key = h.raceName + "_" + Math.floor((h.time||0)/60000); // group by race+minute
+      const key = h.raceId || (h.raceName + "_" + Math.floor((h.time||0)/60000));
+      const entryKey = key + "_" + h.horseId;
+      if(seen.has(entryKey)) return; // skip duplicate
+      seen.add(entryKey);
       if(!map[key]) map[key] = { raceName:h.raceName, raceType:h.raceType, time:h.time, bets:[], won:false, totalPayout:0, totalBet:0 };
       map[key].bets.push(h);
       map[key].totalBet += parseFloat(h.amount)||0;
@@ -5696,7 +5700,7 @@ function App() {
         if(user?.uid) {
           const hist = await fbGetHistory(user.uid);
           Object.entries(activeBets).forEach(([hid,a])=>{
-            hist.push({user:user?.username,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[parseInt(hid)]||null,won:parseInt(hid)===bgResult.winner,payout:parseInt(hid)===bgResult.winner?bgResult.payout:0,time:Date.now(),raceName:race.name,raceType:race.type});
+            hist.push({user:user?.username,raceId:race.id,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[parseInt(hid)]||null,won:parseInt(hid)===bgResult.winner,payout:parseInt(hid)===bgResult.winner?bgResult.payout:0,time:Date.now(),raceName:race.name,raceType:race.type});
           });
           await fbSaveHistory(user.uid, hist);
         }
@@ -5820,7 +5824,7 @@ function App() {
       updateBalance((user?.balance||0)+payout);
       const hist = await fbGetHistory(user.uid);
       Object.entries(activeBets).forEach(([hid,a])=>{
-        hist.push({user:user?.username,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[hid]?parseFloat(calcOdds[hid].toFixed(2)):null,won:parseInt(hid)===winnerIdx,payout:parseInt(hid)===winnerIdx?parseFloat(payout.toFixed(2)):0,time:Date.now(),raceName:selectedRace?.name,raceType:selectedRace?.type});
+        hist.push({user:user?.username,raceId:selectedRace?.id,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[hid]?parseFloat(calcOdds[hid].toFixed(2)):null,won:parseInt(hid)===winnerIdx,payout:parseInt(hid)===winnerIdx?parseFloat(payout.toFixed(2)):0,time:Date.now(),raceName:selectedRace?.name,raceType:selectedRace?.type});
       });
       await fbSaveHistory(user.uid, hist);
       if(bgResult) {
