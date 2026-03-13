@@ -315,8 +315,8 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
   }
 
   // ── 3. Mark finished races ────────────────────────────────────────────────
-  // Max possible race duration: 60 rolls * ROLL_INTERVAL + 10s buffer
-  const MAX_RACE_MS = 60 * ROLL_INTERVAL + 10000;
+  // Max race = 60 rolls * ROLL_INTERVAL + 40s buffer
+  const MAX_RACE_MS = 60 * ROLL_INTERVAL + 40000;
 
   const shouldBeFinished = (r) => {
     if(r.status === "finished") return false;

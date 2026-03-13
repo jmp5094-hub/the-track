@@ -797,8 +797,11 @@ function generateAuctionSchedule() {
 function raceStatus(race, now) {
   const secsToStart = (race.startTime - now) / 1000;
   if(race.status==="finished") return "finished";
+  // Auto-finish: max race = 60 rolls * 3.5s + 40s buffer = 250s after fire time
+  const fireTime = race.isAuction ? race.startTime + 30000 : race.startTime;
+  if(now > fireTime + 250000) return "finished";
   if(secsToStart <= 0)                    return "racing";
-  if(secsToStart <= BET_CLOSE_SECS)       return "locked";   // too late to bet
+  if(secsToStart <= BET_CLOSE_SECS)       return "locked";
   if(secsToStart <= BET_OPEN_HOURS*3600)  return "betting";
   return "upcoming";
 }
