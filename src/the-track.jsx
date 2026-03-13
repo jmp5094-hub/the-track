@@ -4240,11 +4240,22 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
       const targetIdx = Math.min(Math.floor((elapsed - FIRE_OFFSET) / ROLL_INTERVAL), eng.rolls.length - 1);
 
-      // Catch up silently if we're behind
+      // Catch up silently if we're behind — jump positions without animation
       if(targetIdx > eng.lastRollIdx + 1) {
         const fr = eng.rolls[targetIdx - 1];
         if(fr){ setPositions([...fr.positions]); setLegDone([...fr.legDone]); setPhase(fr.phase||"main"); setRollCount(targetIdx); }
         eng.lastRollIdx = targetIdx - 1;
+        // If catch-up lands on last roll, trigger winner immediately
+        if(targetIdx >= eng.rolls.length - 1 && !eng.winnerFired) {
+          eng.winnerFired = true;
+          eng.lastRollIdx = eng.rolls.length - 1;
+          const w = eng.winner ?? 0;
+          const lastFr = eng.rolls[eng.rolls.length - 1];
+          if(lastFr){ setPositions([...lastFr.positions]); setLegDone([...lastFr.legDone]); }
+          setWinner(w); sfx.finishLine(); sfx.win();
+          setTimeout(()=>onRaceEnd(w), 2000);
+          return;
+        }
       }
 
       // Animate next roll
@@ -4258,12 +4269,19 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         setRolling(true); setOverlayVisible(true); setActiveHorses([]);
         setDiceResult({...roll, moves:[], isDoubles:false});
 
+        // Timing: flash(900ms) → hold(300ms) → horses move(500ms) → unlock(400ms) = 2100ms
+        const FLASH_DUR  = 900;
+        const HOLD_DUR   = 300;
+        const MOVE_DUR   = 500;
+        const DONE_PAUSE = 400;
+
         let flashes = 0;
         const nd = roll.dice.length;
+        const flashEvery = Math.floor(FLASH_DUR / 8);
         const flashInt = setInterval(() => {
           setDiceResult(d => ({...d, dice: Array.from({length:nd}, ()=>Math.floor(Math.random()*6)+1)}));
           sfx.diceRoll();
-          if(++flashes >= 10) {
+          if(++flashes >= 8) {
             clearInterval(flashInt);
             setDiceResult({...roll});
             setActiveHorses(roll.moves.filter(m=>m.steps>0).map(m=>m.horse));
@@ -4271,9 +4289,9 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             setMudDie(roll.mudDieIdx??null); setFogDie(roll.fogDieIdx??null);
             sfx.diceSettle();
             if(roll.isDoubles && race.type!=="magic_dice") sfx.doubles();
-            setTimeout(()=>setOverlayVisible(false), 1400);
 
             setTimeout(() => {
+              setOverlayVisible(false);
               setPositions([...roll.positions]); setLegDone([...roll.legDone]);
               setPhase(roll.phase||"main"); setRollCount(rollIdx+1);
               if(roll.phase==="tiebreak"&&roll.tieHorses) setTieHorses(roll.tieHorses);
@@ -4283,24 +4301,30 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
               else{const ts=roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);if(ts>0)setTimeout(()=>sfx.horseMove(Math.min(ts,3)),80);}
               const sliders=roll.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
               if(sliders.length>0){setSlidingHorses(sliders);setTimeout(()=>setSlidingHorses([]),800);}
-              setTimeout(()=>{setMudDie(null);setFogDie(null);},1000);
+              setTimeout(()=>{setMudDie(null);setFogDie(null);}, MOVE_DUR+100);
 
               const newFH=eng.fireHistory.map((h,hi)=>[...h,roll.dice.includes(hi+1)].slice(-3));
               const newOF=newFH.map((h,hi)=>{if(h.length<3)return eng.onFire[hi];if(h.every(v=>v))return true;if(h.every(v=>!v))return false;return eng.onFire[hi];});
               eng.fireHistory=newFH; eng.onFire=newOF; setOnFire([...newOF]);
 
               const moved=roll.moves.filter(m=>m.steps>0).map(m=>m.horse);
-              setMovedHorses(moved); setTimeout(()=>setMovedHorses([]),500);
+              setMovedHorses(moved); setTimeout(()=>setMovedHorses([]), MOVE_DUR+100);
 
-              if(rollIdx===eng.rolls.length-1 && !eng.winnerFired){
-                eng.winnerFired=true;
-                const w=eng.winner??0;
-                setWinner(w); sfx.finishLine(); setTimeout(()=>onRaceEnd(w),2600);
-              }
-              eng.animating=false;
-            }, 1200);
+              setTimeout(()=>{
+                if(rollIdx===eng.rolls.length-1 && !eng.winnerFired){
+                  eng.winnerFired=true;
+                  const w=eng.winner??0;
+                  setWinner(w);
+                  sfx.finishLine();
+                  sfx.win();
+                  setTimeout(()=>onRaceEnd(w), 2000);
+                }
+                eng.animating=false;
+              }, DONE_PAUSE);
+
+            }, HOLD_DUR);
           }
-        }, DICE_ANIM/8);
+        }, flashEvery);
       }
     };
 
@@ -5434,7 +5458,7 @@ function App() {
       }
       if(changed) {
         await fbSaveRaceResults(results);
-        _setCachedRaceResults(results);
+        _cachedRaceResultsRef.current = results;
       }
     };
 
@@ -5555,7 +5579,7 @@ function App() {
         updateBalance((user?.balance||0) + bgResult.payout);
         const updatedResults = {...results, [race.id]: {...results[race.id], paid: true}};
         await fbSaveRaceResults(updatedResults);
-        _setCachedRaceResults(updatedResults);
+        _cachedRaceResultsRef.current = updatedResults;
         if(user?.uid) {
           const hist = await fbGetHistory(user.uid);
           Object.entries(activeBets).forEach(([hid,a])=>{
@@ -5689,7 +5713,7 @@ function App() {
       if(bgResult) {
         const updatedBg = {...bgResults, [selectedRace?.id]:{...bgResult, paid:true}};
         await fbSaveRaceResults(updatedBg);
-        _setCachedRaceResults(updatedBg);
+        _cachedRaceResultsRef.current = updatedBg;
       }
     }
     // Remove from confirmed and clear shared pot
