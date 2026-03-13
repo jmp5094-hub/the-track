@@ -100,12 +100,13 @@ const fbClearRacePot = async (raceId) => {
 const TRACK_SPACES   = 12;
 const BET_CLOSE_SECS = 30;          // betting closes 30s before race
 const BET_OPEN_HOURS = 3;           // betting opens 3 hours before race
-const ROLL_INTERVAL    = 3200;  // ms between roll starts — must match cloud function
-const DICE_FLASH_DUR   = 500;   // ms dice spin/flash
-const DICE_HOLD_DUR    = 600;   // ms dice stay visible after settling
-const HORSE_MOVE_DELAY = 0;     // horses move simultaneously with dice fade
-const NEXT_ROLL_PAUSE  = 200;   // tiny pause after horses land before next roll
-const DICE_ANIM        = DICE_FLASH_DUR; // alias used in flash loop
+const ROLL_INTERVAL    = 3500;  // ms between roll starts — must match cloud function
+const DICE_FLASH_DUR   = 600;   // ms dice spin
+const DICE_HOLD_DUR    = 900;   // ms dice fully visible and readable
+const DICE_FADE_DUR    = 300;   // ms CSS fade (must match transition below)
+const HORSE_MOVE_DUR   = 300;   // ms horse slide anim
+const NEXT_ROLL_PAUSE  = 250;   // ms after horse lands before dice reappear
+const DICE_ANIM        = DICE_FLASH_DUR;
 const TIEBREAK_SPACES  = 3;
 
 const HORSES = [
@@ -4268,13 +4269,13 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         setRolling(true); setOverlayVisible(true); setActiveHorses([]);
         setDiceResult({...roll, moves:[], isDoubles:false});
 
-        // Cycle: flash(500ms) → dice fully visible+readable(600ms) → setOverlayVisible(false) AND setPositions AT SAME TIME
-        //        horse slideHorse anim is 300ms → 200ms after horse lands → next roll fires
-        //        Total visible cycle: ~1600ms, feels punchy and flowing
-        const FLASH_DUR  = 500;   // dice spin
-        const HOLD_DUR   = 600;   // dice fully readable before anything moves
-        const MOVE_DUR   = 300;   // matches slideHorse 0.3s CSS anim
-        const DONE_PAUSE = 200;   // brief breath after horses land
+        // Sequence: flash(600) → hold(900) → dice fade(300) → horse moves → pause(250) → next roll
+        // Total cycle ~2350ms of anim inside ROLL_INTERVAL
+        const FLASH_DUR  = 600;
+        const HOLD_DUR   = 900;   // dice stay up, fully readable
+        const FADE_DUR   = 300;   // matches CSS opacity transition
+        const MOVE_DUR   = 300;   // horse slide
+        const DONE_PAUSE = 250;   // tiny gap before next roll
 
         let flashes = 0;
         const nd = roll.dice.length;
@@ -4291,37 +4292,43 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             sfx.diceSettle();
             if(roll.isDoubles && race.type!=="magic_dice") sfx.doubles();
 
+            // After dice settle: hold so user reads → fade → horse moves → tiny gap → unlock
             setTimeout(() => {
+              // Dice start fading now
               setOverlayVisible(false);
-              setPositions([...roll.positions]); setLegDone([...roll.legDone]);
-              setPhase(roll.phase||"main"); setRollCount(rollIdx+1);
-              if(roll.phase==="tiebreak"&&roll.tieHorses) setTieHorses(roll.tieHorses);
 
-              const jumpers=roll.moves.filter(m=>m.steps>0&&m.jump).map(m=>m.horse);
-              if(jumpers.length>0){setJumpingHorses(jumpers);sfx.hurdleJump();setTimeout(()=>setJumpingHorses([]),900);}
-              else{const ts=roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);if(ts>0)setTimeout(()=>sfx.horseMove(Math.min(ts,3)),80);}
-              const sliders=roll.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
-              if(sliders.length>0){setSlidingHorses(sliders);setTimeout(()=>setSlidingHorses([]),800);}
-              setTimeout(()=>{setMudDie(null);setFogDie(null);}, MOVE_DUR+100);
+              // Horse moves AFTER fade completes
+              setTimeout(() => {
+                setPositions([...roll.positions]); setLegDone([...roll.legDone]);
+                setPhase(roll.phase||"main"); setRollCount(rollIdx+1);
+                if(roll.phase==="tiebreak"&&roll.tieHorses) setTieHorses(roll.tieHorses);
 
-              const newFH=eng.fireHistory.map((h,hi)=>[...h,roll.dice.includes(hi+1)].slice(-3));
-              const newOF=newFH.map((h,hi)=>{if(h.length<3)return eng.onFire[hi];if(h.every(v=>v))return true;if(h.every(v=>!v))return false;return eng.onFire[hi];});
-              eng.fireHistory=newFH; eng.onFire=newOF; setOnFire([...newOF]);
+                const jumpers=roll.moves.filter(m=>m.steps>0&&m.jump).map(m=>m.horse);
+                if(jumpers.length>0){setJumpingHorses(jumpers);sfx.hurdleJump();setTimeout(()=>setJumpingHorses([]),900);}
+                else{const ts=roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);if(ts>0)sfx.horseMove(Math.min(ts,3));}
+                const sliders=roll.moves.filter(m=>m.fog&&m.steps<0).map(m=>m.horse);
+                if(sliders.length>0){setSlidingHorses(sliders);setTimeout(()=>setSlidingHorses([]),600);}
+                setTimeout(()=>{setMudDie(null);setFogDie(null);},400);
 
-              const moved=roll.moves.filter(m=>m.steps>0).map(m=>m.horse);
-              setMovedHorses(moved); setTimeout(()=>setMovedHorses([]), MOVE_DUR+100);
+                const newFH=eng.fireHistory.map((h,hi)=>[...h,roll.dice.includes(hi+1)].slice(-3));
+                const newOF=newFH.map((h,hi)=>{if(h.length<3)return eng.onFire[hi];if(h.every(v=>v))return true;if(h.every(v=>!v))return false;return eng.onFire[hi];});
+                eng.fireHistory=newFH; eng.onFire=newOF; setOnFire([...newOF]);
 
-              setTimeout(()=>{
-                if(rollIdx===eng.rolls.length-1 && !eng.winnerFired){
-                  eng.winnerFired=true;
-                  const w=eng.winner??0;
-                  setWinner(w);
-                  sfx.finishLine();
-                  sfx.win();
-                  setTimeout(()=>onRaceEnd(w), 2000);
-                }
-                eng.animating=false;
-              }, DONE_PAUSE);
+                const moved=roll.moves.filter(m=>m.steps>0).map(m=>m.horse);
+                setMovedHorses(moved); setTimeout(()=>setMovedHorses([]),400);
+
+                // Unlock after horse lands + tiny pause
+                setTimeout(()=>{
+                  if(rollIdx===eng.rolls.length-1 && !eng.winnerFired){
+                    eng.winnerFired=true;
+                    const w=eng.winner??0;
+                    setWinner(w); sfx.finishLine(); sfx.win();
+                    setTimeout(()=>onRaceEnd(w), 2000);
+                  }
+                  eng.animating=false;
+                }, MOVE_DUR + DONE_PAUSE);
+
+              }, FADE_DUR); // wait for dice to fully disappear
 
             }, HOLD_DUR);
           }
@@ -4545,7 +4552,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         return (
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",zIndex:2}}>
             {/* Dice overlay — fixed on top of track, no layout space */}
-            <div style={{position:"fixed",top:64,left:0,right:0,display:"flex",justifyContent:"center",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.22s ease-out"}}>
+            <div style={{position:"fixed",top:64,left:0,right:0,display:"flex",justifyContent:"center",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.3s ease-out"}}>
               {winner!==null?(
                 <div style={{background:"rgba(6,6,20,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"8px 24px",textAlign:"center",boxShadow:`0 0 28px ${HORSES[winner].color}44`,alignSelf:"center"}}>
                   <div style={{fontFamily:"'Orbitron',monospace",color:HORSES[winner].color,fontSize:15,letterSpacing:3,textShadow:`0 0 14px ${HORSES[winner].color}`}}>🏆 {horseName(race,winner).split(" ")[0].toUpperCase()} WINS!</div>
@@ -4635,7 +4642,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
       {/* DICE OVERLAY — landscape only */}
       {isLandscape && (
-        <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.22s ease-out"}}>
+        <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.3s ease-out"}}>
           {winner!==null?(
             <div style={{background:"rgba(6,6,20,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"10px 28px",textAlign:"center",boxShadow:`0 0 32px ${HORSES[winner].color}44`}}>
               <div style={{fontFamily:"'Orbitron',monospace",color:HORSES[winner].color,fontSize:16,letterSpacing:3,textShadow:`0 0 16px ${HORSES[winner].color}`}}>
