@@ -274,7 +274,8 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
   let auctionSched  = auctionSnap.exists     ? auctionSnap.data().races    : null;
 
   // Regenerate if missing or all races are finished
-  const hasFuture = (races) => races && races.some(r => r.startTime > now - 30 * 60 * 1000);
+  // Regenerate when no unfinished races remain in the future
+  const hasFuture = (races) => races && races.some(r => r.status !== 'finished' && r.startTime > now - 5 * 60 * 1000);
 
   if(!hasFuture(schedule)) {
     schedule = generateSchedule(now);
@@ -338,12 +339,11 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
     return r;
   });
 
-  if(schedChanged) {
-    await Promise.all([
-      db.doc("global/schedule").set({ races: updatedSchedule, generatedAt: now }),
-      db.doc("global/auctionSchedule").set({ races: updatedAuction, generatedAt: now }),
-    ]);
-  }
+  // Always save — ensures finished status persists even if schedChanged is false
+  await Promise.all([
+    db.doc("global/schedule").set({ races: updatedSchedule, generatedAt: now }),
+    db.doc("global/auctionSchedule").set({ races: updatedAuction, generatedAt: now }),
+  ]);
 
   return null;
 });
