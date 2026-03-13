@@ -1830,7 +1830,7 @@ function MuteButton({ size=28 }) {
 }
 
 // ─── NAVBAR ───────────────────────────────────────────────────────────────────
-function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onLogout }) {
+function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onPrivateRaces, onLogout }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -1841,10 +1841,11 @@ function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onLogout }) {
   },[]);
 
   const items = [
-    { icon:"👤", label:"Profile",    fn: onProfile },
-    { icon:"🏦", label:"Bank",       fn: onBank    },
-    { icon:"❓",  label:"How It Works", fn: onHowTo },
-    { icon:"🚪", label:"Sign Out",   fn: onLogout, danger: true },
+    { icon:"👤", label:"Profile",       fn: onProfile },
+    { icon:"🏦", label:"Bank",          fn: onBank    },
+    { icon:"🔒", label:"Private Races", fn: onPrivateRaces },
+    { icon:"❓",  label:"How It Works",  fn: onHowTo },
+    { icon:"🚪", label:"Sign Out",      fn: onLogout, danger: true },
   ];
 
   return (
@@ -1969,7 +1970,6 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
         {[
           ["🏠","Lobby",onLobby,null],
           ["🔨","Auction Races",onAuctions,null],
-          ["🔒","Private Races",onPrivateRaces,null],
           ["🎫","Active Bets",onMyBets,pendingCount>0?pendingCount:null],
         ].map(([icon,lbl,fn,badge])=>(
           <button key={lbl} onClick={fn} style={{position:"relative",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:6,color:"#ffffff66",padding:"5px 10px",cursor:"pointer",fontSize:12,letterSpacing:1,transition:"all 0.15s",whiteSpace:"nowrap"}}
@@ -1987,7 +1987,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
           <span style={{fontSize:13}}>🏦</span>
           <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(user.balance)}</span>
         </div>
-        <UserMenu avatar={avatar} user={user} onProfile={onProfile} onBank={onBank} onHowTo={onHowTo} onLogout={onLogout}/>
+        <UserMenu avatar={avatar} user={user} onProfile={onProfile} onBank={onBank} onHowTo={onHowTo} onPrivateRaces={onPrivateRaces} onLogout={onLogout}/>
         <MuteButton/>
       </div>
     </div>
