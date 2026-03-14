@@ -57,6 +57,38 @@ const fbSavePrivateRaces = async (r) => setDoc(doc(db,"global","privateRaces"), 
 const fbGetBankTx  = async (uid) => { const d = await getDoc(doc(db,"bank",uid)); return d.exists() ? d.data().txs || [] : []; };
 const fbSaveBankTx = async (uid, txs) => setDoc(doc(db,"bank",uid), {txs});
 
+// ─── FRIENDS SYSTEM ──────────────────────────────────────────────────────────
+// friends/{uid} → { following:[uid...], followers:[uid...] }
+// userindex/{username} → { uid, username, avatar, balance } (public lookup)
+const fbGetFriends      = async (uid) => { const d = await getDoc(doc(db,"friends",uid)); return d.exists() ? d.data() : {following:[],followers:[]}; };
+const fbSaveFriends     = async (uid, data) => setDoc(doc(db,"friends",uid), data);
+const fbGetUserIndex    = async (username) => { const d = await getDoc(doc(db,"userindex",username.toLowerCase())); return d.exists() ? d.data() : null; };
+const fbSaveUserIndex   = async (username, uid, avatar, balance) => setDoc(doc(db,"userindex",username.toLowerCase()), {uid, username, avatar, balance});
+const fbGetUserByUid    = async (uid) => { const d = await getDoc(doc(db,"users",uid)); return d.exists() ? d.data() : null; };
+const fbGetConfirmedForUser = async (uid) => { const d = await getDoc(doc(db,"bets",uid)); return d.exists() ? d.data().confirmed || {} : {}; };
+
+const fbFollow = async (myUid, theirUid) => {
+  // Add theirUid to my following, add myUid to their followers
+  const [myFriends, theirFriends] = await Promise.all([fbGetFriends(myUid), fbGetFriends(theirUid)]);
+  const myFollowing   = [...new Set([...(myFriends.following||[]),    theirUid])];
+  const theirFollowers= [...new Set([...(theirFriends.followers||[]), myUid])];
+  await Promise.all([
+    fbSaveFriends(myUid,    {...myFriends,    following:myFollowing}),
+    fbSaveFriends(theirUid, {...theirFriends, followers:theirFollowers}),
+  ]);
+};
+
+const fbUnfollow = async (myUid, theirUid) => {
+  const [myFriends, theirFriends] = await Promise.all([fbGetFriends(myUid), fbGetFriends(theirUid)]);
+  const myFollowing   = (myFriends.following||[]).filter(u=>u!==theirUid);
+  const theirFollowers= (theirFriends.followers||[]).filter(u=>u!==myUid);
+  await Promise.all([
+    fbSaveFriends(myUid,    {...myFriends,    following:myFollowing}),
+    fbSaveFriends(theirUid, {...theirFriends, followers:theirFollowers}),
+  ]);
+};
+
+
 // ── Shared race pots — all users contribute and read the same pot ──────────
 const fbGetRacePot = async (raceId) => {
   const d = await getDoc(doc(db,"global","racePots"));
@@ -987,6 +1019,7 @@ function AuthScreen({ onLogin }) {
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), p);
         const uid = cred.user.uid;
         await fbSaveUser(uid, { username: username.trim(), email: email.trim(), balance: 1000, joined: Date.now() });
+        await fbSaveUserIndex(username.trim(), uid, "🏇", 1000);
         onLogin({ uid, username: username.trim(), balance: 1000, email: email.trim() });
       } else {
         const cred = await signInWithEmailAndPassword(auth, email.trim(), p);
@@ -1061,7 +1094,243 @@ function AuthScreen({ onLogin }) {
 // ─── PROFILE PANEL ────────────────────────────────────────────────────────────
 const AVATAR_OPTIONS = ["🏇","🐴","🏆","🎲","⚡","🔥","💎","👑","🦅","🐉","🌟","💀","🎯","🏅","🤑","🦁","🐎","🌊","⚔️","🎪"];
 
-function ProfilePanel({ user, schedule, now, onClose, onGoToRace, onBalanceChange }) {
+
+// ─── USER PROFILE MODAL (view another user's profile) ────────────────────────
+function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now, onClose, onGoToRace }) {
+  const [userData,    setUserData]    = useState(null);
+  const [friendsData, setFriendsData] = useState(null);
+  const [myFriends,   setMyFriends]   = useState(null);
+  const [activeBets,  setActiveBets]  = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [acting,      setActing]      = useState(false);
+
+  useEffect(()=>{
+    if(!uid) return;
+    Promise.all([
+      fbGetUserByUid(uid),
+      fbGetFriends(uid),
+      fbGetFriends(myUid),
+      fbGetConfirmedForUser(uid),
+    ]).then(([user, friends, mine, confirmed])=>{
+      setUserData(user);
+      setFriendsData(friends);
+      setMyFriends(mine);
+      // Build active bets list (race IDs only — no horse details)
+      const bets = Object.entries(confirmed).map(([raceId])=>{
+        const race = schedule.find(r=>r.id===raceId) || auctionSchedule.find(r=>r.id===raceId);
+        if(!race) return null;
+        const st = raceStatus(race, now);
+        if(st==="finished") return null;
+        return { race, st };
+      }).filter(Boolean).sort((a,b)=>a.race.startTime-b.race.startTime);
+      setActiveBets(bets);
+      setLoading(false);
+    });
+  },[uid]);
+
+  const isFollowing = myFriends?.following?.includes(uid);
+  const followerCount = friendsData?.followers?.length || 0;
+  const followingCount = friendsData?.following?.length || 0;
+
+  const handleFollow = async () => {
+    setActing(true);
+    if(isFollowing) {
+      await fbUnfollow(myUid, uid);
+      setMyFriends(f=>({...f, following:(f.following||[]).filter(u=>u!==uid)}));
+      setFriendsData(f=>({...f, followers:(f.followers||[]).filter(u=>u!==myUid)}));
+    } else {
+      await fbFollow(myUid, uid);
+      setMyFriends(f=>({...f, following:[...(f.following||[]),uid]}));
+      setFriendsData(f=>({...f, followers:[...(f.followers||[]),myUid]}));
+    }
+    setActing(false);
+  };
+
+  const profile = getProfile(username);
+  const avatar  = userData?.avatar || profile?.avatar || "🏇";
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:420,background:"#0d0d1f",border:"1px solid rgba(0,245,255,0.15)",borderRadius:20,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,0.8)",animation:"slideIn 0.15s ease-out"}} onClick={e=>e.stopPropagation()}>
+        {/* Header */}
+        <div style={{padding:"20px 20px 16px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:14}}>
+              <div style={{width:56,height:56,borderRadius:14,background:"rgba(0,245,255,0.08)",border:"2px solid #00f5ff33",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>{avatar}</div>
+              <div>
+                <div style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:16,letterSpacing:2}}>{username}</div>
+                <div style={{display:"flex",gap:16,marginTop:4}}>
+                  <span style={{color:"#ffffff55",fontSize:11}}><span style={{color:"#fff",fontWeight:700}}>{followerCount}</span> followers</span>
+                  <span style={{color:"#ffffff55",fontSize:11}}><span style={{color:"#fff",fontWeight:700}}>{followingCount}</span> following</span>
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#ffffff66",cursor:"pointer",width:32,height:32,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
+          {uid !== myUid && (
+            <button onClick={handleFollow} disabled={acting} style={{width:"100%",padding:"10px",borderRadius:10,border:"none",cursor:acting?"not-allowed":"pointer",background:isFollowing?"rgba(255,255,255,0.07)":"rgba(0,245,255,0.15)",color:isFollowing?"#ffffff88":"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:2,fontWeight:700,transition:"all 0.15s"}}>
+              {acting?"...":(isFollowing?"✓ FOLLOWING":"+ FOLLOW")}
+            </button>
+          )}
+        </div>
+
+        {/* Active Bets */}
+        <div style={{padding:"16px 20px 20px",maxHeight:"50vh",overflowY:"auto"}}>
+          <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:12}}>ACTIVE RACES</div>
+          {loading && <div style={{color:"#ffffff33",textAlign:"center",padding:20}}>Loading...</div>}
+          {!loading && activeBets.length===0 && <div style={{color:"#ffffff33",textAlign:"center",padding:20,fontSize:13}}>No active bets right now</div>}
+          {activeBets.map(({race,st})=>{
+            const rt = RACE_TYPES[race.type];
+            const secs = Math.floor((race.startTime-now)/1000);
+            return (
+              <div key={race.id} onClick={()=>{onClose();onGoToRace(race);}} style={{marginBottom:8,padding:"12px 14px",background:"rgba(255,255,255,0.03)",border:`1px solid ${rt.color}33`,borderRadius:10,cursor:"pointer",transition:"all 0.15s"}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
+                onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{color:"#fff",fontWeight:700,fontSize:13}}>{rt.icon} {race.name}</div>
+                    <div style={{color:rt.color,fontSize:11,marginTop:2}}>{rt.label}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    {st==="racing" && <div style={{color:"#ff2d55",fontSize:11,fontFamily:"'Orbitron',monospace",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
+                    {st==="locked" && <div style={{color:"#ffd700",fontSize:11,fontFamily:"'Orbitron',monospace"}}>LOCKED 🔒</div>}
+                    {st==="betting"&& <div style={{color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>{fmtCD(secs)}</div>}
+                    <div style={{color:"#00f5ff66",fontSize:10,marginTop:2}}>tap to view →</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FRIENDS TAB (inside ProfilePanel) ────────────────────────────────────────
+function FriendsTab({ user, schedule, auctionSchedule, now, onGoToRace, onClose }) {
+  const [myFriends,   setMyFriends]   = useState(null);
+  const [searchQ,     setSearchQ]     = useState("");
+  const [searchResult,setSearchResult]= useState(null); // null|"loading"|"notfound"|{uid,username,avatar}
+  const [viewProfile, setViewProfile] = useState(null); // {uid,username}
+  const [followingDetails, setFollowingDetails] = useState([]); // [{uid,username,avatar,activeBetCount}]
+  const [loadingFollowing, setLoadingFollowing] = useState(false);
+
+  useEffect(()=>{
+    if(!user?.uid) return;
+    fbGetFriends(user.uid).then(async f => {
+      setMyFriends(f);
+      if((f.following||[]).length > 0) {
+        setLoadingFollowing(true);
+        const details = await Promise.all((f.following||[]).map(async uid => {
+          const [udata, confirmed] = await Promise.all([fbGetUserByUid(uid), fbGetConfirmedForUser(uid)]);
+          if(!udata) return null;
+          const activeBetCount = Object.entries(confirmed).filter(([raceId])=>{
+            const race = schedule.find(r=>r.id===raceId)||auctionSchedule.find(r=>r.id===raceId);
+            if(!race) return false;
+            return raceStatus(race,now) !== "finished";
+          }).length;
+          return { uid, username:udata.username, avatar:udata.avatar||"🏇", activeBetCount };
+        }));
+        setFollowingDetails(details.filter(Boolean));
+        setLoadingFollowing(false);
+      }
+    });
+  },[user?.uid]);
+
+  const handleSearch = async () => {
+    if(!searchQ.trim()) return;
+    setSearchResult("loading");
+    const found = await fbGetUserIndex(searchQ.trim());
+    if(!found || found.uid === user.uid) { setSearchResult("notfound"); return; }
+    // Get their avatar from users collection
+    const udata = await fbGetUserByUid(found.uid);
+    setSearchResult({ uid:found.uid, username:found.username, avatar:udata?.avatar||"🏇" });
+  };
+
+  const handleUnfollow = async (uid) => {
+    await fbUnfollow(user.uid, uid);
+    setMyFriends(f=>({...f, following:(f.following||[]).filter(u=>u!==uid)}));
+    setFollowingDetails(d=>d.filter(u=>u.uid!==uid));
+  };
+
+  const followerCount  = myFriends?.followers?.length  || 0;
+  const followingCount = myFriends?.following?.length || 0;
+
+  return (
+    <div>
+      {/* Stats row */}
+      <div style={{display:"flex",gap:8,marginBottom:18}}>
+        <div style={{flex:1,padding:"12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,textAlign:"center"}}>
+          <div style={{color:"#ffffff33",fontSize:10,letterSpacing:1,marginBottom:4}}>FOLLOWING</div>
+          <div style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:22,fontWeight:700}}>{followingCount}</div>
+        </div>
+        <div style={{flex:1,padding:"12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,textAlign:"center"}}>
+          <div style={{color:"#ffffff33",fontSize:10,letterSpacing:1,marginBottom:4}}>FOLLOWERS</div>
+          <div style={{fontFamily:"'Orbitron',monospace",color:"#bf5fff",fontSize:22,fontWeight:700}}>{followerCount}</div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{marginBottom:18}}>
+        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FIND PLAYERS</div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={searchQ} onChange={e=>{setSearchQ(e.target.value);setSearchResult(null);}}
+            onKeyDown={e=>e.key==="Enter"&&handleSearch()}
+            placeholder="Search by username..."
+            style={{flex:1,padding:"9px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#fff",fontSize:13,outline:"none"}}/>
+          <button onClick={handleSearch} style={{padding:"9px 16px",background:"rgba(0,245,255,0.1)",border:"1px solid #00f5ff33",borderRadius:8,color:"#00f5ff",cursor:"pointer",fontSize:13,fontWeight:700}}>Search</button>
+        </div>
+        {searchResult==="loading" && <div style={{color:"#ffffff44",fontSize:12,marginTop:8}}>Searching...</div>}
+        {searchResult==="notfound" && <div style={{color:"#ff2d5588",fontSize:12,marginTop:8}}>No player found with that username</div>}
+        {searchResult && searchResult !== "loading" && searchResult !== "notfound" && (
+          <div style={{marginTop:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid #00f5ff22",borderRadius:10,display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:24}}>{searchResult.avatar}</span>
+            <span style={{color:"#fff",fontWeight:700,flex:1,fontSize:14}}>{searchResult.username}</span>
+            <button onClick={()=>setViewProfile({uid:searchResult.uid,username:searchResult.username})} style={{padding:"6px 12px",background:"rgba(0,245,255,0.08)",border:"1px solid #00f5ff33",borderRadius:7,color:"#00f5ff",cursor:"pointer",fontSize:12}}>View</button>
+          </div>
+        )}
+      </div>
+
+      {/* Following list */}
+      <div>
+        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FOLLOWING</div>
+        {myFriends===null && <div style={{color:"#ffffff33",fontSize:13,textAlign:"center",padding:20}}>Loading...</div>}
+        {myFriends!==null && followingCount===0 && <div style={{color:"#ffffff33",fontSize:13,textAlign:"center",padding:"20px 0"}}>Not following anyone yet. Search for players above.</div>}
+        {loadingFollowing && followingCount>0 && <div style={{color:"#ffffff33",fontSize:12,textAlign:"center",padding:10}}>Loading...</div>}
+        {followingDetails.map(f=>(
+          <div key={f.uid} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,marginBottom:6}}>
+            <span style={{fontSize:22,flexShrink:0}}>{f.avatar}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{color:"#fff",fontWeight:700,fontSize:13}}>{f.username}</div>
+              {f.activeBetCount>0
+                ? <div style={{color:"#39ff14",fontSize:11,marginTop:1}}>🎫 {f.activeBetCount} active bet{f.activeBetCount>1?"s":""}</div>
+                : <div style={{color:"#ffffff33",fontSize:11,marginTop:1}}>No active bets</div>
+              }
+            </div>
+            <button onClick={()=>setViewProfile({uid:f.uid,username:f.username})} style={{padding:"5px 10px",background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff22",borderRadius:7,color:"#00f5ff",cursor:"pointer",fontSize:11,flexShrink:0}}>View</button>
+            <button onClick={()=>handleUnfollow(f.uid)} style={{padding:"5px 10px",background:"rgba(255,45,85,0.06)",border:"1px solid #ff2d5522",borderRadius:7,color:"#ff2d5577",cursor:"pointer",fontSize:11,flexShrink:0}}>Unfollow</button>
+          </div>
+        ))}
+      </div>
+
+      {viewProfile && (
+        <UserProfileModal
+          uid={viewProfile.uid}
+          username={viewProfile.username}
+          myUid={user.uid}
+          schedule={schedule}
+          auctionSchedule={auctionSchedule}
+          now={now}
+          onClose={()=>setViewProfile(null)}
+          onGoToRace={(race)=>{ setViewProfile(null); onClose(); onGoToRace(race); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRace, onBalanceChange }) {
   const [profile, setProfile] = useState(()=>getProfile(user.username));
   const [editBio,  setEditBio]  = useState(false);
   const [bioText,  setBioText]  = useState(profile.bio||"");
@@ -1124,7 +1393,7 @@ function ProfilePanel({ user, schedule, now, onClose, onGoToRace, onBalanceChang
           )}
         </div>
         <div style={{display:"flex",gap:5,marginBottom:18}}>
-          {tabS("stats","Stats","📊")}{tabS("bets","Active Bets","🎫")}{tabS("history","History","📋")}{tabS("avatar","Avatar","🎨")}
+          {tabS("stats","Stats","📊")}{tabS("bets","Active Bets","🎫")}{tabS("history","History","📋")}{tabS("friends","Friends","👥")}{tabS("avatar","Avatar","🎨")}
         </div>
         {tab==="stats"&&(
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -1183,6 +1452,9 @@ function ProfilePanel({ user, schedule, now, onClose, onGoToRace, onBalanceChang
               </div>;
             })}
           </div>
+        )}
+        {tab==="friends"&&(
+          <FriendsTab user={user} schedule={schedule} auctionSchedule={auctionSchedule} now={now} onGoToRace={onGoToRace} onClose={onClose}/>
         )}
         {tab==="avatar"&&(
           <div>
@@ -2870,7 +3142,7 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace }) {
   );
 }
 
-function LobbyScreen({ schedule, now, onEnterRace, userBets }) {
+function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={} }) {
   const withStatus = useMemo(()=>schedule.map(r=>({...r,_st:raceStatus(r,now)})).filter(r=>r._st!=="finished"),[schedule,now]);
   const sections=[
     {title:"🔴 LIVE NOW",   filter:r=>r._st==="racing"||r._st==="locked", accent:"#ff2d55"},
@@ -2927,6 +3199,7 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets }) {
                           <span style={{color:"#ffffff33"}}>·</span>
                           <span style={{color:"#ffffff44",fontSize:12}}>🕐 {fmtTime(new Date(race.startTime))}</span>
                           {hasBet&&<span style={{background:betIsConfirmed?"rgba(0,245,255,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#00f5ff33":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#00f5ff":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
+                          {friendRaces[race.id]>0&&<span style={{background:"rgba(191,95,255,0.12)",border:"1px solid #bf5fff33",borderRadius:10,padding:"1px 8px",color:"#bf5fff",fontSize:11}}>👥 {friendRaces[race.id]}</span>}
                         </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0,minWidth:100}}>
@@ -5611,6 +5884,7 @@ function App() {
   const [showMyBets,    setShowMyBets]    = useState(false);
   const [showBank,      setShowBank]      = useState(false);
   const [showHowTo,     setShowHowTo]     = useState(false);
+  const [friendRaces,   setFriendRaces]   = useState({}); // {raceId: count of friends betting}
   const [showProfile,   setShowProfile]   = useState(false);
   const [showPrivate,   setShowPrivate]   = useState(false);
   const [showAuction,   setShowAuction]   = useState(false);
@@ -5626,6 +5900,23 @@ function App() {
   const timeOffsetRef   = useRef(0);
   const lastTickRef     = useRef(Date.now());
   const _cachedRaceResultsRef = useRef({});
+
+  // Load friend active races
+  useEffect(()=>{
+    if(!user?.uid) return;
+    fbGetFriends(user.uid).then(async f => {
+      const following = f.following || [];
+      if(!following.length) return;
+      const allConfirmed = await Promise.all(following.map(uid => fbGetConfirmedForUser(uid)));
+      const raceCounts = {};
+      allConfirmed.forEach(confirmed => {
+        Object.keys(confirmed).forEach(raceId => {
+          raceCounts[raceId] = (raceCounts[raceId]||0) + 1;
+        });
+      });
+      setFriendRaces(raceCounts);
+    });
+  },[user?.uid, schedule]);
 
   // Keep race results cache fresh — use a ref so clock interval always sees latest value
   useEffect(()=>{
@@ -6078,7 +6369,7 @@ function App() {
           />
         </div>
       )}
-      {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets}/>}
+      {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets} friendRaces={friendRaces}/>}
       {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} sharedPot={sharedPot[liveSelectedRace?.id]||null} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
       {screen==="race"   && liveSelectedRace && <RaceScreen race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={sharedPot[liveSelectedRace?.id]?.totalPot||totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
       {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onPlayAgain={()=>handleEnterRace(liveSelectedRace)} onLobby={goLobby}/>}
