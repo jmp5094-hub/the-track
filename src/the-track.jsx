@@ -1126,8 +1126,10 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
         console.log("Confirmed bets for", uid, ":", Object.keys(confirmed));
         console.log("Schedule IDs (first 5):", schedule.slice(0,5).map(r=>r.id));
 
+        const safeSchedule = schedule || [];
+        const safeAuction  = auctionSchedule || [];
         const bets = Object.entries(confirmed).map(([raceId, data])=>{
-          const race = schedule.find(r=>r.id===raceId) || auctionSchedule.find(r=>r.id===raceId);
+          const race = safeSchedule.find(r=>r.id===raceId) || safeAuction.find(r=>r.id===raceId);
           if(!race) {
             console.log("Race not found in schedule:", raceId);
             // Still show it even if not in schedule — create a minimal race object
@@ -6463,7 +6465,7 @@ function App() {
 
       {showBank    && <BankPanel user={user} onClose={()=>setShowBank(false)} onBalanceChange={updateBalance}/>}
       {showHowTo   && <HowItWorksPanel onClose={()=>setShowHowTo(false)}/>}
-      {showProfile && <ProfilePanel user={user} schedule={schedule} now={now} onClose={()=>setShowProfile(false)} onBalanceChange={updateBalance}/>}
+      {showProfile && <ProfilePanel user={user} schedule={schedule} auctionSchedule={auctionSchedule} now={now} onClose={()=>setShowProfile(false)} onGoToRace={handleEnterRace} onBalanceChange={updateBalance}/>}
       {showPrivate && <PrivateRacesPanel user={user} onClose={()=>setShowPrivate(false)} onLaunchPrivateRace={handleLaunchPrivateRace}/>}
       {showMyBets&& (
         <MyBetsPanel
