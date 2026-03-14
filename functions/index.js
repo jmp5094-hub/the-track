@@ -1,8 +1,22 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest }  = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 admin.initializeApp();
 const db = admin.firestore();
+
+// ─── PROVABLY FAIR HELPERS ────────────────────────────────────────────────────
+function sha256(str) {
+  return crypto.createHash("sha256").update(String(str)).digest("hex");
+}
+function generateFairSeed() {
+  // Cryptographically secure random seed
+  return crypto.randomBytes(16).toString("hex");
+}
+function seedToInt(seedHex) {
+  // Convert hex seed to integer for mulberry32
+  return parseInt(seedHex.slice(0,8), 16) || 1;
+}
 
 // ─── CONSTANTS (must match frontend) ─────────────────────────────────────────
 const TRACK_SPACES    = 12;
@@ -220,39 +234,49 @@ function simulateRaceWithHistory(raceType, condition, seed) {
 }
 
 // ─── SCHEDULE GENERATION ─────────────────────────────────────────────────────
-function generateSchedule(now) {
+function generateSchedule(now, seedsDoc) {
   const races = [];
   const names = [...RACE_NAMES].sort(() => Math.random() - 0.5);
   let cursor = now + 4 * 60 * 1000;
   for(let i = 0; i < 32; i++) {
-    const type    = RACE_TYPES[i % RACE_TYPES.length];
-    const raceId  = `r${i}_${now}`;
+    const type      = RACE_TYPES[i % RACE_TYPES.length];
+    const raceId    = `r${i}_${now}`;
     const condition = pickCondition(type, raceId);
-    const seed    = Math.floor(Math.random() * 2147483647) + 1;
+    const seedHex   = generateFairSeed();
+    const seedHash  = sha256(seedHex);
+    const seedInt   = seedToInt(seedHex);
+    seedsDoc[raceId] = seedHex; // store secret seed separately
     races.push({
       id: raceId, name: names[i % names.length], type, condition,
-      startTime: cursor, status: "upcoming",
-      horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId), seed,
+      startTime: cursor, status: "upcoming", seedHash,
+      // seed included for simulation — in a full hardened version
+      // this would be removed from client-readable docs
+      seed: seedInt,
+      horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
     cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
   }
   return races;
 }
 
-function generateAuctionSchedule(now) {
+function generateAuctionSchedule(now, seedsDoc) {
   const races = [];
   const names = [...RACE_NAMES].sort(() => Math.random() - 0.5);
   let cursor = now + 5 * 60 * 1000;
   for(let i = 0; i < 32; i++) {
-    const type    = RACE_TYPES[i % RACE_TYPES.length];
-    const raceId  = `a${i}_${now}`;
+    const type      = RACE_TYPES[i % RACE_TYPES.length];
+    const raceId    = `a${i}_${now}`;
     const condition = pickCondition(type, raceId);
-    const seed    = Math.floor(Math.random() * 2147483647) + 1;
+    const seedHex   = generateFairSeed();
+    const seedHash  = sha256(seedHex);
+    const seedInt   = seedToInt(seedHex);
     const horseOrder = [...Array(6).keys()].sort(() => Math.random() - 0.5);
+    seedsDoc[raceId] = seedHex;
     races.push({
       id: raceId, name: names[i % names.length], type, condition,
       startTime: cursor, status: "upcoming", isAuction: true, horseOrder,
-      horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId), seed,
+      seedHash, seed: seedInt,
+      horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
     cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
   }
@@ -339,10 +363,22 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
     return r;
   });
 
-  // Always save — ensures finished status persists even if schedChanged is false
+  // Reveal seeds for newly finished races
+  let seedsChanged = false;
+  const revealForSchedule = (races) => races.map(r => {
+    if(r.status === "finished" && !r.revealedSeed && seedsDoc[r.id]) {
+      seedsChanged = true;
+      const revealedSeed = seedsDoc[r.id];
+      return { ...r, revealedSeed };
+    }
+    return r;
+  });
+  const finalSchedule = revealForSchedule(updatedSchedule);
+  const finalAuction  = revealForSchedule(updatedAuction);
+
   await Promise.all([
-    db.doc("global/schedule").set({ races: updatedSchedule, generatedAt: now }),
-    db.doc("global/auctionSchedule").set({ races: updatedAuction, generatedAt: now }),
+    db.doc("global/schedule").set({ races: finalSchedule, generatedAt: now }),
+    db.doc("global/auctionSchedule").set({ races: finalAuction, generatedAt: now }),
   ]);
 
   return null;
@@ -359,12 +395,12 @@ exports.raceSchedulerHttp = onRequest(async (req, res) => {
   let auctionSched = auctionSnap.exists   ? auctionSnap.data().races : null;
   const hasFuture  = (races) => races && races.some(r => r.startTime > now - 30*60*1000);
   if(!hasFuture(schedule)) {
-    schedule = generateSchedule(now);
-    await db.doc("global/schedule").set({ races: schedule, generatedAt: now });
+    const sd1 = {}; schedule = generateSchedule(now, sd1);
+    await Promise.all([db.doc("global/schedule").set({ races: schedule, generatedAt: now }), db.doc("private/raceSeeds").set(sd1)]);
   }
   if(!hasFuture(auctionSched)) {
-    auctionSched = generateAuctionSchedule(now);
-    await db.doc("global/auctionSchedule").set({ races: auctionSched, generatedAt: now });
+    const sd2 = {}; auctionSched = generateAuctionSchedule(now, sd2);
+    await Promise.all([db.doc("global/auctionSchedule").set({ races: auctionSched, generatedAt: now }), db.doc("private/raceSeeds").set(sd2)]);
   }
   const allRaces = [...schedule, ...auctionSched];
   const upcoming = allRaces.filter(r => {

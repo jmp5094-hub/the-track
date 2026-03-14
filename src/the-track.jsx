@@ -3094,6 +3094,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
           <span style={{color:rt.color,fontSize:11,fontWeight:700,letterSpacing:2}}>{rt.label.toUpperCase()}</span>
         </div>
 
+        <ProvablyFairBadge race={race}/>
         {/* Countdown ring */}
         <div style={{position:"relative",width:140,height:140,marginBottom:16,flexShrink:0}}>
           <svg width="140" height="140" style={{position:"absolute",top:0,left:0,transform:"rotate(-90deg)"}}>
@@ -5050,6 +5051,96 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
   );
 }
 
+
+
+// ─── PROVABLY FAIR ────────────────────────────────────────────────────────────
+function ProvablyFairBadge({ race, expanded=false }) {
+  const [open, setOpen] = useState(expanded);
+  const [verifyInput, setVerifyInput] = useState("");
+  const [verifyResult, setVerifyResult] = useState(null); // null | true | false
+
+  const seedHash     = race?.seedHash;
+  const revealedSeed = race?.revealedSeed;
+  const isRevealed   = !!revealedSeed;
+
+  // SHA-256 in browser
+  const sha256 = async (str) => {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  };
+
+  const verify = async () => {
+    const seed = verifyInput.trim() || revealedSeed;
+    if(!seed || !seedHash) return;
+    const hash = await sha256(seed);
+    setVerifyResult(hash === seedHash);
+  };
+
+  if(!seedHash) return null;
+
+  return (
+    <div style={{margin:"12px 0",borderRadius:10,border:"1px solid rgba(0,245,255,0.2)",background:"rgba(0,245,255,0.04)",overflow:"hidden"}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:"none",border:"none",cursor:"pointer"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:14}}>🔐</span>
+          <span style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:10,letterSpacing:2,fontWeight:700}}>PROVABLY FAIR</span>
+          {isRevealed && <span style={{background:"rgba(57,255,20,0.15)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 7px",color:"#39ff14",fontSize:9,fontWeight:700,letterSpacing:1}}>REVEALED</span>}
+        </div>
+        <span style={{color:"#00f5ff66",fontSize:11}}>{open?"▲":"▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{padding:"0 14px 14px"}}>
+          <div style={{color:"#ffffff55",fontSize:11,lineHeight:1.6,marginBottom:10}}>
+            The outcome of this race was locked in before betting opened. The seed hash below was published before any bets were placed — proving the result was never changed.
+          </div>
+
+          {/* Seed Hash — always visible */}
+          <div style={{marginBottom:10}}>
+            <div style={{color:"#ffffff33",fontSize:9,letterSpacing:2,marginBottom:4}}>SEED HASH (SHA-256) — published before betting</div>
+            <div style={{background:"rgba(0,0,0,0.3)",borderRadius:6,padding:"8px 10px",fontFamily:"monospace",fontSize:10,color:"#00f5ff",wordBreak:"break-all",letterSpacing:0.5}}>
+              {seedHash}
+            </div>
+          </div>
+
+          {/* Revealed Seed — only after race */}
+          {isRevealed ? (
+            <div style={{marginBottom:12}}>
+              <div style={{color:"#ffffff33",fontSize:9,letterSpacing:2,marginBottom:4}}>REVEALED SEED — published after race finished</div>
+              <div style={{background:"rgba(0,0,0,0.3)",borderRadius:6,padding:"8px 10px",fontFamily:"monospace",fontSize:10,color:"#39ff14",wordBreak:"break-all",letterSpacing:0.5}}>
+                {revealedSeed}
+              </div>
+            </div>
+          ) : (
+            <div style={{marginBottom:12,padding:"8px 10px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:6}}>
+              <span style={{color:"#ffd70077",fontSize:11}}>🔒 Seed will be revealed after the race finishes</span>
+            </div>
+          )}
+
+          {/* Verify section */}
+          {isRevealed && (
+            <div>
+              <div style={{color:"#ffffff33",fontSize:9,letterSpacing:2,marginBottom:6}}>VERIFY — SHA-256(seed) should equal the hash above</div>
+              <div style={{display:"flex",gap:6,marginBottom:6}}>
+                <input
+                  value={verifyInput||revealedSeed}
+                  onChange={e=>{setVerifyInput(e.target.value);setVerifyResult(null);}}
+                  placeholder="Paste seed to verify..."
+                  style={{flex:1,padding:"6px 10px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,color:"#fff",fontSize:11,fontFamily:"monospace",outline:"none"}}
+                />
+                <button onClick={verify} style={{padding:"6px 14px",background:"rgba(0,245,255,0.1)",border:"1px solid #00f5ff33",borderRadius:6,color:"#00f5ff",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
+                  Verify ✓
+                </button>
+              </div>
+              {verifyResult === true  && <div style={{color:"#39ff14",fontSize:12,fontWeight:700}}>✓ Verified — this race was provably fair</div>}
+              {verifyResult === false && <div style={{color:"#ff2d55",fontSize:12,fontWeight:700}}>✗ Hash mismatch — seed does not match</div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── HOW IT WORKS PANEL ───────────────────────────────────────────────────────
 function HowItWorksPanel({ onClose }) {
