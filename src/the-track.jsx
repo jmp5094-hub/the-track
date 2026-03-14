@@ -6461,7 +6461,7 @@ function App() {
   return (
     <div style={{minHeight:"100vh",background:"#08081a"}}>
       <style>{GS}</style>
-      <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>setShowAuction(true)} onBank={()=>setShowBank(true)} onHowTo={()=>setShowHowTo(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
+      <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>{setSelectedAuctionRace(null);setShowAuction(true);}} onBank={()=>setShowBank(true)} onHowTo={()=>setShowHowTo(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
 
       {showBank    && <BankPanel user={user} onClose={()=>setShowBank(false)} onBalanceChange={updateBalance}/>}
       {showHowTo   && <HowItWorksPanel onClose={()=>setShowHowTo(false)}/>}
