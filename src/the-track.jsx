@@ -1335,6 +1335,7 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
   const [editBio,  setEditBio]  = useState(false);
   const [bioText,  setBioText]  = useState(profile.bio||"");
   const [tab,      setTab]      = useState("stats");
+  const [showProfileReplay, setShowProfileReplay] = useState(null);
   const hist = getHistory().filter(h=>h.user===user.username);
   const totalRaces=hist.length, wins=hist.filter(h=>h.won).length;
   const totalWagered=hist.reduce((s,h)=>s+h.amount,0);
@@ -1437,11 +1438,13 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
         {tab==="history"&&(
           <div>
             {hist.length===0&&<p style={{color:"#ffffff33",textAlign:"center",padding:"30px 0"}}>No races yet!</p>}
+            {showProfileReplay && <RaceReplayScreen race={showProfileReplay} onClose={()=>setShowProfileReplay(null)}/>}
             {[...hist].reverse().map((h,i)=>{
               const horse=HORSES[h.horseId]; const rt=RACE_TYPES[h.raceType];
               return <div key={i} style={{marginBottom:6,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.won?"#39ff1422":"#ff2d5511"}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4,marginBottom:4}}>
+                <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4,marginBottom:4,alignItems:"center"}}>
                   <span style={{color:"#00f5ff",fontSize:12,fontWeight:600}}>{rt?.icon} {h.raceName||"Race"}</span>
+                  {h.raceId && <button onClick={()=>setShowProfileReplay({id:h.raceId,name:h.raceName,type:h.raceType||"standard",condition:"sunny",seed:1,startTime:h.time||Date.now()})} style={{padding:"2px 8px",background:"rgba(191,95,255,0.1)",border:"1px solid #bf5fff33",borderRadius:6,color:"#bf5fff",cursor:"pointer",fontSize:10,fontWeight:700}}>📼</button>}
                   <span style={{color:"#ffffff33",fontSize:10}}>{new Date(h.time).toLocaleString()}</span>
                 </div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -2320,7 +2323,8 @@ function Modal({ title, accent="#00f5ff", onClose, children, wide }) {
 function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, onGoToRace, userBalance, onBalanceChange }) {
   const [tab, setTab] = useState("active");
   const [pending, setPending] = useState(getPending());
-  const [history, setHistory] = useState(null); // null = not loaded yet
+  const [history, setHistory] = useState(null);
+  const [replayRace, setReplayRace] = useState(null);
 
   // Load history when History tab opened
   useEffect(()=>{
@@ -2507,14 +2511,25 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
                   );
                 })}
               </div>
-              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",justifyContent:"space-between"}}>
-                <span style={{color:"#ffffff44",fontSize:11}}>Total bet: <span style={{color:"#ffd700"}}>${fmt2(race.totalBet)}</span></span>
-                <span style={{color:"#ffffff44",fontSize:11}}>Net: <span style={{color:net>=0?"#39ff14":"#ff2d55",fontWeight:700}}>{net>=0?"+":""}${fmt2(net)}</span></span>
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <span style={{color:"#ffffff44",fontSize:11}}>Total bet: <span style={{color:"#ffd700"}}>${fmt2(race.totalBet)}</span></span>
+                  <span style={{color:"#ffffff44",fontSize:11,marginLeft:12}}>Net: <span style={{color:net>=0?"#39ff14":"#ff2d55",fontWeight:700}}>{net>=0?"+":""}${fmt2(net)}</span></span>
+                </div>
+                {race.raceType && (
+                  <button onClick={()=>{
+                    const rt = RACE_TYPES[race.raceType]||RACE_TYPES.standard;
+                    setReplayRace({ id: race.bets[0]?.raceId||`replay_${race.time}`, name:race.raceName, type:race.raceType, condition:"sunny", seed:1, startTime:race.time||Date.now() });
+                  }} style={{padding:"4px 10px",background:"rgba(191,95,255,0.1)",border:"1px solid #bf5fff33",borderRadius:7,color:"#bf5fff",cursor:"pointer",fontSize:11,fontWeight:700,flexShrink:0}}>
+                    📼 Replay
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </>}
+      {replayRace && <RaceReplayScreen race={replayRace} onClose={()=>setReplayRace(null)}/>}
     </Modal>
   );
 }
@@ -4581,7 +4596,7 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
 }
 
 // ─── RACE SCREEN ──────────────────────────────────────────────────────────────
-function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, auctionOwners }) {
+function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, auctionOwners, replayRolls=null, replayWinner=null, replaySpeed=1, replaySpeedRef=null, isReplay=false }) {
   const rt = RACE_TYPES[race.type];
   const [gateBurst, setGateBurst] = useState(false);
   const [showTie, setShowTie] = useState(false);
@@ -4613,8 +4628,13 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
     fireHistory: Array(6).fill([]), onFire: Array(6).fill(false), gunFired: false,
   });
 
-  // Load roll history once from Firestore
+  // Load roll history — use replayRolls if provided, else fetch from Firestore
   useEffect(() => {
+    if(replayRolls) {
+      engineRef.current.rolls  = replayRolls;
+      engineRef.current.winner = replayWinner;
+      return;
+    }
     let cancelled = false;
     const tryLoad = async () => {
       const allRolls = await fbGetRaceRolls();
@@ -4688,12 +4708,12 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         setDiceResult({...roll, moves:[], isDoubles:false});
 
         // Sequence: flash(600) → hold(900) → dice fade(300) → horse moves → pause(250) → next roll
-        // Total cycle ~2350ms of anim inside ROLL_INTERVAL
-        const FLASH_DUR  = 600;
-        const HOLD_DUR   = 900;   // dice stay up, fully readable
-        const FADE_DUR   = 300;   // matches CSS opacity transition
-        const MOVE_DUR   = 300;   // horse slide
-        const DONE_PAUSE = 250;   // tiny gap before next roll
+        const _spd = replaySpeedRef ? replaySpeedRef.current : 1;
+        const FLASH_DUR  = 600  / _spd;
+        const HOLD_DUR   = 900  / _spd;
+        const FADE_DUR   = 300  / _spd;
+        const MOVE_DUR   = 300  / _spd;
+        const DONE_PAUSE = 250  / _spd;
 
         let flashes = 0;
         const nd = roll.dice.length;
@@ -4814,7 +4834,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const cond = TRACK_CONDITIONS[race.condition||"sunny"];
 
   return (
-    <div style={{height:"100vh",background:"#08081a",paddingTop:isLandscape?0:56,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+    <div style={{height:"100vh",background:"#08081a",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
       {winner!==null&&<Confetti/>}
 
       {/* TIE dramatic overlay */}
@@ -5441,6 +5461,75 @@ function ProvablyFairBadge({ race, expanded=false }) {
               {verifyResult === false && <div style={{color:"#ff2d55",fontSize:12,fontWeight:700}}>✗ Hash mismatch — seed does not match</div>}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── RACE REPLAY SCREEN ───────────────────────────────────────────────────────
+function RaceReplayScreen({ race, onClose }) {
+  const [rolls,    setRolls]    = useState(null);
+  const [winner,   setWinner]   = useState(null);
+  const [speed,    setSpeed]    = useState(1);
+  const [finished, setFinished] = useState(false);
+  const speedRef = useRef(1);
+
+  useEffect(()=>{
+    fbGetRaceRolls().then(allRolls => {
+      const rd = allRolls[race.id];
+      if(rd){ setRolls(rd.rolls); setWinner(rd.winner); }
+      else {
+        const { winner:w, rolls:r } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
+        setRolls(r); setWinner(w);
+      }
+    });
+  },[race.id]);
+
+  const toggleSpeed = () => {
+    const s = speed===1?2:1;
+    setSpeed(s); speedRef.current=s;
+  };
+
+  const rt = RACE_TYPES[race.type]||RACE_TYPES.standard;
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:600,background:"#08081a",display:"flex",flexDirection:"column"}}>
+      {/* Replay header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(8,8,26,0.98)",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0,zIndex:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+          <span style={{fontSize:18}}>{rt.icon}</span>
+          <div style={{minWidth:0}}>
+            <div style={{color:"#fff",fontWeight:700,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:180}}>{race.name}</div>
+            <div style={{color:"#bf5fff",fontSize:9,letterSpacing:2,fontFamily:"'Orbitron',monospace"}}>📼 REPLAY</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+          {!finished && rolls && (
+            <button onClick={toggleSpeed} style={{padding:"5px 12px",background:speed===2?"rgba(255,215,0,0.15)":"rgba(255,255,255,0.07)",border:`1px solid ${speed===2?"#ffd70044":"rgba(255,255,255,0.12)"}`,borderRadius:8,color:speed===2?"#ffd700":"#ffffff88",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Orbitron',monospace",letterSpacing:1}}>
+              {speed===1?"1×":"2× ⚡"}
+            </button>
+          )}
+          {finished && <span style={{color:"#39ff14",fontFamily:"'Orbitron',monospace",fontSize:10,letterSpacing:2}}>✓ FINISHED</span>}
+          {!rolls && <span style={{color:"#ffffff33",fontSize:12}}>Loading...</span>}
+          <button onClick={onClose} style={{width:32,height:32,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#ffffff66",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        </div>
+      </div>
+
+      {/* Embed RaceScreen in replay mode */}
+      {rolls && (
+        <div style={{flex:1,overflow:"hidden",marginTop:0}}>
+          <RaceScreen
+            race={{...race, startTime: Date.now() + 1200, nowMs: Date.now()}}
+            bets={{}} totalPot={0}
+            onRaceEnd={()=>setFinished(true)}
+            user={null} chatMsgs={[]} setChatMsgs={()=>{}} chatOpen={false}
+            setChatOpen={()=>{}} chatUnread={0} setChatUnread={()=>{}}
+            auctionOwners={null}
+            replayRolls={rolls} replayWinner={winner} replaySpeed={speed} replaySpeedRef={speedRef}
+            isReplay={true}
+          />
         </div>
       )}
     </div>
