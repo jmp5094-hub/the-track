@@ -3160,7 +3160,7 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
                   )}
                   <span style={{color:"#ffffff33"}}>·</span>
                   <span style={{color:"#ffffff44",fontSize:11}}>{ownedCount}/6 sold</span>
-                  {(()=>{ const pot=sharedPot[race.id]?.totalPot||0; return pot>0?<><span style={{color:"#ffffff33"}}>·</span><span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(pot)}</span></>:null; })()}
+{(sharedPot[race.id]?.totalPot||0)>0&&<><span style={{color:"#ffffff33"}}>·</span><span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span></>}
                 </div>
               </div>
               <div style={{textAlign:"right",flexShrink:0,display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
@@ -3250,7 +3250,7 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={} }) {
                           )}
                           {hasBet&&<span style={{background:betIsConfirmed?"rgba(0,245,255,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#00f5ff33":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#00f5ff":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
                           {friendRaces[race.id]>0&&<span style={{background:"rgba(191,95,255,0.12)",border:"1px solid #bf5fff33",borderRadius:10,padding:"1px 8px",color:"#bf5fff",fontSize:11}}>👥 {friendRaces[race.id]}</span>}
-                          {(()=>{ const pot=sharedPot[race.id]?.totalPot||0; return pot>0?<span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(pot)}</span>:null; })()}
+{(sharedPot[race.id]?.totalPot||0)>0&&<span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span>}
                         </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0,minWidth:100}}>
