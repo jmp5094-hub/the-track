@@ -374,7 +374,7 @@ function simulateRaceWithHistory(raceType, condition, seed) {
 function generateSchedule(now, seedsDoc) {
   const races = [];
   let cursor = now + 4 * 60 * 1000;
-  for(let i = 0; i < 32; i++) {
+  for(let i = 0; i < 64; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
     const raceId    = `r${i}_${now}`;
     const condition = pickCondition(type, raceId);
@@ -395,7 +395,7 @@ function generateSchedule(now, seedsDoc) {
 function generateAuctionSchedule(now, seedsDoc) {
   const races = [];
   let cursor = now + 5 * 60 * 1000;
-  for(let i = 0; i < 32; i++) {
+  for(let i = 0; i < 64; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
     const raceId    = `a${i}_${now}`;
     const condition = pickCondition(type, raceId);
