@@ -1106,26 +1106,36 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
 
   useEffect(()=>{
     if(!uid) return;
-    Promise.all([
-      fbGetUserByUid(uid),
-      fbGetFriends(uid),
-      fbGetFriends(myUid),
-      fbGetConfirmedForUser(uid),
-    ]).then(([user, friends, mine, confirmed])=>{
-      setUserData(user);
-      setFriendsData(friends);
-      setMyFriends(mine);
-      // Build active bets list (race IDs only — no horse details)
-      const bets = Object.entries(confirmed).map(([raceId])=>{
-        const race = schedule.find(r=>r.id===raceId) || auctionSchedule.find(r=>r.id===raceId);
-        if(!race) return null;
-        const st = raceStatus(race, now);
-        if(st==="finished") return null;
-        return { race, st };
-      }).filter(Boolean).sort((a,b)=>a.race.startTime-b.race.startTime);
-      setActiveBets(bets);
-      setLoading(false);
-    });
+    const load = async () => {
+      try {
+        const [userData, friends, mine] = await Promise.all([
+          fbGetUserByUid(uid),
+          fbGetFriends(uid),
+          fbGetFriends(myUid),
+        ]);
+        setUserData(userData);
+        setFriendsData(friends);
+        setMyFriends(mine);
+
+        // Load confirmed bets separately — may fail due to permissions
+        let confirmed = {};
+        try { confirmed = await fbGetConfirmedForUser(uid); } catch(e) {}
+
+        const bets = Object.entries(confirmed).map(([raceId])=>{
+          const race = schedule.find(r=>r.id===raceId) || auctionSchedule.find(r=>r.id===raceId);
+          if(!race) return null;
+          const st = raceStatus(race, now);
+          if(st==="finished") return null;
+          return { race, st };
+        }).filter(Boolean).sort((a,b)=>a.race.startTime-b.race.startTime);
+        setActiveBets(bets);
+      } catch(e) {
+        console.error("UserProfileModal load error:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   },[uid]);
 
   const isFollowing = myFriends?.following?.includes(uid);
