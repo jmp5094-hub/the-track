@@ -6113,17 +6113,27 @@ function App() {
         changed = true;
         // Auto-payout confirmed bets
         if(user?.uid) {
-          const confirmed = await fbGetConfirmed(user.uid);
+          const [confirmed, sharedPotData] = await Promise.all([
+            fbGetConfirmed(user.uid),
+            fbGetRacePot(race.id),
+          ]);
           const saved = confirmed[race.id];
           if(saved) {
-            const activeBets = saved.bets || {};
-            const activePot  = saved.pot  || 0;
-            const myBet = parseFloat(activeBets[winner] || 0);
-            const totalOnWinner = Object.entries(activeBets).reduce((s,[hid,v])=>parseInt(hid)===winner?s+(parseFloat(v)||0):s, 0);
+            const activeBets  = saved.bets || {};
+            // Use shared pot if available, fall back to personal pot
+            const sharedTotal = sharedPotData?.totalPot || 0;
+            const sharedBets  = sharedPotData?.betsPerHorse || {};
+            const activePot   = sharedTotal > 0 ? sharedTotal : (saved.pot || 0);
+            const myBet       = parseFloat(activeBets[winner] || 0);
+            // totalOnWinner = all users' bets on winning horse from shared pot
+            const totalOnWinner = sharedTotal > 0
+              ? (sharedBets[winner] || 0)
+              : Object.entries(activeBets).reduce((s,[hid,v])=>parseInt(hid)===winner?s+(parseFloat(v)||0):s, 0);
             const payout = myBet > 0 && totalOnWinner > 0 ? (activePot / totalOnWinner) * myBet : 0;
-            results[race.id].confirmedBets = activeBets;
-            results[race.id].confirmedPot  = activePot;
-            results[race.id].payout = payout;
+            results[race.id].confirmedBets  = activeBets;
+            results[race.id].confirmedPot   = activePot;
+            results[race.id].totalOnWinner  = totalOnWinner;
+            results[race.id].payout         = parseFloat(payout.toFixed(2));
           }
         }
       }
@@ -6364,35 +6374,44 @@ function App() {
 
     // ── NORMAL RACE PATH ──
     const c = user?.uid ? await fbGetConfirmed(user.uid) : {};
-    const saved=c[selectedRace?.id];
-    const activeBets=saved?.bets||bets;
-    // Use shared pot for odds — all users contributed
-    const sp = sharedPot[selectedRace?.id];
-    const sharedTotalPot = sp?.totalPot || saved?.pot || totalPot;
+    const saved = c[selectedRace?.id];
+    const activeBets = saved?.bets || bets;
+
+    // Fetch shared pot fresh from Firestore — don't rely on stale local state
+    const freshSharedPot = await fbGetRacePot(selectedRace?.id);
+    const sp = freshSharedPot?.totalPot > 0 ? freshSharedPot : sharedPot[selectedRace?.id];
+    const sharedTotalPot     = sp?.totalPot     || saved?.pot || totalPot;
     const sharedBetsPerHorse = sp?.betsPerHorse || {};
-    const calcOdds={};
-    HORSES.forEach(h=>{
+
+    const calcOdds = {};
+    HORSES.forEach(h => {
       const totalOnHorse = sharedBetsPerHorse[h.id] || 0;
-      if(totalOnHorse>0) calcOdds[h.id]=parseFloat((sharedTotalPot/totalOnHorse).toFixed(2));
+      if(totalOnHorse > 0) calcOdds[h.id] = parseFloat((sharedTotalPot / totalOnHorse).toFixed(2));
     });
     setOdds(calcOdds);
-    const activePot=sharedTotalPot;
-    const myBetAmt=parseFloat(activeBets[winnerIdx]||0);
-    const payout=myBetAmt>0&&calcOdds[winnerIdx]?myBetAmt*calcOdds[winnerIdx]:0;
+
+    const activePot  = sharedTotalPot;
+    const myBetAmt   = parseFloat(activeBets[winnerIdx] || 0);
+    const payout     = myBetAmt > 0 && calcOdds[winnerIdx] ? parseFloat((myBetAmt * calcOdds[winnerIdx]).toFixed(2)) : 0;
+
     const bgResults = _cachedRaceResultsRef.current;
     const bgResult  = bgResults[selectedRace?.id];
-    if(!bgResult?.paid && user?.uid) {
-      updateBalance((user?.balance||0)+payout);
+
+    // ─── BUG 3 FIX: Mark paid BEFORE calling updateBalance to prevent double-pay ─
+    const alreadyPaid = bgResult?.paid === true;
+    if(!alreadyPaid && user?.uid) {
+      // Mark paid immediately to prevent race condition with background runner
+      if(bgResult) {
+        const updatedBg = {...bgResults, [selectedRace?.id]:{...bgResult, paid:true}};
+        _cachedRaceResultsRef.current = updatedBg;
+        await fbSaveRaceResults(updatedBg);
+      }
+      updateBalance((user?.balance||0) + payout);
       const hist = await fbGetHistory(user.uid);
       Object.entries(activeBets).forEach(([hid,a])=>{
         hist.push({user:user?.username,raceId:selectedRace?.id,horseId:parseInt(hid),amount:parseFloat(a)||0,odds:calcOdds[hid]?parseFloat(calcOdds[hid].toFixed(2)):null,won:parseInt(hid)===winnerIdx,payout:parseInt(hid)===winnerIdx?parseFloat(payout.toFixed(2)):0,time:Date.now(),raceName:selectedRace?.name,raceType:selectedRace?.type});
       });
       await fbSaveHistory(user.uid, hist);
-      if(bgResult) {
-        const updatedBg = {...bgResults, [selectedRace?.id]:{...bgResult, paid:true}};
-        await fbSaveRaceResults(updatedBg);
-        _cachedRaceResultsRef.current = updatedBg;
-      }
     }
     // Remove from confirmed and clear shared pot
     if(user?.uid) {
