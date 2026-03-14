@@ -2742,10 +2742,14 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
 
   // Regular bets — restore from confirmed store if already placed
   const [localBets, setLocalBets] = useState(()=>{
-    const c=getConfirmed()[race.id];
-    return c?.bets||{};
+    // Use Firestore-backed confirmedBets prop first, fall back to localStorage
+    if(confirmedBets && Object.keys(confirmedBets).length > 0) return {...confirmedBets};
+    const c = getConfirmed()[race.id];
+    return c?.bets || {};
   });
-  const [betsConfirmed, setBetsConfirmed] = useState(()=>!!getConfirmed()[race.id]);
+  const [betsConfirmed, setBetsConfirmed] = useState(()=>{
+    return (confirmedBets && Object.keys(confirmedBets).length > 0) || !!getConfirmed()[race.id];
+  });
   const saveBet=(hid,val)=>setLocalBets(b=>({...b,[hid]:val}));
   const confirmBets=()=>{
     const cleaned={}; let pot=0;
@@ -6307,9 +6311,16 @@ function App() {
     if(!raceId) return;
     const delta = pot - prevPot;
     updateBalance(user.balance - delta);
+    // Save to Firestore confirmed bets
     const c = await fbGetConfirmed(user.uid);
-    c[raceId]={ bets:finalBets, pot, raceId };
+    c[raceId] = { bets:finalBets, pot, raceId };
     await fbSaveConfirmed(user.uid, c);
+    // Also write to shared pot so bets appear in lobby and active bets
+    await fbContributeToRacePot(raceId, user.uid, finalBets, pot, prevPot);
+    // Mirror to localStorage so AuctionRaceScreen can read it on remount
+    const local = getConfirmed();
+    local[raceId] = { bets:finalBets, pot, raceId };
+    saveConfirmed(local);
     sfx.betConfirm();
     setBets(finalBets); setTotalPot(pot);
     setUserBets(c);
