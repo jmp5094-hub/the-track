@@ -4697,7 +4697,10 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   // Master clock — ticks every 200ms, drives all animation
   useEffect(() => {
     const FIRE_OFFSET = 1300;
-    const fireTime = race.isAuction ? race.startTime + 30000 : race.startTime;
+    // In replay mode, use a virtual start time from now so engine fires immediately
+    const fireTime = isReplay
+      ? Date.now() - FIRE_OFFSET - 10  // already past fire offset
+      : (race.isAuction ? race.startTime + 30000 : race.startTime);
 
     const tick = () => {
       const eng = engineRef.current;
@@ -4706,15 +4709,20 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       const elapsed = now2 - fireTime;
 
       // Gunshot
-      if(!eng.gunFired && elapsed >= 600 && elapsed < FIRE_OFFSET + ROLL_INTERVAL) {
+      if(!eng.gunFired && (elapsed >= 600 || isReplay)) {
         eng.gunFired = true;
         sfx.gunshot();
         setGateBurst(true);
         setTimeout(() => setGateBurst(false), 700);
       }
-      if(elapsed < FIRE_OFFSET) return;
+      if(elapsed < FIRE_OFFSET && !isReplay) return;
 
-      const targetIdx = Math.min(Math.floor((elapsed - FIRE_OFFSET) / ROLL_INTERVAL), eng.rolls.length - 1);
+      // In replay mode, targetIdx advances based on animation completion not wall clock
+      // We use a virtual elapsed that only counts ROLL_INTERVAL per completed roll
+      const effectiveElapsed = isReplay
+        ? (eng.lastRollIdx + 1) * ROLL_INTERVAL + 10  // always ready for next roll
+        : elapsed;
+      const targetIdx = Math.min(Math.floor((effectiveElapsed - FIRE_OFFSET) / ROLL_INTERVAL), eng.rolls.length - 1);
 
       // Catch up silently if we're behind — jump positions without animation
       if(targetIdx > eng.lastRollIdx + 1) {
