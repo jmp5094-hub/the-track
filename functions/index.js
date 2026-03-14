@@ -27,15 +27,154 @@ const HURDLE_CELL     = 5;
 
 const RACE_TYPES = ["standard","down_back","hurdle","magic_dice","triple_dice"];
 
-const RACE_NAMES = [
-  "Belmont Invitational","Churchill Classic","Saratoga Sprint","Preakness Cup",
-  "Ascot Gold Run","Epsom Derby","Dubai Millennium","Kentucky Crown",
-  "Arc de Triomphe","Breeders' Showdown","Melbourne Dash","Pegasus Stakes",
-  "Santa Anita Gold","Cheltenham Chase","Royal Ascot","Goodwood Festival",
-  "Iron Horse Classic","Thunder Ridge Open","Neon City Grand Prix","Crystal Cup",
-  "Pacific Rim Stakes","Golden Gate Sprint","Lone Star Derby","Emerald Cup",
-  "Midnight Classic","Sunrise Stakes","Thunderdome Open","Apex Invitational",
+// ─── GENERATIVE NAME SYSTEM ──────────────────────────────────────────────────
+// Race names: [Adjective] [Location] [Event] → ~15,000+ combos
+const RACE_ADJ = [
+  "Golden","Silver","Iron","Crystal","Diamond","Emerald","Sapphire","Ruby","Amber","Crimson",
+  "Midnight","Sunset","Sunrise","Thunder","Lightning","Storm","Shadow","Neon","Electric","Blazing",
+  "Ancient","Royal","Grand","Imperial","Premier","Supreme","Elite","Classic","Legendary","Eternal",
+  "Desert","Arctic","Tropical","Coastal","Mountain","Valley","Canyon","Ridge","Summit","Pacific",
+  "Atlantic","Gulf","River","Ocean","Prairie","Highland","Lowland","Northern","Southern","Eastern",
 ];
+const RACE_LOC = [
+  "Gate","Crown","Cup","Stakes","Park","Downs","Track","Circuit","Oval","Mile",
+  "Derby","Meadows","Fields","Pines","Hills","Sands","Coast","Ridge","Glen","Crest",
+  "Cross","Point","Pass","Run","Way","Lane","Path","Trail","Road","Course",
+];
+const RACE_EVENT = [
+  "Classic","Invitational","Championship","Sprint","Derby","Stakes","Open","Cup","Challenge","Grand Prix",
+  "Showdown","Dash","Run","Race","Prix","Trophy","Bowl","Series","Festival","Finale",
+];
+
+// Horse names: [Prefix] + [Suffix] → ~4,000+ combos
+const HORSE_PREFIX = [
+  "Shadow","Iron","Lady","Thunder","Mystic","Silver","Dark","Golden","Wild","Night",
+  "Star","Red","Blue","Desert","Fire","Ice","Lucky","Noble","Ocean","Phantom",
+  "Quick","Royal","Speed","Twilight","Valor","Whirl","Blazing","Storm","Crimson","Velvet",
+  "Black","White","Ghost","Sacred","Swift","Bold","Brave","Fierce","Regal","Solar",
+  "Lunar","Cosmic","Sonic","Neon","Steel","Stone","Jade","Onyx","Pearl","Ember",
+  "Frost","Blaze","Drift","Comet","Titan","Atlas","Orion","Nova","Eclipse","Inferno",
+];
+const HORSE_SUFFIX = [
+  "Dancer","Duke","Charm","Bolt","Rose","Arrow","Storm","Boy","Spirit","Rider",
+  "Gazer","Baron","Moon","Wind","Starter","Queen","Streak","Quest","Wave","Racer",
+  "Flash","Flush","Demon","Dream","Heart","Wing","Blade","Crest","Fire","Force",
+  "Star","King","Prince","Glory","Honor","Legend","Fury","Blaze","Spark","Rush",
+  "Dash","Drift","Strike","Surge","Drive","Pulse","Flare","Light","Shade","Pride",
+  "Grace","Power","Spirit","Valor","Might","Gleam","Glow","Shine","Dawn","Dusk",
+  "Dust","Thunder","Shadow","Storm","Flash","Clash","Crash","Smash","Lash","Dash",
+];
+
+function seededPick(arr, seed, offset=0) {
+  const h = Math.abs((seed * 2654435761 + offset * 1234567891) >>> 0);
+  return arr[h % arr.length];
+}
+
+function generateRaceName(raceId) {
+  const seed = raceId.split("").reduce((a,c,i) => a + c.charCodeAt(0)*(i+17), 0);
+  const adj   = seededPick(RACE_ADJ,   seed, 1);
+  const loc   = seededPick(RACE_LOC,   seed, 2);
+  const event = seededPick(RACE_EVENT, seed, 3);
+  return `${adj} ${loc} ${event}`;
+}
+
+const HORSE_FUNNY = [
+  // Puns
+  "Hay Girl Hay","Stable Genius","Neigh Sayer","Hoof Hearted","Gallop Poll",
+  "Sir Prance A Lot","Mane Attraction","Furlong John Silver","Trot Luck",
+  "Unbridled Chaos","Canter Believe It","Mare-velous","Saddle Up Buttercup",
+  "Pasture Prime","Stirrup Trouble","Stable Diffusion","Rein Man","Foal Play",
+  "Mane Event","Canter Stop Me Now","Whinny The Pooh","Pony Up","Furlong Goodbye",
+  "Mare Force One","Hoof Do You Think You Are","Rein Check","Bit By Bit",
+  "Equestrianaire","Jockey Of All Trades","Sir Rides A Lot","Clop Clop Bang Bang",
+  "Four Legs McGee","Hoofin It","Bridle Party","Neigh-borhood Watch","Colt Shoulder",
+  "Bit Player","Colt Case Scenario","Trot Nixon","Bridle Shower","Horse Of Course",
+  // Tech
+  "The Algorithm","Dark Web Runner","Final Boss","404 Horse Found",
+  "Stack Overflow","Runtime Error","Null Pointer","Git Push","Buffering",
+  "Blue Screen","Hard Reboot","Factory Reset","Low Battery","Kernel Panic",
+  "Syntax Error","Memory Leak","Sudo Runner","Ctrl Alt Delete","Force Quit",
+  "WiFi Password","Bluetooth Pony","Incognito Mode","Cookies Accepted",
+  "Cached Results","Server Down","Pending Approval","Two Factor Auth",
+  "Password123","Auto Correct","Spam Filter","Pop Up Blocker","Dark Mode",
+  "Do Not Disturb","Unsubscribe","Reply All","Out Of Memory","Disk Full",
+  "Cloud Storage","Bitcoin Blaze","Crypto Crash","NFT Nightmare","AI Generated",
+  "Prompt Engineer","Machine Learning","Neural Network","Deep Fake","Chat Bot",
+  "404 Finish Line","HTTP Horse","localhost:3000","yarn install","npm audit fix",
+  // Absurd
+  "I Am A Horse","Definitely Not A Dog","Surprisingly Fast","Unexpected Visitor",
+  "Send Help","Out Of Office","Left On Read","Technically Legal","No Ragrets",
+  "Plot Twist","Hidden Fees","Loading Please Wait","Accidental Winner","Who Let Me In",
+  "Not My Problem","Fine Print","Read The Room","Main Character Energy",
+  "Side Quest","Touch Grass","Skill Issue","Vibe Check","Too Powerful","Big Yikes",
+  "That Escalated","Plot Armor","Final Form","It Is What It Is","Understood The Assignment",
+  "Rent Free","NPC Runner","Understood The Vibes","Literally Shaking","No Notes",
+  "Unhinged","Built Different","Slay Queen","Ate And Left No Crumbs","Bestie",
+  "Based And Redpilled","Touch Grass Twice","Chronically Online","Delulu","Rizz",
+  "Caught In 4K","No Cap","Lowkey Goated","Sheesh","Bussin","Mid At Best",
+  "Sleep Deprived","Caffeine Dependent","Running On Vibes","Zero Preparation",
+  "Wrong Tab Open","Autocomplete Champion","Checked The Wiki","Googled It",
+  // Pop Culture
+  "Fast And Furious","Hay-Z","Taylor Trots","Post Malone-y","Shrek 5",
+  "Dobby Is Free","You Shall Not Pass","Winter Is Coming","I Am Iron Horse",
+  "Baby Yoda Runs","Seabiscuit 2.0","War Horse Emoji","My Little Nightmare",
+  "Oats McKinnon","Bucephalus Jr","Gandalf The Grey","Han Solo Runner",
+  "Dwayne The Pony Johnson","Nicolas Cage Rage","Keanu Neighves","Jeff Trots",
+  "Elon Tusk","Mark Trotterberg","Beyonce Gallops","Rihanna Runs","Drake Pace",
+  "Kanye Westerly","Lil Trot Baby","Bad Bunny Hops","Post Gallone","Ice Trotter",
+  "Billie Eilish Runs","Harry Styles Fast","Sabrina Carpenter Canters","Chappell Roan Race",
+  "The Weekend Sprint","Weeknd At Bernies","Olivia Rodeo","Doja Cat Nap",
+  "Timothee Chalamet Runs","Zendaya Dashes","Tom Holands Horse","Pedro Pascal Pace",
+  "Breaking Bad Horse","Better Call Stud","The Wire Trotter","Succession Stakes",
+  "White Lotus Legs","Severance Sprint","Beef Runner","The Bear Gallops",
+  // Food & Drink
+  "Nacho Average Horse","Taco Tuesday","Espresso Yourself","Sir Loin Of Beef",
+  "Whiskey Business","Rum Runner","Oat Cuisine","Carrot Top Speed","Apple Turnover",
+  "Cold Brew Bullet","Iced Latte Legs","Tiramisu Trots","Ramen Racer","Hot Sauce Hero",
+  "Sriracha Splash","Wasabi Warrior","Truffle Shuffle","Kombucha Kick",
+  "Matcha Maker","Avocado Toast","Gluten Free Gallop","Charcuterie Board",
+  "Cannoli Cannon","Szechuan Blaze","Kimchi Kick","Pulled Pork Pace",
+  "Brisket Blaze","Boba Tea Blitz","Croissant Canter","Sourdough Sprint",
+  "Flat White Flash","Cortado Charge","Oat Milk Obliterator","Smashed Avo",
+  "Wagyu Runner","Omakase Gallop","Birria Blaze","Al Pastor Pace",
+  // Mythology & History
+  "Pegasus Jr","Sleipnirs Son","Eponas Chosen","Zeus Thunderhoof",
+  "Ares War Steed","Apollo Sun Runner","Hermes Sprinter","Poseidons Fury",
+  "Achilles Heel","Odyssey Runner","Odins Charger","Freyas Mare","Lokis Trick",
+  "Valhalla Bound","Ra Sun Steed","Atlas Shrugged","Prometheus Fire","Icarus Flew",
+  "Fenrirs Foal","Bifrost Runner","Cleopatras Charger","Caesar Sprint",
+  "Napoleons Retreat","Genghis Khan Gallop","Alexandrias Horse","Spartan 300",
+  // Sports & Games
+  "First And Ten","Grand Slam Dunk","Hat Trick Pony","Overtime Hero",
+  "Sudden Death","Penalty Kick","Blitz Attack","Double Bogey","Eagle Scout",
+  "Hole In One","Buzzer Beater","Touch Down","Home Run Hero","Triple Double",
+  "Clean Sheet","Corner Kick King","Birdie Putt","Ace Serve","Match Point",
+  "Final Whistle","Extra Time","Penalty Shootout","Golden Boot","MVP",
+  "Respawn Timer","No Clip Mode","God Mode Activated","Cheat Code","Boss Rush",
+  "Speedrun Record","Any Percent","Rage Quit","GG No Re","Try Hard",
+  // Vibes & Aesthetic
+  "Electric Slide","Velvet Thunder","Disco Inferno","Neon Cowboy","Glitter Cannon",
+  "Cosmic Debris","Schrodingers Horse","Dark Matter","Event Horizon",
+  "The Dark Horse Knight","Horse With No Name","Velvet Underground",
+  "Synthwave Stallion","Lo Fi Legs","Holographic Pony","Laser Show",
+  "Vaporwave Trots","Retro Future","Pastel Chaos","Cottagecore Canter",
+  "Dark Academia Dash","Goblincore Gallop","Cottagecore Champion","Y2K Runner",
+  "Indie Sleeper","Hyperpop Hooves","Dreamcore Derby","Liminal Space Racer",
+  "Liminal Finish Line","Backrooms Sprint","Found Footage","Creepypasta",
+];
+
+function generateHorseName(raceId, slot) {
+  const seed = raceId.split("").reduce((a,c,i) => a + c.charCodeAt(0)*(i+slot*7+3), 0);
+  // ~30% chance of funny name, ~70% classic prefix+suffix
+  const stylePick = Math.abs((seed * 3141592653 + slot * 2718281828) >>> 0) % 10;
+  if(stylePick < 3) {
+    // Funny/creative name
+    return seededPick(HORSE_FUNNY, seed, slot + 42);
+  }
+  const prefix = seededPick(HORSE_PREFIX, seed, slot);
+  const suffix = seededPick(HORSE_SUFFIX, seed + slot*999983, slot+1);
+  return `${prefix} ${suffix}`;
+}
 
 const HORSE_COATS = [
   { name:"White",      filter:"brightness(10) saturate(0)" },
@@ -51,14 +190,7 @@ const HORSE_COATS = [
   { name:"Sorrel",     filter:"sepia(1) saturate(3) hue-rotate(350deg) brightness(1.0)" },
 ];
 
-const HORSE_NAME_POOL = [
-  "Shadow Dancer","Iron Duke","Lady Luck","Thunderbolt","Mystic Rose","Silver Arrow",
-  "Dark Storm","Golden Boy","Wild Spirit","Night Rider","Star Gazer","Red Baron",
-  "Blue Moon","Desert Wind","Fire Starter","Ice Queen","Lucky Charm","Noble Quest",
-  "Ocean Wave","Phantom Racer","Quick Silver","Royal Flush","Speed Demon","Twilight",
-  "Valor","Whirlwind","Xanadu","Yellow Rose","Zephyr","Ace High","Black Diamond",
-  "Crown Jewel","Dazzle","Eagle Eye","Fury Road","Ghost Rider","Honorable","Inferno",
-];
+
 
 const TRACK_CONDITIONS = {
   sunny: { weight:6 },
@@ -89,13 +221,18 @@ function pickCondition(raceType, raceId) {
 }
 
 function pickHorseNames(raceId) {
-  const seed = raceId.split('').reduce((a,c,i) => a + c.charCodeAt(0)*(i+1), 0);
-  const pool = [...HORSE_NAME_POOL];
-  for(let i=pool.length-1;i>0;i--){
-    const j = Math.abs(seed*(i+1)*2654435761 >>> 0) % (i+1);
-    [pool[i],pool[j]] = [pool[j],pool[i]];
+  // Generate 6 unique horse names for this race
+  const names = [];
+  const used  = new Set();
+  for(let slot = 0; slot < 6; slot++) {
+    let name = generateHorseName(raceId, slot);
+    // Ensure no duplicates
+    let attempt = 0;
+    while(used.has(name) && attempt < 10) { name = generateHorseName(raceId, slot + (++attempt)*100); }
+    used.add(name);
+    names.push(name);
   }
-  return pool.slice(0,6);
+  return names;
 }
 
 function pickHorseCoats(raceId) {
@@ -236,7 +373,6 @@ function simulateRaceWithHistory(raceType, condition, seed) {
 // ─── SCHEDULE GENERATION ─────────────────────────────────────────────────────
 function generateSchedule(now, seedsDoc) {
   const races = [];
-  const names = [...RACE_NAMES].sort(() => Math.random() - 0.5);
   let cursor = now + 4 * 60 * 1000;
   for(let i = 0; i < 32; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
@@ -245,13 +381,10 @@ function generateSchedule(now, seedsDoc) {
     const seedHex   = generateFairSeed();
     const seedHash  = sha256(seedHex);
     const seedInt   = seedToInt(seedHex);
-    seedsDoc[raceId] = seedHex; // store secret seed separately
+    seedsDoc[raceId] = seedHex;
     races.push({
-      id: raceId, name: names[i % names.length], type, condition,
-      startTime: cursor, status: "upcoming", seedHash,
-      // seed included for simulation — in a full hardened version
-      // this would be removed from client-readable docs
-      seed: seedInt,
+      id: raceId, name: generateRaceName(raceId), type, condition,
+      startTime: cursor, status: "upcoming", seedHash, seed: seedInt,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
     cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
@@ -261,7 +394,6 @@ function generateSchedule(now, seedsDoc) {
 
 function generateAuctionSchedule(now, seedsDoc) {
   const races = [];
-  const names = [...RACE_NAMES].sort(() => Math.random() - 0.5);
   let cursor = now + 5 * 60 * 1000;
   for(let i = 0; i < 32; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
@@ -273,7 +405,7 @@ function generateAuctionSchedule(now, seedsDoc) {
     const horseOrder = [...Array(6).keys()].sort(() => Math.random() - 0.5);
     seedsDoc[raceId] = seedHex;
     races.push({
-      id: raceId, name: names[i % names.length], type, condition,
+      id: raceId, name: generateRaceName(raceId), type, condition,
       startTime: cursor, status: "upcoming", isAuction: true, horseOrder,
       seedHash, seed: seedInt,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),

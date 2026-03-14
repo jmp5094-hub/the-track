@@ -155,6 +155,41 @@ const RACE_NAMES = [
   "Midnight Classic","Sunrise Stakes","Thunderdome Open","Apex Invitational",
 ];
 
+
+// ─── GENERATIVE RACE NAME SYSTEM ─────────────────────────────────────────────
+const RACE_NAME_ADJ = [
+  "Golden","Silver","Iron","Crystal","Diamond","Emerald","Sapphire","Ruby","Amber","Crimson",
+  "Midnight","Sunset","Sunrise","Thunder","Lightning","Storm","Shadow","Neon","Electric","Blazing",
+  "Ancient","Royal","Grand","Imperial","Premier","Supreme","Elite","Classic","Legendary","Eternal",
+  "Desert","Arctic","Tropical","Coastal","Mountain","Valley","Canyon","Ridge","Summit","Pacific",
+  "Atlantic","Gulf","River","Ocean","Prairie","Highland","Northern","Southern","Eastern","Western",
+  "Velvet","Obsidian","Cobalt","Scarlet","Ivory","Onyx","Jade","Pearl","Copper","Bronze",
+];
+const RACE_NAME_LOC = [
+  "Gate","Crown","Cup","Stakes","Park","Downs","Track","Circuit","Oval","Mile",
+  "Derby","Meadows","Fields","Pines","Hills","Sands","Coast","Ridge","Glen","Crest",
+  "Cross","Point","Pass","Run","Way","Lane","Trail","Course","Chase","Straight",
+  "Bend","Turn","Furlong","Stretch","Paddock","Finish","Turf","Rail","Infield","Outfield",
+];
+const RACE_NAME_EVENT = [
+  "Classic","Invitational","Championship","Sprint","Derby","Stakes","Open","Cup","Challenge","Grand Prix",
+  "Showdown","Dash","Run","Race","Trophy","Bowl","Series","Festival","Finale","Qualifier",
+  "Masters","Premier","Elite","Pro","Open","Invitational","Shootout","Clash","Duel","Rumble",
+];
+
+function seededPick(arr, seed, offset) {
+  const h = Math.abs(((seed * 2654435761) + (offset * 1234567891)) >>> 0);
+  return arr[h % arr.length];
+}
+
+function generateRaceName(raceId) {
+  const seed = raceId.split("").reduce((a,c,i) => a + c.charCodeAt(0)*(i+17), 0);
+  const adj   = seededPick(RACE_NAME_ADJ,   seed, 1);
+  const loc   = seededPick(RACE_NAME_LOC,   seed, 2);
+  const event = seededPick(RACE_NAME_EVENT, seed, 3);
+  return `${adj} ${loc} ${event}`;
+}
+
 const HURDLE_CELL  = 5; // 0-indexed center cell — single hurdle at position 6
 
 // ─── TRACK CONDITIONS ─────────────────────────────────────────────────────────
@@ -739,8 +774,6 @@ function generateSchedule() {
   const types = Object.keys(RACE_TYPES);
   const now   = Date.now();
   const races  = [];
-  const names  = [...RACE_NAMES].sort(()=>Math.random()-0.5);
-
   // Dense schedule: 3-8 races per hour, staggered irregularly
   let cursor = now + 4*60*1000; // first race 4 min from now
   for(let i=0; i<32; i++){
@@ -749,7 +782,7 @@ function generateSchedule() {
     const condition = pickCondition(type, raceId);
     races.push({
       id:        raceId,
-      name:      names[i % names.length],
+      name:      generateRaceName(raceId),
       type,
       condition,
       startTime: cursor,
@@ -767,7 +800,6 @@ function generateAuctionSchedule() {
   const types = Object.keys(RACE_TYPES);
   const now   = Date.now();
   const races  = [];
-  const names  = [...RACE_NAMES].sort(()=>Math.random()-0.5);
   // First auction race starts 5 min from now
   let cursor = now + 5*60*1000;
   for(let i=0; i<32; i++){
@@ -778,7 +810,7 @@ function generateAuctionSchedule() {
     const horseOrder = [...Array(6).keys()].sort(()=>Math.random()-0.5);
     races.push({
       id:        raceId,
-      name:      names[i % names.length],
+      name:      generateRaceName(raceId),
       type,
       condition,
       startTime: cursor,
