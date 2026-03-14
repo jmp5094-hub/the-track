@@ -1146,8 +1146,8 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
     setActing(false);
   };
 
-  const profile = getProfile(username);
-  const avatar  = userData?.avatar || profile?.avatar || "🏇";
+  const avatar = userData?.avatar || "🏇";
+  const bio    = userData?.bio || "";
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
@@ -1173,6 +1173,13 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
             </button>
           )}
         </div>
+
+        {/* Bio */}
+        {bio && (
+          <div style={{padding:"10px 20px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+            <p style={{color:"#ffffffbb",fontSize:13,lineHeight:1.5,margin:0}}>{bio}</p>
+          </div>
+        )}
 
         {/* Active Bets */}
         <div style={{padding:"16px 20px 20px",maxHeight:"50vh",overflowY:"auto"}}>
@@ -1223,14 +1230,18 @@ function FriendsTab({ user, schedule, auctionSchedule, now, onGoToRace, onClose 
       if((f.following||[]).length > 0) {
         setLoadingFollowing(true);
         const details = await Promise.all((f.following||[]).map(async uid => {
-          const [udata, confirmed] = await Promise.all([fbGetUserByUid(uid), fbGetConfirmedForUser(uid)]);
+          const udata = await fbGetUserByUid(uid);
           if(!udata) return null;
-          const activeBetCount = Object.entries(confirmed).filter(([raceId])=>{
-            const race = schedule.find(r=>r.id===raceId)||auctionSchedule.find(r=>r.id===raceId);
-            if(!race) return false;
-            return raceStatus(race,now) !== "finished";
-          }).length;
-          return { uid, username:udata.username, avatar:udata.avatar||"🏇", activeBetCount };
+          let activeBetCount = 0;
+          try {
+            const confirmed = await fbGetConfirmedForUser(uid);
+            activeBetCount = Object.entries(confirmed).filter(([raceId])=>{
+              const race = schedule.find(r=>r.id===raceId)||auctionSchedule.find(r=>r.id===raceId);
+              if(!race) return false;
+              return raceStatus(race,now) !== "finished";
+            }).length;
+          } catch(e) { /* bets unreadable — still show user */ }
+          return { uid, username:udata.username, avatar:udata.avatar||"🏇", bio:udata.bio||"", activeBetCount };
         }));
         setFollowingDetails(details.filter(Boolean));
         setLoadingFollowing(false);
@@ -1297,19 +1308,24 @@ function FriendsTab({ user, schedule, auctionSchedule, now, onGoToRace, onClose 
         <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FOLLOWING</div>
         {myFriends===null && <div style={{color:"#ffffff33",fontSize:13,textAlign:"center",padding:20}}>Loading...</div>}
         {myFriends!==null && followingCount===0 && <div style={{color:"#ffffff33",fontSize:13,textAlign:"center",padding:"20px 0"}}>Not following anyone yet. Search for players above.</div>}
-        {loadingFollowing && followingCount>0 && <div style={{color:"#ffffff33",fontSize:12,textAlign:"center",padding:10}}>Loading...</div>}
+        {loadingFollowing && <div style={{color:"#ffffff44",fontSize:12,textAlign:"center",padding:"16px 0"}}>Loading followers...</div>}
         {followingDetails.map(f=>(
-          <div key={f.uid} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,marginBottom:6}}>
-            <span style={{fontSize:22,flexShrink:0}}>{f.avatar}</span>
+          <div key={f.uid} onClick={()=>setViewProfile({uid:f.uid,username:f.username})}
+            style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,marginBottom:8,cursor:"pointer",transition:"all 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
+            onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}>
+            <div style={{width:44,height:44,borderRadius:12,background:"rgba(0,245,255,0.08)",border:"2px solid #00f5ff22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{f.avatar}</div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{color:"#fff",fontWeight:700,fontSize:13}}>{f.username}</div>
+              <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{f.username}</div>
               {f.activeBetCount>0
-                ? <div style={{color:"#39ff14",fontSize:11,marginTop:1}}>🎫 {f.activeBetCount} active bet{f.activeBetCount>1?"s":""}</div>
-                : <div style={{color:"#ffffff33",fontSize:11,marginTop:1}}>No active bets</div>
+                ? <div style={{color:"#39ff14",fontSize:12,marginTop:2}}>🎫 {f.activeBetCount} active bet{f.activeBetCount>1?"s":""} · tap to view</div>
+                : <div style={{color:"#ffffff33",fontSize:12,marginTop:2}}>No active bets</div>
               }
             </div>
-            <button onClick={()=>setViewProfile({uid:f.uid,username:f.username})} style={{padding:"5px 10px",background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff22",borderRadius:7,color:"#00f5ff",cursor:"pointer",fontSize:11,flexShrink:0}}>View</button>
-            <button onClick={()=>handleUnfollow(f.uid)} style={{padding:"5px 10px",background:"rgba(255,45,85,0.06)",border:"1px solid #ff2d5522",borderRadius:7,color:"#ff2d5577",cursor:"pointer",fontSize:11,flexShrink:0}}>Unfollow</button>
+            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+              <button onClick={e=>{e.stopPropagation();setViewProfile({uid:f.uid,username:f.username});}} style={{padding:"5px 12px",background:"rgba(0,245,255,0.08)",border:"1px solid #00f5ff33",borderRadius:7,color:"#00f5ff",cursor:"pointer",fontSize:11,fontWeight:700}}>View →</button>
+              <button onClick={e=>{e.stopPropagation();handleUnfollow(f.uid);}} style={{padding:"5px 12px",background:"rgba(255,45,85,0.06)",border:"1px solid #ff2d5522",borderRadius:7,color:"#ff2d5566",cursor:"pointer",fontSize:11}}>Unfollow</button>
+            </div>
           </div>
         ))}
       </div>
@@ -1350,8 +1366,8 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
     return {race,data,st};
   }).filter(Boolean).sort((a,b)=>a.race.startTime-b.race.startTime);
 
-  const saveAvatar=(av)=>{const p={...profile,avatar:av};setProfile(p);saveProfile(user.username,p);setTab("stats");};
-  const saveBio=()=>{const p={...profile,bio:bioText};setProfile(p);saveProfile(user.username,p);setEditBio(false);};
+  const saveAvatar=(av)=>{ const p={...profile,avatar:av}; setProfile(p); saveProfile(user.username,p); setTab("stats"); fbSaveUser(user.uid,{avatar:av}); fbSaveUserIndex(user.username, user.uid, av, user.balance); };
+  const saveBio=()=>{ const p={...profile,bio:bioText}; setProfile(p); saveProfile(user.username,p); setEditBio(false); fbSaveUser(user.uid,{bio:bioText}); };
   const tabS=(id,lbl,icon)=>(
     <button onClick={()=>setTab(id)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",
       background:tab===id?"#00f5ff":"rgba(255,255,255,0.05)",color:tab===id?"#08081a":"#ffffff55",
@@ -6119,9 +6135,15 @@ function App() {
           setUser({ uid: firebaseUser.uid, username: userData.username, balance: userData.balance, email: firebaseUser.email });
           const confirmed = await fbGetConfirmed(firebaseUser.uid);
           setUserBets(confirmed);
-          // Upsert userindex so this user is searchable — backfills existing users on login
-          const profile = getProfile(userData.username);
-          fbSaveUserIndex(userData.username, firebaseUser.uid, profile?.avatar||"🏇", userData.balance);
+          // Sync Firestore profile fields (avatar, bio) to localStorage
+          const localProfile = getProfile(userData.username);
+          const mergedAvatar = userData.avatar || localProfile?.avatar || "🏇";
+          const mergedBio    = userData.bio    || localProfile?.bio    || "";
+          if(mergedAvatar !== localProfile?.avatar || mergedBio !== localProfile?.bio) {
+            saveProfile(userData.username, {...localProfile, avatar:mergedAvatar, bio:mergedBio});
+          }
+          // Upsert userindex with latest avatar
+          fbSaveUserIndex(userData.username, firebaseUser.uid, mergedAvatar, userData.balance);
         }
       } else {
         setUser(null);
