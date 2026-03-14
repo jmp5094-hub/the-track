@@ -3184,7 +3184,7 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
                       <div style={{color:auctionSecs<120?"#ffd70066":"#ffffff22",fontSize:10,letterSpacing:1,marginTop:2}}>🔨 AUCTION OPENS</div>
                     </div>
                     <div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs-30)}</div>
+                      <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
                       <div style={{color:"#39ff1466",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
                     </div>
                   </>
