@@ -1119,12 +1119,22 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
 
         // Load confirmed bets separately — may fail due to permissions
         let confirmed = {};
-        try { confirmed = await fbGetConfirmedForUser(uid); } catch(e) {}
+        try { confirmed = await fbGetConfirmedForUser(uid); } catch(e) {
+          console.warn("Could not read bets for", uid, e);
+        }
 
-        const bets = Object.entries(confirmed).map(([raceId])=>{
+        console.log("Confirmed bets for", uid, ":", Object.keys(confirmed));
+        console.log("Schedule IDs (first 5):", schedule.slice(0,5).map(r=>r.id));
+
+        const bets = Object.entries(confirmed).map(([raceId, data])=>{
           const race = schedule.find(r=>r.id===raceId) || auctionSchedule.find(r=>r.id===raceId);
-          if(!race) return null;
+          if(!race) {
+            console.log("Race not found in schedule:", raceId);
+            // Still show it even if not in schedule — create a minimal race object
+            return null;
+          }
           const st = raceStatus(race, now);
+          console.log("Race", raceId, "status:", st);
           if(st==="finished") return null;
           return { race, st };
         }).filter(Boolean).sort((a,b)=>a.race.startTime-b.race.startTime);
