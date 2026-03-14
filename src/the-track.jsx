@@ -1482,7 +1482,10 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
               return <div key={i} style={{marginBottom:6,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.won?"#39ff1422":"#ff2d5511"}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4,marginBottom:4,alignItems:"center"}}>
                   <span style={{color:"#00f5ff",fontSize:12,fontWeight:600}}>{rt?.icon} {h.raceName||"Race"}</span>
-                  {h.raceId && <button onClick={()=>setShowProfileReplay({id:h.raceId,name:h.raceName,type:h.raceType||"standard",condition:"sunny",seed:1,startTime:h.time||Date.now()})} style={{padding:"2px 8px",background:"rgba(191,95,255,0.1)",border:"1px solid #bf5fff33",borderRadius:6,color:"#bf5fff",cursor:"pointer",fontSize:10,fontWeight:700}}>📼</button>}
+                  {h.raceId && <button onClick={()=>{
+  const found = schedule.find(r=>r.id===h.raceId)||auctionSchedule.find(r=>r.id===h.raceId);
+  setShowProfileReplay(found || {id:h.raceId,name:h.raceName,type:h.raceType||"standard",condition:"sunny",seed:1,startTime:h.time||Date.now()});
+}} style={{padding:"2px 8px",background:"rgba(191,95,255,0.1)",border:"1px solid #bf5fff33",borderRadius:6,color:"#bf5fff",cursor:"pointer",fontSize:10,fontWeight:700}}>📼</button>}
                   <span style={{color:"#ffffff33",fontSize:10}}>{new Date(h.time).toLocaleString()}</span>
                 </div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -2554,10 +2557,11 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
                   <span style={{color:"#ffffff44",fontSize:11}}>Total bet: <span style={{color:"#ffd700"}}>${fmt2(race.totalBet)}</span></span>
                   <span style={{color:"#ffffff44",fontSize:11,marginLeft:12}}>Net: <span style={{color:net>=0?"#39ff14":"#ff2d55",fontWeight:700}}>{net>=0?"+":""}${fmt2(net)}</span></span>
                 </div>
-                {race.raceType && (
+                {race.bets[0]?.raceId && (
                   <button onClick={()=>{
-                    const rt = RACE_TYPES[race.raceType]||RACE_TYPES.standard;
-                    setReplayRace({ id: race.bets[0]?.raceId||`replay_${race.time}`, name:race.raceName, type:race.raceType, condition:"sunny", seed:1, startTime:race.time||Date.now() });
+                    const raceId = race.bets[0].raceId;
+                    const found = schedule.find(r=>r.id===raceId)||auctionSchedule.find(r=>r.id===raceId);
+                    setReplayRace(found || { id:raceId, name:race.raceName, type:race.raceType||"standard", condition:"sunny", seed:1, startTime:race.time||Date.now() });
                   }} style={{padding:"4px 10px",background:"rgba(191,95,255,0.1)",border:"1px solid #bf5fff33",borderRadius:7,color:"#bf5fff",cursor:"pointer",fontSize:11,fontWeight:700,flexShrink:0}}>
                     📼 Replay
                   </button>
