@@ -6117,10 +6117,11 @@ function App() {
         const userData = await fbGetUser(firebaseUser.uid);
         if(userData) {
           setUser({ uid: firebaseUser.uid, username: userData.username, balance: userData.balance, email: firebaseUser.email });
-          // Load user bets
           const confirmed = await fbGetConfirmed(firebaseUser.uid);
-          // Convert to pending format for badge
           setUserBets(confirmed);
+          // Upsert userindex so this user is searchable — backfills existing users on login
+          const profile = getProfile(userData.username);
+          fbSaveUserIndex(userData.username, firebaseUser.uid, profile?.avatar||"🏇", userData.balance);
         }
       } else {
         setUser(null);
