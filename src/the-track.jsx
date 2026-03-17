@@ -4990,8 +4990,13 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             </> : null;
             const burstAnim = gateBurst ? "gateBurst 0.5s ease-out" : undefined;
             const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat} neonColor={h.color} moving={isMoved} flipX={returning} size={Math.round(cellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
+            // Calculate pixel X position for smooth horse overlay
+            const totalCells = phase==="tiebreak" ? TIEBREAK_SPACES : TRACK_SPACES;
+            const cellsVisible = totalCells + 1; // +1 for start cell
+            // vc is visual cell (0-indexed from start), pos===0 means start cell
+            const overlayX = pos===0 ? 0 : (vc + 1); // +1 to account for start cell offset
             return (
-              <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s"}}>
+              <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s",position:"relative"}}>
                 <div style={{width:sideLabelW,flexShrink:0,paddingRight:4,display:"flex",flexDirection:"column"}}>
                   <span style={{color:isActive?h.color:"#ffffff44",fontWeight:700,fontSize:labelSize,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",transition:"color 0.2s",textShadow:isActive?`0 0 8px ${h.color}`:""}}>
                     {horseName(race,h.id).split(" ")[0]}
@@ -5006,7 +5011,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     const isHomeFinish=(race.type==="down_back"||race.type==="magic_dice")&&returning;
                     const horseHere=pos===0;
                     return <div style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,background:horseHere?"rgba(255,255,255,0.06)":isHomeFinish?"rgba(255,215,0,0.06)":"rgba(255,255,255,0.02)",border:isHomeFinish?"1px solid #ffd70033":"1px solid #ffffff0a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,marginRight:2}}>
-                      {horseHere?<LottieHorse coatIndex={horseLottieCoat(race,hi)} neonColor={h.color} moving={false} size={Math.round(cellSize*0.7)}/>:isHomeFinish?"🏁":""}
+                      {!horseHere&&(isHomeFinish?"🏁":"")}
                     </div>;
                   })()}
                   {Array.from({length:phase==="tiebreak"?TIEBREAK_SPACES:TRACK_SPACES}).map((_,ci)=>{
@@ -5015,7 +5020,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     const isFinish=phase==="tiebreak"?ci===TIEBREAK_SPACES-1:(race.type==="down_back"||race.type==="magic_dice")?false:ci===TRACK_SPACES-1;
                     const betGlow = isBet && hasHorse ? `0 0 20px ${h.color}, 0 0 40px ${h.color}88` : hasHorse ? `0 0 14px ${h.color},0 0 28px ${h.color}55` : isHurdle?"0 0 10px #ff6b0066":"none";
                     return <div key={ci} style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,position:"relative",background:hasHorse?`${h.color}1e`:passed?"rgba(255,255,255,0.015)":ci%2===0?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.018)",border:hasHorse&&isBet?`2px solid ${h.color}`:hasHorse?`2px solid ${h.color}`:isHurdle?"2px solid #ff6b00":isFinish?"1px solid #ffd70033":"1px solid rgba(255,255,255,0.05)",boxShadow:betGlow,display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,transition:"box-shadow 0.15s",animation:isHurdle&&!hasHorse?"hurdlePulse 1.2s ease-in-out infinite":isBet&&hasHorse?"betPulse 1.4s ease-in-out infinite":"none","--bet-glow":`0 0 16px ${h.color}, 0 0 32px ${h.color}66`,"--bet-glow-bright":`0 0 28px ${h.color}, 0 0 56px ${h.color}aa`}}>
-                      {hasHorse?horseEmoji:isHurdle?"🚧":isFinish?"🏁":""}
+                      {!hasHorse&&(isHurdle?"🚧":isFinish?"🏁":"")}
                       {hasHorse&&isBet&&<span style={{position:"absolute",top:1,right:2,fontSize:Math.max(7,Math.round(7*cellScale)),opacity:0.55,lineHeight:1}}>💰</span>}
                       {hasHorse&&isMoved&&<>
                         <div style={{position:"absolute",inset:0,overflow:"hidden",borderRadius:4,pointerEvents:"none",zIndex:3}}>
@@ -5080,7 +5085,7 @@ const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor=
                   <div key={h.id} style={{flex:1,display:"flex",flexDirection:"column",opacity:dimmed?0.3:1,gap:2,background:isActive?`${h.color}08`:"transparent",borderRadius:6,padding:"2px",transition:"background 0.3s"}}>
                     {/* Top cell — turnaround marker for down_back, finish line for standard */}
                     <div style={{height:pCellH,borderRadius:4,flexShrink:0,background:atTurnaround?`${h.color}1e`:"rgba(255,255,255,0.02)",border:atTurnaround?`2px solid ${h.color}`:isDownBackType?"1px solid rgba(255,255,255,0.04)":"1px solid rgba(255,215,0,0.18)",boxShadow:atTurnaround?`0 0 12px ${h.color}`:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:pFontSize}}>
-                      {atTurnaround?horseEmoji:isDownBackType?"🔄":"🏁"}
+                      {!atTurnaround&&(isDownBackType?"🔄":"🏁")}
                     </div>
                     {/* Track cells top→bottom (ri=10 at top, ri=0 at bottom) — 11 cells to match landscape */}
                     {Array.from({length:phase==="tiebreak"?TIEBREAK_SPACES:(TRACK_SPACES-1)}).map((_,ci)=>{
@@ -5090,7 +5095,7 @@ const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor=
                       const isHurdle=race.type==="hurdle"&&ri===HURDLE_CELL;
                       return (
                         <div key={ri} style={{height:pCellH,borderRadius:4,flexShrink:0,position:"relative",overflow:"visible",background:hasHorse?`${h.color}1e`:passed?"rgba(255,255,255,0.01)":ri%2===0?"rgba(255,255,255,0.036)":"rgba(255,255,255,0.018)",border:hasHorse?`2px solid ${h.color}`:isHurdle?"2px solid #ff6b00":"1px solid rgba(255,255,255,0.04)",boxShadow:isBet&&hasHorse?`0 0 20px ${h.color},0 0 40px ${h.color}88`:hasHorse?`0 0 12px ${h.color},0 0 24px ${h.color}55`:isHurdle?"0 0 8px #ff6b0066":"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:pFontSize,transition:"box-shadow 0.15s",animation:isHurdle&&!hasHorse?"hurdlePulse 1.2s ease-in-out infinite":isBet&&hasHorse?"betPulse 1.4s ease-in-out infinite":"none","--bet-glow":`0 0 16px ${h.color},0 0 32px ${h.color}66`,"--bet-glow-bright":`0 0 28px ${h.color},0 0 56px ${h.color}aa`}}>
-                          {hasHorse?horseEmoji:isHurdle?"🚧":""}
+                          {!hasHorse&&(isHurdle?"🚧":"")}
                           {hasHorse&&isBet&&<span style={{position:"absolute",top:0,right:1,fontSize:6,opacity:0.5,lineHeight:1}}>💰</span>}
                           {hasHorse&&isMoved&&<>
                             <div style={{position:"absolute",inset:0,overflow:"hidden",borderRadius:4,pointerEvents:"none",zIndex:3}}>
@@ -5113,7 +5118,7 @@ const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor=
                       return (
                         <div style={{height:pCellH+18,borderRadius:4,flexShrink:0,background:bg,border,boxShadow:shadow,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,padding:"2px 1px"}}>
                           <div style={{fontSize:pFontSize,lineHeight:1}}>
-                            {horseAtBottom ? horseEmoji : isFinishHere ? "🏁" : ""}
+                            {!horseAtBottom && (isFinishHere ? "🏁" : "")}
                           </div>
                           <div style={{width:7,height:7,borderRadius:"50%",background:h.color,flexShrink:0,boxShadow:`0 0 5px ${h.color}`}}/>
                           <div style={{fontSize:7,fontWeight:700,color:activeHorses.includes(hi)?h.color:"#ffffff55",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",textAlign:"center",lineHeight:1,padding:"0 2px"}}>
@@ -5123,6 +5128,42 @@ const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor=
                         </div>
                       );
                     })()}
+                  {/* Smooth sliding overlay horse — landscape column */}
+                  {(()=>{
+                    const totalP = phase==="tiebreak" ? TIEBREAK_SPACES+1 : TRACK_SPACES+1;
+                    // Map position to cell index from top:
+                    // top = atTurnaround cell (index 0)
+                    // ri decreases top→bottom: ri=TRACK_SPACES-1 at top, ri=0 near bottom
+                    // bottom = start/finish cell (last index)
+                    let overlayYIdx;
+                    if(atFinish || pos===0) {
+                      overlayYIdx = totalP - 1; // bottom cell
+                    } else if(atTurnaround) {
+                      overlayYIdx = 0; // top cell
+                    } else {
+                      // ri = visual cell, top cell is ri=TRACK_SPACES-2, bottom of main is ri=0
+                      const ri2 = vc;
+                      overlayYIdx = (TRACK_SPACES-2) - ri2 + 1; // +1 for top cell offset
+                    }
+                    const horseSz = Math.round(pCellH*0.85);
+                    const yPx = overlayYIdx * (pCellH+2) + (pCellH/2) - horseSz/2;
+                    return (
+                      <div style={{
+                        position:"absolute",
+                        top: yPx,
+                        left:"50%",
+                        transform:"translateX(-50%)",
+                        transition:"top 0.32s cubic-bezier(0.25,0.8,0.35,1)",
+                        zIndex:10,
+                        pointerEvents:"none",
+                        width:horseSz,
+                        height:horseSz,
+                      }}>
+                        {isWinner ? <span style={{fontSize:Math.round(pCellH*0.7),lineHeight:1}}>🏆</span> : horseEmoji}
+                        {!isWinner && flameLayers}
+                      </div>
+                    );
+                  })()}
                   </div>
                 );
               })}
