@@ -261,10 +261,20 @@ export default function LottieHorse({
     );
   }
 
+  // Convert hex to rgb for box-shadow
+  const hexToRgbStr = (hex) => {
+    const h = hex.replace("#","");
+    const r = parseInt(h.slice(0,2),16);
+    const g = parseInt(h.slice(2,4),16);
+    const b = parseInt(h.slice(4,6),16);
+    return `${r},${g},${b}`;
+  };
+  const neonRgb = hexToRgbStr(neonColor);
+
   return (
     <div style={{
       width: size, height: size,
-      transform: flipX ? "scaleX(1)" : "scaleX(-1)",  // scaleX(-1)=face right, scaleX(1)=face left
+      transform: flipX ? "scaleX(1)" : "scaleX(-1)",
       filter: `url(#${filterId})`,
       ...style,
     }}>

@@ -4989,10 +4989,15 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
               <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
             </> : null;
             const burstAnim = gateBurst ? "gateBurst 0.5s ease-out" : undefined;
-            const slideAnim = isMoved ? (returning ? "horseSlideInReturn 0.32s cubic-bezier(0.25,0.8,0.35,1)" : "horseSlideIn 0.32s cubic-bezier(0.25,0.8,0.35,1)") : undefined;
-            const horseEmoji=isWinner?"🏆":<div style={{"--cell-w":`${cellSize}px`,animation:slideAnim,display:"inline-block"}}><LottieHorse coatIndex={lottieCoat} neonColor={h.color} moving={isMoved} flipX={returning} size={Math.round(cellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":undefined}}/></div>;
+// horse rendered in absolute overlay below
+            // Pixel X for smooth horse overlay
+            const horseW = Math.round(cellH*0.9);
+            const cellGap = 2;
+            // position 0 = start cell, positions 1-12 = track cells
+            const xIdx = pos===0 ? 0 : (vc + 1);
+            const horseLeft = sideLabelW + (xIdx * (cellSize + cellGap)) + Math.round((cellSize - horseW)/2);
             return (
-              <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s"}}>
+              <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s",position:"relative",overflow:"visible"}}>
                 <div style={{width:sideLabelW,flexShrink:0,paddingRight:4,display:"flex",flexDirection:"column"}}>
                   <span style={{color:isActive?h.color:"#ffffff44",fontWeight:700,fontSize:labelSize,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",transition:"color 0.2s",textShadow:isActive?`0 0 8px ${h.color}`:""}}>
                     {horseName(race,h.id).split(" ")[0]}
@@ -5007,7 +5012,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     const isHomeFinish=(race.type==="down_back"||race.type==="magic_dice")&&returning;
                     const horseHere=pos===0;
                     return <div style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,background:horseHere?"rgba(255,255,255,0.06)":isHomeFinish?"rgba(255,215,0,0.06)":"rgba(255,255,255,0.02)",border:isHomeFinish?"1px solid #ffd70033":"1px solid #ffffff0a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,marginRight:2}}>
-                      {horseHere?<LottieHorse coatIndex={horseLottieCoat(race,hi)} neonColor={h.color} moving={false} size={Math.round(cellSize*0.7)}/>:isHomeFinish?"🏁":""}
+                      {!horseHere&&(isHomeFinish?"🏁":"")}
                     </div>;
                   })()}
                   {Array.from({length:phase==="tiebreak"?TIEBREAK_SPACES:TRACK_SPACES}).map((_,ci)=>{
@@ -5016,7 +5021,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     const isFinish=phase==="tiebreak"?ci===TIEBREAK_SPACES-1:(race.type==="down_back"||race.type==="magic_dice")?false:ci===TRACK_SPACES-1;
                     const betGlow = isBet && hasHorse ? `0 0 20px ${h.color}, 0 0 40px ${h.color}88` : hasHorse ? `0 0 14px ${h.color},0 0 28px ${h.color}55` : isHurdle?"0 0 10px #ff6b0066":"none";
                     return <div key={ci} style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,position:"relative",background:hasHorse?`${h.color}1e`:passed?"rgba(255,255,255,0.015)":ci%2===0?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.018)",border:hasHorse&&isBet?`2px solid ${h.color}`:hasHorse?`2px solid ${h.color}`:isHurdle?"2px solid #ff6b00":isFinish?"1px solid #ffd70033":"1px solid rgba(255,255,255,0.05)",boxShadow:betGlow,display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,transition:"box-shadow 0.15s",animation:isHurdle&&!hasHorse?"hurdlePulse 1.2s ease-in-out infinite":isBet&&hasHorse?"betPulse 1.4s ease-in-out infinite":"none","--bet-glow":`0 0 16px ${h.color}, 0 0 32px ${h.color}66`,"--bet-glow-bright":`0 0 28px ${h.color}, 0 0 56px ${h.color}aa`}}>
-                      {hasHorse?horseEmoji:isHurdle?"🚧":isFinish?"🏁":""}
+                      {!hasHorse&&(isHurdle?"🚧":isFinish?"🏁":"")}
                       {hasHorse&&isBet&&<span style={{position:"absolute",top:1,right:2,fontSize:Math.max(7,Math.round(7*cellScale)),opacity:0.55,lineHeight:1}}>💰</span>}
                       {hasHorse&&isMoved&&<>
                         <div style={{position:"absolute",inset:0,overflow:"hidden",borderRadius:4,pointerEvents:"none",zIndex:3}}>
@@ -5028,6 +5033,31 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                       {hasHorse&&flameLayers}
                     </div>;
                   })}
+                </div>
+                {/* Absolute positioned overlay horse — slides smoothly */}
+                <div style={{
+                  position:"absolute",
+                  left: horseLeft,
+                  top:"50%",
+                  transform:"translateY(-50%)",
+                  transition:"left 0.32s cubic-bezier(0.25,0.8,0.35,1)",
+                  zIndex:10,
+                  pointerEvents:"none",
+                  width:horseW,
+                  height:horseW,
+                }}>
+                  {isWinner
+                    ? <span style={{fontSize:Math.round(cellH*0.7),lineHeight:1}}>🏆</span>
+                    : <LottieHorse
+                        coatIndex={lottieCoat}
+                        neonColor={h.color}
+                        moving={isMoved}
+                        flipX={returning}
+                        size={horseW}
+                        speed={isJumping?2:isSliding?0.5:1.6}
+                      />
+                  }
+                  {flameLayers}
                 </div>
               </div>
             );
@@ -5073,16 +5103,29 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                 </> : null;
                 const burstAnim = gateBurst ? "gateBurstPortrait 0.5s ease-out" : undefined;
                 const lottieCoat2=horseLottieCoat(race,hi);
-const slideAnimP = isMoved ? (returning ? "horseSlideInReturn 0.32s cubic-bezier(0.25,0.8,0.35,1)" : "horseSlideIn 0.32s cubic-bezier(0.25,0.8,0.35,1)") : undefined;
-const horseEmoji=isWinner?"🏆":<div style={{"--cell-w":`${pCellH}px`,animation:slideAnimP,display:"inline-block"}}><LottieHorse coatIndex={lottieCoat2} neonColor={h.color} moving={isMoved} flipX={returning} size={Math.round(pCellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":undefined}}/></div>;
                 const isDownBackType=(race.type==="down_back"||race.type==="magic_dice");
                 const atFinish=phase==="tiebreak"?pos>=TIEBREAK_SPACES:isDownBackType?returning&&pos<=0:pos>=TRACK_SPACES;
                 const atTurnaround=phase!=="tiebreak"&&isDownBackType&&pos>=TRACK_SPACES;
+                // Portrait Y position for overlay horse
+                const pGap = 2;
+                const pHorseW = Math.round(pCellH*0.9);
+                let pYIdx;
+                if(atFinish || (pos===0 && !atTurnaround)) {
+                  // bottom cell
+                  pYIdx = TRACK_SPACES; // top(1) + main(TRACK_SPACES-1) + bottom = TRACK_SPACES
+                } else if(atTurnaround) {
+                  pYIdx = 0; // top cell
+                } else {
+                  // main cells: ri=TRACK_SPACES-2 is topmost, ri=0 is bottom of main
+                  // top cell offset = 1, so pYIdx = 1 + (TRACK_SPACES-2 - vc)
+                  pYIdx = 1 + (TRACK_SPACES - 2 - vc);
+                }
+                const pYpx = pYIdx * (pCellH + pGap) + Math.round((pCellH - pHorseW)/2);
                 return (
-                  <div key={h.id} style={{flex:1,display:"flex",flexDirection:"column",opacity:dimmed?0.3:1,gap:2,background:isActive?`${h.color}08`:"transparent",borderRadius:6,padding:"2px",transition:"background 0.3s"}}>
+                  <div key={h.id} style={{flex:1,display:"flex",flexDirection:"column",opacity:dimmed?0.3:1,gap:pGap,background:isActive?`${h.color}08`:"transparent",borderRadius:6,padding:"2px",transition:"background 0.3s",position:"relative",overflow:"visible"}}>
                     {/* Top cell — turnaround marker for down_back, finish line for standard */}
                     <div style={{height:pCellH,borderRadius:4,flexShrink:0,background:atTurnaround?`${h.color}1e`:"rgba(255,255,255,0.02)",border:atTurnaround?`2px solid ${h.color}`:isDownBackType?"1px solid rgba(255,255,255,0.04)":"1px solid rgba(255,215,0,0.18)",boxShadow:atTurnaround?`0 0 12px ${h.color}`:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:pFontSize}}>
-                      {atTurnaround?horseEmoji:isDownBackType?"🔄":"🏁"}
+                      {!atTurnaround&&(isDownBackType?"🔄":"🏁")}
                     </div>
                     {/* Track cells top→bottom (ri=10 at top, ri=0 at bottom) — 11 cells to match landscape */}
                     {Array.from({length:phase==="tiebreak"?TIEBREAK_SPACES:(TRACK_SPACES-1)}).map((_,ci)=>{
@@ -5092,7 +5135,7 @@ const horseEmoji=isWinner?"🏆":<div style={{"--cell-w":`${pCellH}px`,animation
                       const isHurdle=race.type==="hurdle"&&ri===HURDLE_CELL;
                       return (
                         <div key={ri} style={{height:pCellH,borderRadius:4,flexShrink:0,position:"relative",overflow:"visible",background:hasHorse?`${h.color}1e`:passed?"rgba(255,255,255,0.01)":ri%2===0?"rgba(255,255,255,0.036)":"rgba(255,255,255,0.018)",border:hasHorse?`2px solid ${h.color}`:isHurdle?"2px solid #ff6b00":"1px solid rgba(255,255,255,0.04)",boxShadow:isBet&&hasHorse?`0 0 20px ${h.color},0 0 40px ${h.color}88`:hasHorse?`0 0 12px ${h.color},0 0 24px ${h.color}55`:isHurdle?"0 0 8px #ff6b0066":"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:pFontSize,transition:"box-shadow 0.15s",animation:isHurdle&&!hasHorse?"hurdlePulse 1.2s ease-in-out infinite":isBet&&hasHorse?"betPulse 1.4s ease-in-out infinite":"none","--bet-glow":`0 0 16px ${h.color},0 0 32px ${h.color}66`,"--bet-glow-bright":`0 0 28px ${h.color},0 0 56px ${h.color}aa`}}>
-                          {hasHorse?horseEmoji:isHurdle?"🚧":""}
+                          {!hasHorse&&(isHurdle?"🚧":"")}
                           {hasHorse&&isBet&&<span style={{position:"absolute",top:0,right:1,fontSize:6,opacity:0.5,lineHeight:1}}>💰</span>}
                           {hasHorse&&isMoved&&<>
                             <div style={{position:"absolute",inset:0,overflow:"hidden",borderRadius:4,pointerEvents:"none",zIndex:3}}>
@@ -5115,7 +5158,7 @@ const horseEmoji=isWinner?"🏆":<div style={{"--cell-w":`${pCellH}px`,animation
                       return (
                         <div style={{height:pCellH+18,borderRadius:4,flexShrink:0,background:bg,border,boxShadow:shadow,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1,padding:"2px 1px"}}>
                           <div style={{fontSize:pFontSize,lineHeight:1}}>
-                            {horseAtBottom ? horseEmoji : isFinishHere ? "🏁" : ""}
+                            {!horseAtBottom && (isFinishHere ? "🏁" : "")}
                           </div>
                           <div style={{width:7,height:7,borderRadius:"50%",background:h.color,flexShrink:0,boxShadow:`0 0 5px ${h.color}`}}/>
                           <div style={{fontSize:7,fontWeight:700,color:activeHorses.includes(hi)?h.color:"#ffffff55",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",textAlign:"center",lineHeight:1,padding:"0 2px"}}>
@@ -5126,6 +5169,30 @@ const horseEmoji=isWinner?"🏆":<div style={{"--cell-w":`${pCellH}px`,animation
                       );
                     })()}
 
+                  {/* Absolute overlay horse — slides smoothly up/down column */}
+                  <div style={{
+                    position:"absolute",
+                    top: pYpx,
+                    left:"50%",
+                    transform:"translateX(-50%)",
+                    transition:"top 0.32s cubic-bezier(0.25,0.8,0.35,1)",
+                    zIndex:10,
+                    pointerEvents:"none",
+                    width:pHorseW,
+                    height:pHorseW,
+                  }}>
+                    {isWinner
+                      ? <span style={{fontSize:Math.round(pCellH*0.7),lineHeight:1,display:"block",textAlign:"center"}}>🏆</span>
+                      : <LottieHorse
+                          coatIndex={lottieCoat2}
+                          neonColor={h.color}
+                          moving={isMoved}
+                          flipX={returning}
+                          size={pHorseW}
+                          speed={isJumping?2:isSliding?0.5:1.6}
+                        />
+                    }
+                  </div>
                   </div>
                 );
               })}
@@ -6116,9 +6183,9 @@ function App() {
         if(results[race.id] !== undefined) continue;
         const actualFireTime = race.isAuction ? race.startTime + 30000 : race.startTime;
         if(actualFireTime > now2) continue;
-        const { winner, rolls } = simRace(race.type, race.condition||"sunny", race.seed);
-        const visualFinishAt = actualFireTime + 1300 + rolls * ROLL_INTERVAL;
-        results[race.id] = { winner: winner ?? 0, rolls, finishedAt: now2, visualFinishAt, raceId: race.id };
+        const { winner: simWinner, rolls: rollCount } = simRace(race.type, race.condition||"sunny", race.seed);
+        const visualFinishAt = actualFireTime + 1300 + (rollCount||30) * ROLL_INTERVAL;
+        results[race.id] = { winner: simWinner ?? 0, rolls: rollCount||30, finishedAt: now2, visualFinishAt, raceId: race.id };
         changed = true;
         // Auto-payout confirmed bets
         if(user?.uid) {
@@ -6505,6 +6572,7 @@ function App() {
 
   return (
     <div style={{minHeight:"100vh",background:"#08081a"}}>
+      <OutlineFilters/>
       <style>{GS}</style>
       <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>{setSelectedAuctionRace(null);setShowAuction(true);}} onBank={()=>setShowBank(true)} onHowTo={()=>setShowHowTo(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
 
