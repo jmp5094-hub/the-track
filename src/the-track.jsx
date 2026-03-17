@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import LottieHorse, { OutlineFilters, getCoatIndex, getCoatName } from "./LottieHorse";
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, orderBy, limit, runTransaction, increment } from "firebase/firestore";
@@ -166,8 +167,9 @@ function HorseName({ race, horseId, style={}, firstOnly=false }) {
   const name = horseName(race, horseId);
   return <span style={style}>{firstOnly ? name.split(" ")[0] : name}</span>;
 }
-const horseCoat  = (race, horseId) => race?.coats?.[horseId]?.filter ?? "sepia(1) saturate(1.5) hue-rotate(330deg) brightness(0.65)";
+const horseCoat     = (race, horseId) => race?.coats?.[horseId]?.filter ?? "sepia(1) saturate(1.5) hue-rotate(330deg) brightness(0.65)";
 const horseCoatName = (race, horseId) => race?.coats?.[horseId]?.name ?? "Bay";
+const horseLottieCoat = (race, horseId) => getCoatIndex(race?.id || "default", horseId);
 
 const RACE_TYPES = {
   standard:    { label:"Standard",     icon:"🏇", color:"#00f5ff", dice:2, desc:"2 dice per roll — each die moves a horse. Doubles = bonus move!" },
@@ -3716,7 +3718,7 @@ function OddsRevealScreen({ race, bets, totalPot, odds }) {
         {HORSES.map(h=>(
           <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:6,background:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${h.color}33`}}>
             <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:`${h.color}15`,border:`1.5px solid ${h.color}`}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-            <span style={{flex:1,color:h.color,fontWeight:700,fontSize:14}}><HorseName race={race} horseId={h.id}/> <span style={{color:"#ffffff33",fontSize:10,fontWeight:400}}>({horseCoatName(race,h.id)})</span></span>
+            <span style={{flex:1,color:h.color,fontWeight:700,fontSize:14}}><HorseName race={race} horseId={h.id}/> <span style={{color:"#ffffff33",fontSize:10,fontWeight:400}}>({getCoatName(horseLottieCoat(race,h.id))})</span></span>
             <span style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:16}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
             {bets[h.id]>0&&<span style={{color:"#ffd70088",fontSize:12}}>your: ${bets[h.id]}</span>}
           </div>
@@ -4986,7 +4988,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
               <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
             </> : null;
             const burstAnim = gateBurst ? "gateBurst 0.5s ease-out" : undefined;
-            const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:returning?<span style={{filter:coat,position:"relative",zIndex:2,animation:isMoved?"slideHorseReturn 0.25s ease-out":undefined}}>🐴</span>:<span style={{display:"inline-block",transform:"scaleX(-1)",filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorse 0.25s ease-out":undefined)}}>🐴</span>;
+            const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat} neonColor={h.color} moving={isMoved} size={Math.round(cellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
             return (
               <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s"}}>
                 <div style={{width:sideLabelW,flexShrink:0,paddingRight:4,display:"flex",flexDirection:"column"}}>
@@ -5003,7 +5005,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     const isHomeFinish=(race.type==="down_back"||race.type==="magic_dice")&&returning;
                     const horseHere=pos===0;
                     return <div style={{width:cellSize,height:cellH,borderRadius:4,flexShrink:0,background:horseHere?"rgba(255,255,255,0.06)":isHomeFinish?"rgba(255,215,0,0.06)":"rgba(255,255,255,0.02)",border:isHomeFinish?"1px solid #ffd70033":"1px solid #ffffff0a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:emojiSize,marginRight:2}}>
-                      {horseHere?<span style={{display:"inline-block",transform:"scaleX(-1)",filter:coat}}>🐴</span>:isHomeFinish?"🏁":""}
+                      {horseHere?<LottieHorse coatIndex={horseLottieCoat(race,hi)} neonColor={h.color} moving={false} size={Math.round(cellSize*0.7)}/>:isHomeFinish?"🏁":""}
                     </div>;
                   })()}
                   {Array.from({length:phase==="tiebreak"?TIEBREAK_SPACES:TRACK_SPACES}).map((_,ci)=>{
@@ -5068,7 +5070,8 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                   <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
                 </> : null;
                 const burstAnim = gateBurst ? "gateBurstPortrait 0.5s ease-out" : undefined;
-                const horseEmoji=isWinner?"🏆":isJumping?<span style={{display:"inline-block",animation:"hurdleJump 0.7s ease-in-out",filter:coat}}>🐴</span>:isSliding?<span style={{display:"inline-block",animation:"slideBack 0.7s ease-in-out",filter:coat}}>🐴</span>:<span style={{filter:coat,position:"relative",zIndex:2,animation:burstAnim||(isMoved?"slideHorseReturn 0.25s ease-out":undefined)}}>🐴</span>;
+                const lottieCoat2=horseLottieCoat(race,hi);
+                const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor={h.color} moving={isMoved} size={Math.round(pCellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
                 const isDownBackType=(race.type==="down_back"||race.type==="magic_dice");
                 const atFinish=phase==="tiebreak"?pos>=TIEBREAK_SPACES:isDownBackType?returning&&pos<=0:pos>=TRACK_SPACES;
                 const atTurnaround=phase!=="tiebreak"&&isDownBackType&&pos>=TRACK_SPACES;
