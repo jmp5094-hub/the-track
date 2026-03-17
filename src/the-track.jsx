@@ -4979,6 +4979,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             const returning=(race.type==="down_back"||race.type==="magic_dice")&&legDone[hi];
             const vc=visualCell(hi), inTie=tieHorses?.includes(hi), dimmed=tieHorses&&!inTie;
             const coat=horseCoat(race,hi);
+            const lottieCoat=horseLottieCoat(race,hi);
             const isBet=betOnHorses.has(hi)&&winner===null;
             const isHot=onFire[hi];
             const isMoved=movedHorses.includes(hi);
@@ -6114,7 +6115,7 @@ function App() {
         if(actualFireTime > now2) continue;
         const { winner, rolls } = simRace(race.type, race.condition||"sunny", race.seed);
         const visualFinishAt = actualFireTime + 1300 + rolls * ROLL_INTERVAL;
-        results[race.id] = { winner, rolls, finishedAt: now2, visualFinishAt, raceId: race.id };
+        results[race.id] = { winner: winner ?? 0, rolls, finishedAt: now2, visualFinishAt, raceId: race.id };
         changed = true;
         // Auto-payout confirmed bets
         if(user?.uid) {
