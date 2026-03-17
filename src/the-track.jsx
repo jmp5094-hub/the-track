@@ -4765,7 +4765,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         const HOLD_DUR   = 900  / _spd;
         const FADE_DUR   = 300  / _spd;
         const MOVE_DUR   = 300  / _spd;
-        const DONE_PAUSE = 250  / _spd;
+        const DONE_PAUSE = 450  / _spd;
 
         let flashes = 0;
         const nd = roll.dice.length;
@@ -4989,7 +4989,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
               <div style={{position:"absolute",bottom:2,left:"50%",marginLeft:Math.round(-8*cellScale),width:Math.round(16*cellScale),height:Math.round(32*cellScale),borderRadius:"50% 50% 25% 25% / 60% 60% 40% 40%",transformOrigin:"bottom center",background:"radial-gradient(ellipse at 50% 85%, #ffffffcc 0%, #ffd700aa 50%, transparent 78%)",animation:"flameC 0.3s ease-in-out infinite",pointerEvents:"none",zIndex:1}}/>
             </> : null;
             const burstAnim = gateBurst ? "gateBurst 0.5s ease-out" : undefined;
-            const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat} neonColor={h.color} moving={isMoved} size={Math.round(cellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
+            const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat} neonColor={h.color} moving={isMoved} flipX={returning} size={Math.round(cellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
             return (
               <div key={h.id} style={{display:"flex",alignItems:"center",marginBottom:3,opacity:dimmed?0.3:1,background:isActive?`${h.color}0c`:"transparent",borderRadius:6,transition:"all 0.3s"}}>
                 <div style={{width:sideLabelW,flexShrink:0,paddingRight:4,display:"flex",flexDirection:"column"}}>
@@ -5072,7 +5072,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                 </> : null;
                 const burstAnim = gateBurst ? "gateBurstPortrait 0.5s ease-out" : undefined;
                 const lottieCoat2=horseLottieCoat(race,hi);
-                const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor={h.color} moving={isMoved} size={Math.round(pCellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
+const horseEmoji=isWinner?"🏆":<LottieHorse coatIndex={lottieCoat2} neonColor={h.color} moving={isMoved} flipX={returning} size={Math.round(pCellH*0.85)} speed={isJumping?2:isSliding?0.5:1.6} style={{animation:isJumping?"hurdleJump 0.7s ease-in-out":isSliding?"slideBack 0.7s ease-in-out":burstAnim||undefined}}/>;
                 const isDownBackType=(race.type==="down_back"||race.type==="magic_dice");
                 const atFinish=phase==="tiebreak"?pos>=TIEBREAK_SPACES:isDownBackType?returning&&pos<=0:pos>=TRACK_SPACES;
                 const atTurnaround=phase!=="tiebreak"&&isDownBackType&&pos>=TRACK_SPACES;

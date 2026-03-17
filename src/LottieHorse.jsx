@@ -215,6 +215,7 @@ export default function LottieHorse({
   moving = false,      // true = play, false = pause
   size = 64,           // px — width and height
   speed = 1.6,
+  flipX = false,       // true = facing left (returning in down & back)
   style = {},
 }) {
   const [animData, setAnimData] = useState(null);
@@ -259,7 +260,7 @@ export default function LottieHorse({
   return (
     <div style={{
       width: size, height: size,
-      transform: "scaleX(-1)",  // face right
+      transform: flipX ? "scaleX(1)" : "scaleX(-1)",  // scaleX(-1)=face right, scaleX(1)=face left
       filter: `url(#${filterId})`,
       ...style,
     }}>
