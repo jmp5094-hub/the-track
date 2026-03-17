@@ -144,7 +144,10 @@ let baseLoadPromise = null;
 async function loadBase() {
   if(baseDataCache) return baseDataCache;
   if(baseLoadPromise) return baseLoadPromise;
-  baseLoadPromise = fetch("/horse-base.json").then(r=>r.json()).then(d=>{ baseDataCache=d; return d; });
+  baseLoadPromise = fetch("/horse-base.json")
+    .then(r=>{ if(!r.ok) throw new Error(`Failed to load horse-base.json: ${r.status}`); return r.json(); })
+    .then(d=>{ baseDataCache=d; baseLoadPromise=null; return d; })
+    .catch(e=>{ console.error('LottieHorse: could not load base animation:', e); baseLoadPromise=null; throw e; });
   return baseLoadPromise;
 }
 
@@ -248,11 +251,12 @@ export default function LottieHorse({
   const filterId = presetIdx >= 0 ? `horse-outline-${presetIdx}` : "horse-outline-custom";
 
   if(!animData) {
-    // Loading placeholder — static emoji fallback
+    // Loading placeholder — colored circle while Lottie loads
     return (
       <div style={{width:size, height:size, display:"flex", alignItems:"center",
-                   justifyContent:"center", fontSize:size*0.5, ...style}}>
-        🐴
+                   justifyContent:"center", ...style}}>
+        <div style={{width:size*0.6, height:size*0.6, borderRadius:"50%",
+                     background:neonColor, opacity:0.4}}/>
       </div>
     );
   }
