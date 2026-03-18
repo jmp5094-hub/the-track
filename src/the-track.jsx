@@ -2924,9 +2924,25 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   useEffect(()=>{
     if(raceStarted && !firedRaceRef.current){
       firedRaceRef.current = true;
+      // Gates open commentary for auction races
+      const gKey = race.id+'-start';
+      if(gKey !== lastCommentaryKey){
+        lastCommentaryKey = gKey;
+        const names = HORSES.map((_,i)=>horseName(race,i));
+        setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 1200);
+      }
       onRaceStart();
     }
   },[raceStarted]);
+
+  // Bugle when 4 seconds to race fire
+  const bugleFiredRef2 = useRef(false);
+  useEffect(()=>{
+    if(secsToRaceFire <= 4 && secsToRaceFire > 0 && !bugleFiredRef2.current){
+      bugleFiredRef2.current = true;
+      sfx.bugle();
+    }
+  },[secsToRaceFire]);
 
   return (
     <div style={{minHeight:"100vh",background:"#08081a",paddingTop:68,paddingBottom:40}}>
