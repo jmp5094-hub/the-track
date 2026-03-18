@@ -81,19 +81,26 @@ function hslToRgb(h,s,l) {
 
 function remapColor(rn,gn,bn, bH,bS,bL, dH,dS,dL) {
   const [h,s,l] = rgbToHsl(rn*255,gn*255,bn*255);
+  // Relative lightness — how far this color is from the dominant (47.5%)
+  const lRel = l / DOM_L; // 1.0 = same as dominant body
   let nH,nS,nL;
-  if(l < 25) {
+  if(l < 20) {
+    // Very dark — shadows, hooves, eyes
     nH=(h+(dH-DOM_H)+360)%360;
     nS=Math.min(100, dS*(DOM_S>0?s/DOM_S:1));
-    nL=Math.max(3, dL*(l/DOM_L)*1.2);
-  } else if(l > 65) {
+    nL=Math.max(2, dL*lRel*1.3);
+  } else if(lRel > 1.5) {
+    // Very bright highlights — keep them light relative to body
     nH=(h+(bH-DOM_H)+360)%360;
-    nS=Math.min(100, bS*0.6);
-    nL=Math.min(95, bL+(l-DOM_L)*0.7);
+    nS=Math.min(100, bS*0.5);
+    nL=Math.min(97, bL + (l - DOM_L)*0.5);
   } else {
+    // Mid tones — main body, shading, mane
     nH=(h+(bH-DOM_H)+360)%360;
-    nS=Math.min(100, bS*(DOM_S>0?s/DOM_S:1));
-    nL=Math.max(5, Math.min(90, bL+(l-DOM_L)*0.85));
+    const sRatio = DOM_S>0 ? s/DOM_S : 1;
+    nS=Math.min(100, bS*sRatio);
+    // Scale lightness proportionally around target body lightness
+    nL=Math.max(3, Math.min(95, bL + (l - DOM_L)*0.9));
   }
   return hslToRgb(nH,nS,nL);
 }
@@ -139,6 +146,7 @@ export function getCoatName(index) {
 // Cache: baseData loaded once, recolored versions cached by coatIndex
 let baseDataCache = null;
 const coatCache = {};
+const CACHE_VERSION = 2; // bump to invalidate old cached colors
 let baseLoadPromise = null;
 
 async function loadBase() {
