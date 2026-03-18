@@ -392,9 +392,9 @@ function simulateRaceWithHistory(raceType, condition, seed) {
 }
 
 // ─── SCHEDULE GENERATION ─────────────────────────────────────────────────────
-function generateSchedule(now, seedsDoc) {
+function generateSchedule(startCursor, seedsDoc) {
   const races = [];
-  let cursor = now + 4 * 60 * 1000;
+  let cursor = startCursor;
   for(let i = 0; i < 64; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
     const raceId    = `r${i}_${now}`;
@@ -413,9 +413,9 @@ function generateSchedule(now, seedsDoc) {
   return races;
 }
 
-function generateAuctionSchedule(now, seedsDoc) {
+function generateAuctionSchedule(startCursor, seedsDoc) {
   const races = [];
-  let cursor = now + 5 * 60 * 1000;
+  let cursor = startCursor;
   for(let i = 0; i < 64; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
     const raceId    = `a${i}_${now}`;
@@ -441,29 +441,53 @@ function generateAuctionSchedule(now, seedsDoc) {
 exports.raceScheduler = onSchedule("every 1 minutes", async () => {
   const now = Date.now();
 
-  // ── 1. Load or generate schedule ──────────────────────────────────────────
-  const [schedSnap, auctionSnap] = await Promise.all([
+  // ── 1. Load schedule + seeds ──────────────────────────────────────────────
+  const [schedSnap, auctionSnap, seedsSnap] = await Promise.all([
     db.doc("global/schedule").get(),
     db.doc("global/auctionSchedule").get(),
+    db.doc("private/raceSeeds").get(),
   ]);
 
-  let schedule      = schedSnap.exists      ? schedSnap.data().races      : null;
-  let auctionSched  = auctionSnap.exists     ? auctionSnap.data().races    : null;
+  let schedule      = schedSnap.exists   ? schedSnap.data().races   : null;
+  let auctionSched  = auctionSnap.exists ? auctionSnap.data().races : null;
+  const seedsDoc    = seedsSnap.exists   ? seedsSnap.data()         : {};
 
-  // Regenerate if missing or all races are finished
-  // Regenerate when no unfinished races remain in the future
-  const hasFuture = (races) => races && races.some(r => r.status !== 'finished' && r.startTime > now - 5 * 60 * 1000);
+  // Count unfinished future races
+  const futureCount = (races) => !races ? 0 :
+    races.filter(r => r.status !== 'finished' && r.startTime > now - 5 * 60 * 1000).length;
 
-  if(!hasFuture(schedule)) {
-    schedule = generateSchedule(now);
-    await db.doc("global/schedule").set({ races: schedule, generatedAt: now });
-    console.log("Generated new schedule with", schedule.length, "races");
+  const TOPUP_THRESHOLD = 10;
+  const BATCH = 64;
+
+  // Helper: append new races after the last existing race
+  const topUpSchedule = (existing, genFn) => {
+    const lastTime = existing.reduce((m, r) => Math.max(m, r.startTime), now);
+    return [...existing, ...genFn(lastTime + 60000, seedsDoc)];
+  };
+
+  // Trim old finished races, keep last 20
+  const trimOld = (races) => {
+    const finished = races.filter(r => r.status === 'finished');
+    const rest = races.filter(r => r.status !== 'finished');
+    return [...finished.slice(-20), ...rest];
+  };
+
+  // Regenerate or top-up regular schedule
+  if(!schedule || schedule.length === 0) {
+    schedule = generateSchedule(now + 60000, seedsDoc);
+    console.log("Generated fresh schedule:", schedule.length, "races");
+  } else if(futureCount(schedule) < TOPUP_THRESHOLD) {
+    schedule = topUpSchedule(trimOld(schedule), generateSchedule);
+    console.log("Topped up schedule, now:", schedule.length, "races");
   }
 
-  if(!hasFuture(auctionSched)) {
-    auctionSched = generateAuctionSchedule(now);
-    await db.doc("global/auctionSchedule").set({ races: auctionSched, generatedAt: now });
-    console.log("Generated new auction schedule");
+  // Regenerate or top-up auction schedule
+  if(!auctionSched || auctionSched.length === 0) {
+    auctionSched = generateAuctionSchedule(now + 60000, seedsDoc);
+    console.log("Generated fresh auction schedule:", auctionSched.length, "races");
+  } else if(futureCount(auctionSched) < TOPUP_THRESHOLD) {
+    auctionSched = topUpSchedule(trimOld(auctionSched), generateAuctionSchedule);
+    console.log("Topped up auction schedule, now:", auctionSched.length, "races");
   }
 
   // ── 2. Pre-compute roll histories for races starting in the next 2 minutes ──
@@ -532,6 +556,7 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
   await Promise.all([
     db.doc("global/schedule").set({ races: finalSchedule, generatedAt: now }),
     db.doc("global/auctionSchedule").set({ races: finalAuction, generatedAt: now }),
+    db.doc("private/raceSeeds").set(seedsDoc),
   ]);
 
   return null;
@@ -540,9 +565,10 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
 // ─── HTTP TRIGGER (for testing / manual invoke) ──────────────────────────────
 exports.raceSchedulerHttp = onRequest(async (req, res) => {
   const now = Date.now();
-  const [schedSnap, auctionSnap] = await Promise.all([
+  const [schedSnap, auctionSnap, seedsSnapH] = await Promise.all([
     db.doc("global/schedule").get(),
     db.doc("global/auctionSchedule").get(),
+    db.doc("private/raceSeeds").get(),
   ]);
   let schedule     = schedSnap.exists     ? schedSnap.data().races : null;
   let auctionSched = auctionSnap.exists   ? auctionSnap.data().races : null;
