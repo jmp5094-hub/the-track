@@ -595,7 +595,6 @@ function queueCommentary(text, priority=false) {
   }
 }
 
-function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
 
 // Commentary line generators
 const COMMENTARY = {
