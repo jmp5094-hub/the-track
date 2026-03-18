@@ -574,40 +574,23 @@ async function speakLine(text) {
       commentaryPlaying = false;
       drainQueue();
     };
-    const playPromise = audio.play();
-    if(playPromise) {
-      playPromise.catch(e => {
-        // Store for later playback after user gesture
-        pendingAudio = audio;
-        commentaryPlaying = false;
-      });
-    }
+    audio.play().catch(() => {
+      // Autoplay blocked — store and retry on next user gesture
+      pendingAudio = audio;
+      commentaryPlaying = false;
+      // Hook into existing unlock system
+      const retry = () => { if(pendingAudio){ pendingAudio.play().catch(()=>{}); pendingAudio=null; } };
+      window.addEventListener("click", retry, {once:true});
+      window.addEventListener("touchstart", retry, {once:true});
+    });
   } catch(e) {
     commentaryPlaying = false;
     drainQueue();
   }
 }
 
-// Unlock audio context on first user interaction
+// Pending audio for autoplay unlock
 let pendingAudio = null;
-let audioUnlocked = false;
-function unlockAudio() {
-  if(audioUnlocked) return;
-  audioUnlocked = true;
-  if(pendingAudio) {
-    pendingAudio.play().catch(()=>{});
-    pendingAudio = null;
-  }
-  // Pre-warm audio with silent buffer
-  const ctx = new (window.AudioContext||window.webkitAudioContext)();
-  const buf = ctx.createBuffer(1,1,22050);
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.connect(ctx.destination);
-  src.start(0);
-}
-document.addEventListener("click", unlockAudio, { once:false });
-document.addEventListener("touchstart", unlockAudio, { once:false });
 
 function drainQueue() {
   if(commentaryQueue.length === 0) { commentaryPlaying=false; return; }
