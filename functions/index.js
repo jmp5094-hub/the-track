@@ -438,7 +438,7 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
 
 // ─── MAIN CRON FUNCTION ───────────────────────────────────────────────────────
 // Runs every minute — manages schedule and pre-computes race roll histories
-exports.raceScheduler = onSchedule("every 1 minutes", async () => {
+exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB" }, async () => {
   const now = Date.now();
 
   // ── 1. Load schedule + seeds ──────────────────────────────────────────────
@@ -498,9 +498,21 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
   });
 
   const rollsSnap = await db.doc("global/raceRolls").get();
-  const rollsDoc  = rollsSnap.exists ? rollsSnap.data() : {};
+  let rollsDoc  = rollsSnap.exists ? rollsSnap.data() : {};
 
-  let changed = false;
+  // Trim old roll entries to prevent doc from growing unboundedly
+  const TWO_HOURS = 2 * 60 * 60 * 1000;
+  const trimmedRolls = {};
+  for(const [raceId, data] of Object.entries(rollsDoc)) {
+    if(data.computedAt && now - data.computedAt < TWO_HOURS) {
+      trimmedRolls[raceId] = data;
+    }
+  }
+  const trimCount = Object.keys(rollsDoc).length - Object.keys(trimmedRolls).length;
+  if(trimCount > 0) console.log(`Trimmed ${trimCount} old roll entries`);
+  rollsDoc = trimmedRolls;
+
+  let changed = trimCount > 0;
   for(const race of upcoming) {
     if(rollsDoc[race.id]) continue; // already computed
     console.log("Pre-computing rolls for", race.id, race.name);
@@ -512,7 +524,7 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
 
   if(changed) {
     await db.doc("global/raceRolls").set(rollsDoc);
-    console.log("Saved roll histories for", upcoming.length, "races");
+    console.log("Saved roll histories, total entries:", Object.keys(rollsDoc).length);
   }
 
   // ── 3. Mark finished races ────────────────────────────────────────────────
@@ -563,7 +575,7 @@ exports.raceScheduler = onSchedule("every 1 minutes", async () => {
 });
 
 // ─── HTTP TRIGGER (for testing / manual invoke) ──────────────────────────────
-exports.raceSchedulerHttp = onRequest(async (req, res) => {
+exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
   const now = Date.now();
   const [schedSnap, auctionSnap, seedsSnapH] = await Promise.all([
     db.doc("global/schedule").get(),
