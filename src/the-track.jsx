@@ -168,8 +168,14 @@ function HorseName({ race, horseId, style={}, firstOnly=false }) {
   return <span style={style}>{firstOnly ? name.split(" ")[0] : name}</span>;
 }
 const horseCoat     = (race, horseId) => race?.coats?.[horseId]?.filter ?? "sepia(1) saturate(1.5) hue-rotate(330deg) brightness(0.65)";
-const horseCoatName = (race, horseId) => race?.coats?.[horseId]?.name ?? "Bay";
-const horseLottieCoat = (race, horseId) => getCoatIndex(race?.id || "default", horseId);
+const horseCoatName = (race, horseId) => race?.coats?.[horseId]?.name ?? getCoatName(horseLottieCoat(race, horseId));
+const horseLottieCoat = (race, horseId) => {
+  // Use coatIndex stored in race by cloud function if available
+  const stored = race?.coats?.[horseId]?.coatIndex;
+  if(stored !== undefined && stored !== null) return stored;
+  // Fall back to deterministic derivation for old races
+  return getCoatIndex(race?.id || "default", horseId);
+};
 
 const RACE_TYPES = {
   standard:    { label:"Standard",     icon:"🏇", color:"#00f5ff", dice:2, desc:"2 dice per roll — each die moves a horse. Doubles = bonus move!" },
