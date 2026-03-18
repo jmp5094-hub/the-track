@@ -106,15 +106,17 @@ function remapColor(rn,gn,bn, bH,bS,bL, dH,dS,dL) {
 }
 
 function applyCoat(baseData, coatIndex) {
-  const [,bodyHex,maneHex,darkHex] = COAT_DEFS[coatIndex % COAT_DEFS.length];
+  const idx = coatIndex % COAT_DEFS.length;
+  const [coatName,bodyHex,maneHex,darkHex] = COAT_DEFS[idx];
   const [bR,bG,bB] = hexToRgb(bodyHex);
-  const [mR,mG,mB] = hexToRgb(maneHex); // unused in current impl but reserved
   const [dR,dG,dB] = hexToRgb(darkHex);
   const [bH,bS,bL] = rgbToHsl(bR,bG,bB);
   const [dH,dS,dL] = rgbToHsl(dR,dG,dB);
+  console.log(`LottieHorse: applying coat ${idx} (${coatName}) body=${bodyHex} bH=${bH.toFixed(1)} bS=${bS.toFixed(1)} bL=${bL.toFixed(1)}`);
 
   // Deep clone + recolor
   const data = JSON.parse(JSON.stringify(baseData));
+  let firstColorLogged = false;
   function walk(obj) {
     if(!obj || typeof obj !== "object") return;
     if(Array.isArray(obj)) { obj.forEach(walk); return; }
@@ -124,6 +126,7 @@ function applyCoat(baseData, coatIndex) {
         if(Array.isArray(c) && c.length >= 3 && !Array.isArray(c[0])) {
           const [nr,ng,nb] = remapColor(c[0],c[1],c[2], bH,bS,bL, dH,dS,dL);
           obj.c.k = [parseFloat(nr.toFixed(4)), parseFloat(ng.toFixed(4)), parseFloat(nb.toFixed(4)), c[3]??1];
+          if(!firstColorLogged){ firstColorLogged=true; const [rOut,gOut,bOut]=[Math.round(nr*255),Math.round(ng*255),Math.round(nb*255)]; console.log(`  first color: in=(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)}) out=(${rOut},${gOut},${bOut}) #${rOut.toString(16).padStart(2,'0')}${gOut.toString(16).padStart(2,'0')}${bOut.toString(16).padStart(2,'0')}`); }
         }
       }
     }
