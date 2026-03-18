@@ -527,6 +527,141 @@ if(typeof window !== "undefined") {
 
 // ── Individual sound effects ──────────────────────────────────────────────────
 
+
+// ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
+const EL_VOICE_ID = "mR1dRpBxfiThJHgub8nr";
+const EL_API_KEY  = "sk_f22555e2d8e6adf701fc3f91f7e1f2901a1c60e8c2d57605";
+const EL_URL      = `https://api.elevenlabs.io/v1/text-to-speech/${EL_VOICE_ID}/stream`;
+
+let commentaryQueue   = [];
+let commentaryPlaying = false;
+let commentaryEnabled = true;
+let lastCommentaryKey = null; // prevent duplicate triggers
+
+async function speakLine(text) {
+  if(!commentaryEnabled) return;
+  try {
+    const res = await fetch(EL_URL, {
+      method: "POST",
+      headers: {
+        "xi-api-key": EL_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_turbo_v2",
+        voice_settings: { stability:0.45, similarity_boost:0.82, style:0.35, use_speaker_boost:true }
+      })
+    });
+    if(!res.ok) return;
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = 0.85;
+    commentaryPlaying = true;
+    audio.onended = () => {
+      commentaryPlaying = false;
+      URL.revokeObjectURL(url);
+      drainQueue();
+    };
+    audio.play().catch(()=>{ commentaryPlaying=false; drainQueue(); });
+  } catch(e) {
+    commentaryPlaying = false;
+    drainQueue();
+  }
+}
+
+function drainQueue() {
+  if(commentaryQueue.length === 0) { commentaryPlaying=false; return; }
+  const next = commentaryQueue.shift();
+  speakLine(next);
+}
+
+function queueCommentary(text, priority=false) {
+  if(!commentaryEnabled) return;
+  if(priority) {
+    // Interrupt current + clear queue
+    commentaryQueue = [text];
+    if(commentaryPlaying) {
+      commentaryPlaying = false;
+      speakLine(text);
+    } else {
+      drainQueue();
+    }
+  } else {
+    if(commentaryQueue.length < 2) commentaryQueue.push(text); // cap queue
+    if(!commentaryPlaying) drainQueue();
+  }
+}
+
+function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+
+// Commentary line generators
+const COMMENTARY = {
+  gatesOpen: (horses) => pick([
+    `AND THEY ARE OFF! ${horses[0]} and ${horses[1]} break cleanly from the gate!`,
+    `The gates fly open — six horses thunder down the track!`,
+    `They're racing! A clean break — let's see who takes the early lead!`,
+    `Off and running — the field is away!`,
+  ]),
+  earlyLeader: (name) => pick([
+    `${name} grabs the early lead — setting the pace!`,
+    `It's ${name} out front — looking strong after the first roll!`,
+    `Watch ${name} — bolting to the front right away!`,
+    `${name} establishes position — leads the field!`,
+  ]),
+  midraceClose: (a, b) => pick([
+    `${a} and ${b} running neck and neck at the halfway mark!`,
+    `What a race — ${a} leads by a nose over ${b} at mid-track!`,
+    `Too close to call — ${a}, ${b}, and the field are bunched up!`,
+    `Halfway home and it is a battle — nobody is giving an inch!`,
+  ]),
+  doubles: (name) => pick([
+    `Doubles for ${name}! Surging two spaces forward!`,
+    `${name} rolls doubles — a big move through the field!`,
+    `${name} hits doubles! Takes the lead!`,
+    `Doubles! ${name} leaps ahead of the competition!`,
+  ]),
+  hurdle: (name) => pick([
+    `${name} clears the hurdle in stride — not breaking pace!`,
+    `Over the hurdle goes ${name} — clean jump!`,
+    `${name} sails over the hurdle — stays in contention!`,
+    `The hurdle is no obstacle for ${name}!`,
+  ]),
+  finalStretch: (name) => pick([
+    `Down the stretch they come — ${name} in front with three to go!`,
+    `Final stretch — ${name} leads but the field is closing fast!`,
+    `Here they come — ${name} fighting for the win!`,
+    `Three spaces left — it is anybody's race!`,
+  ]),
+  photoFinish: (a, b) => pick([
+    `${a} and ${b} — it could be a photo finish!`,
+    `We may need the camera — ${a} and ${b} are neck and neck at the wire!`,
+    `It is going to the wire — too close to call!`,
+    `The stewards will review this one — what a finish!`,
+  ]),
+  winner: (name, odds) => pick([
+    `${name} wins it! Paying ${odds} to one — what a race!`,
+    `And the winner is ${name}! ${odds} to one — the crowd goes wild!`,
+    `${name} takes The Track trophy! Paying ${odds} to one!`,
+    `It's ${name} crossing first! ${odds} to one — what a performance!`,
+  ]),
+  upset: (name, odds) => pick([
+    `Upset alert — ${name} comes from behind to win at ${odds} to one!`,
+    `Nobody saw that coming — ${name} at ${odds} to one takes it all!`,
+    `The longshot comes in! ${name} at ${odds} to one — incredible scenes!`,
+    `${name} with the massive upset! ${odds} to one — unbelievable!`,
+  ]),
+  tiebreak: () => pick([
+    `We have a tie! The tiebreaker is underway — everything to play for!`,
+    `Dead heat — the judges call for a tiebreaker race!`,
+    `It cannot be separated — into the tiebreaker they go!`,
+  ]),
+};
+
+function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
+
 const sfx = {
   // Rapid click while dice are spinning
   diceRoll: () => playSound(ctx => {
@@ -2172,7 +2307,7 @@ function BankPanel({ user, onClose, onBalanceChange }) {
 function MuteButton({ size=28 }) {
   const [on, setOn] = useState(getSoundEnabled());
   const toggle = () => {
-    const v = !on; setOn(v); setSoundEnabled(v);
+    const v = !on; setOn(v); setSoundEnabled(v); setCommentaryEnabled(v);
 
     if(v) sfx.betConfirm();
   };
@@ -2255,7 +2390,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
     ["⬡", "Sign Out",   onLogout,         null],
   ];
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
-  const toggleSound = () => { const v=!soundOn; setSoundOn(v); setSoundEnabled(v); if(v) sfx.betConfirm(); };
+  const toggleSound = () => { const v=!soundOn; setSoundOn(v); setSoundEnabled(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); };
 
   const closeMenu = (fn) => { setMenuOpen(false); fn && fn(); };
 
@@ -4376,6 +4511,38 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
             setMovedHorses(moved);
             T(()=>setMovedHorses([]), HORSE_MOVE_DUR + 100);
 
+            // Commentary triggers
+            const cRollNum = rc + 1;
+            const cKey = race.id + '-r' + cRollNum;
+            if(cKey !== lastCommentaryKey && phase !== "tiebreak") {
+              lastCommentaryKey = cKey;
+              if(dr.isDoubles && raceType !== "magic_dice") {
+                const mover = dr.moves[0]?.horse ?? 0;
+                T(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 300);
+              } else if(cRollNum === 2 || cRollNum === 3) {
+                const leader = newPos.indexOf(Math.max(...newPos));
+                if(newPos[leader] > 0) T(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
+              } else if(cRollNum === 6 || cRollNum === 7) {
+                const sorted = [...newPos.entries()].sort((a,b)=>b[1]-a[1]);
+                if(sorted[0][1]>0 && sorted[1][1]>0 && sorted[0][1]-sorted[1][1]<=1) {
+                  T(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sorted[0][0]),horseName(race,sorted[1][0]))), 400);
+                }
+              }
+              const leader2 = newPos.indexOf(Math.max(...newPos));
+              if(newPos[leader2] >= 9 && newPos[leader2] <= 10) {
+                const fKey = race.id + '-final';
+                if(fKey !== lastCommentaryKey) { lastCommentaryKey = fKey; T(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader2))), 300); }
+              }
+              if(raceType === "hurdle") {
+                dr.moves.forEach(m => {
+                  const prevPos = ref.current.positions[m.horse] - (m.steps||0);
+                  if(newPos[m.horse] > HURDLE_CELL && prevPos <= HURDLE_CELL) {
+                    T(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+                  }
+                });
+              }
+            }
+
             // Sounds
             if(jumpers.length > 0) {
               setJumpingHorses(jumpers);
@@ -4428,12 +4595,20 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                     setPhase("tiebreak");
                     setTieHorses(potentialWinners);
                     setRollCount(0);
+                    T(()=>queueCommentary(COMMENTARY.tiebreak(), true), 300);
                     T(doRoll, 2400);
                   } else {
                     ref.current.winner  = w;
                     ref.current.running = false;
                     setWinner(w);
                     sfx.finishLine();
+                    // Winner commentary
+                    const cWinName = horseName(race,w);
+                    const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+                    const cMyBet = parseFloat(bets?.[w]||0);
+                    const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
+                    const cUpset = parseFloat(cOdds) >= 5;
+                    T(()=>queueCommentary(cUpset?COMMENTARY.upset(cWinName,cOdds):COMMENTARY.winner(cWinName,cOdds), true), 600);
                     T(()=>onWinner(w), 2600);
                   }
                 }
@@ -4660,6 +4835,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const [diceResult,     setDiceResult]     = useState(null);
   const [rolling,        setRolling]        = useState(false);
   const [rollCount,      setRollCount]      = useState(0);
+  const rollCountRef = useRef(0);
   const [winner,         setWinner]         = useState(null);
   const [tieHorses,      setTieHorses]      = useState(null);
   const [phase,          setPhase]          = useState("main");
@@ -4728,6 +4904,11 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         sfx.gunshot();
         setGateBurst(true);
         setTimeout(() => setGateBurst(false), 700);
+        if(lastCommentaryKey !== race.id+'-start') {
+          lastCommentaryKey = race.id+'-start';
+          const names = HORSES.map((_,i)=>horseName(race,i));
+          setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 400);
+        }
       }
       if(elapsed < FIRE_OFFSET && !isReplay) return;
 
@@ -4761,6 +4942,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         if(!roll) return;
         eng.animating  = true;
         eng.lastRollIdx = rollIdx;
+        rollCountRef.current = rollIdx + 1;
 
         setRolling(true); setOverlayVisible(true); setActiveHorses([]);
         setDiceResult({...roll, moves:[], isDoubles:false});
