@@ -529,9 +529,7 @@ if(typeof window !== "undefined") {
 
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
-const EL_VOICE_ID = "mR1dRpBxfiThJHgub8nr";
-const EL_API_KEY  = "sk_f22555e2d8e6adf701fc3f91f7e1f2901a1c60e8c2d57605";
-const EL_URL      = `https://api.elevenlabs.io/v1/text-to-speech/${EL_VOICE_ID}/stream`;
+const EL_URL = "/api/commentary"; // Vercel serverless proxy — keeps API key server-side
 
 let commentaryQueue   = [];
 let commentaryPlaying = false;
@@ -543,16 +541,8 @@ async function speakLine(text) {
   try {
     const res = await fetch(EL_URL, {
       method: "POST",
-      headers: {
-        "xi-api-key": EL_API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_turbo_v2",
-        voice_settings: { stability:0.45, similarity_boost:0.82, style:0.35, use_speaker_boost:true }
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
     });
     if(!res.ok) {
 
@@ -6810,9 +6800,8 @@ function App() {
             onBack={()=>setSelectedAuctionRace(null)}
             onRaceStart={()=>{
               const r=auctionSchedule.find(x=>x.id===selectedAuctionRace.id)||selectedAuctionRace;
-              // For auction races, the visual race starts at startTime+30s (after presentation)
-              const raceWithStart = {...r, startTime: r.startTime + 30000};
-              setSelectedRace(raceWithStart);
+              // RaceScreen handles the +30s auction offset via race.isAuction flag — don't add it here
+              setSelectedRace(r);
               fbGetAuctions().then(allA => setAuctionOwners((allA[r.id]||{}).owners||null));
               setWinner(null);
               setShowAuction(false);
