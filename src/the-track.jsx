@@ -3008,15 +3008,6 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   useEffect(()=>{
     if(raceStarted && !firedRaceRef.current){
       firedRaceRef.current = true;
-      // Gates open commentary for auction races — only if race just started
-      const gKey = race.id+'-start';
-      const auctionFireTime = race.startTime + 30000;
-      const auctionElapsed = Date.now() - auctionFireTime;
-      if(!firedCommentaryKeys.has(gKey) && auctionElapsed < 5000){
-        firedCommentaryKeys.add(gKey);
-        const names = HORSES.map((_,i)=>horseName(race,i));
-        setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 1200);
-      }
       onRaceStart();
     }
   },[raceStarted]);
@@ -3025,15 +3016,10 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const bugleFiredRef2 = useRef(false);
   const auctionMusicRef = useRef(false);
   useEffect(()=>{
-    // Start music when odds reveal begins
-    if((inOdds||raceStarted) && !auctionMusicRef.current){
-      auctionMusicRef.current = true;
-      startBgMusic();
-    }
-    // Bugle at 4 seconds
     if(secsToRaceFire <= 4 && secsToRaceFire > 0 && !bugleFiredRef2.current){
       bugleFiredRef2.current = true;
       sfx.bugle();
+      if(!auctionMusicRef.current){ auctionMusicRef.current=true; startBgMusic(); }
     }
   },[secsToRaceFire, inOdds, raceStarted]);
 
@@ -3668,15 +3654,11 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
   const musicStartedRef = useRef(false);
   useEffect(()=>{
     const countdown = devForceStart ? devCountdown : Math.max(0, liveSecs);
-    // Start music when locked (30s countdown)
-    if(!musicStartedRef.current && (isLocked||isRacing)) {
-      musicStartedRef.current = true;
-      startBgMusic();
-    }
     // Bugle at 4 seconds
     if(countdown <= 4 && countdown > 0 && !bugleFiredRef.current) {
       bugleFiredRef.current = true;
       sfx.bugle();
+      if(!musicStartedRef.current){ musicStartedRef.current=true; startBgMusic(); }
     }
     if(countdown === 0) bugleFiredRef.current = false;
   }, [liveSecs, devCountdown, devForceStart, isLocked, isRacing]);
