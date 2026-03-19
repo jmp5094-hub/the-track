@@ -534,7 +534,7 @@ let bgMusicLoaded = false;
 
 function initBgMusic() {
   if(bgMusic) return;
-  bgMusic = new Audio("/music-race.mp3");
+  bgMusic = new Audio("/The_Final_Furlong_2026-03-19T020327.mp3");
   bgMusic.loop = true;
   bgMusic.volume = 0;
   bgMusic.preload = "auto";
