@@ -620,63 +620,85 @@ function queueCommentary(text, priority=false) {
 // Commentary line generators
 const COMMENTARY = {
   gatesOpen: (horses) => pick([
-    `AND THEY ARE OFF! ${horses[0]} and ${horses[1]} break cleanly from the gate!`,
-    `The gates fly open — six horses thunder down the track!`,
-    `They're racing! A clean break — let's see who takes the early lead!`,
-    `Off and running — the field is away!`,
+    `AND THEY ARE OFF — ${horses[0]} and ${horses[1]} break from the gate!`,
+    `The gates fly open and six horses thunder down the track!`,
+    `They are racing! A clean break for the entire field!`,
+    `Off and running at The Track — and what a start it is!`,
+    `The starter's gun fires — and they are away!`,
   ]),
   earlyLeader: (name) => pick([
-    `${name} grabs the early lead — setting the pace!`,
-    `It's ${name} out front — looking strong after the first roll!`,
-    `Watch ${name} — bolting to the front right away!`,
-    `${name} establishes position — leads the field!`,
+    `${name} grabs the early lead and is setting the pace!`,
+    `It is ${name} out front after those opening exchanges!`,
+    `${name} has broken well and already commands the field!`,
+    `Watch out for ${name} — already clear of the field!`,
+    `Early doors and ${name} means business — right to the front!`,
+  ]),
+  bigLead: (name) => pick([
+    `${name} is pulling away — opening up a significant lead!`,
+    `Look at ${name} go — leaving the field behind!`,
+    `This could be over early — ${name} is flying out in front!`,
+    `${name} is in a different race right now — absolutely dominant!`,
+    `Three lengths clear — ${name} is in control of this race!`,
   ]),
   midraceClose: (a, b) => pick([
-    `${a} and ${b} running neck and neck at the halfway mark!`,
-    `What a race — ${a} leads by a nose over ${b} at mid-track!`,
-    `Too close to call — ${a}, ${b}, and the field are bunched up!`,
-    `Halfway home and it is a battle — nobody is giving an inch!`,
+    `${a} and ${b} are inseparable at the halfway mark — this is a real race!`,
+    `Neck and neck — ${a} leads by a whisker over ${b}!`,
+    `Too close to call at the midpoint — ${a} and ${b} refusing to yield!`,
+    `What a battle — ${a}, ${b}, and the field are bunched together!`,
+    `Halfway home and the lead keeps changing — this one is far from over!`,
   ]),
   doubles: (name) => pick([
-    `Doubles for ${name}! Surging two spaces forward!`,
-    `${name} rolls doubles — a big move through the field!`,
-    `${name} hits doubles! Takes the lead!`,
-    `Doubles! ${name} leaps ahead of the competition!`,
+    `Doubles! ${name} rolls a pair and surges forward — what a roll!`,
+    `${name} hits the double — a huge moment in this race!`,
+    `Doubles for ${name}! That is two spaces in one throw — gaining ground fast!`,
+    `${name} with the doubles — a big move right through the field!`,
+    `The dice show doubles — and ${name} takes full advantage!`,
   ]),
   hurdle: (name) => pick([
-    `${name} clears the hurdle in stride — not breaking pace!`,
-    `Over the hurdle goes ${name} — clean jump!`,
-    `${name} sails over the hurdle — stays in contention!`,
-    `The hurdle is no obstacle for ${name}!`,
+    `${name} clears the hurdle without breaking stride — beautiful!`,
+    `Over the obstacle goes ${name} — clean as a whistle!`,
+    `${name} sails over the hurdle and stays right in contention!`,
+    `The hurdle is no problem for ${name} — not missing a beat!`,
+    `${name} takes the hurdle in stride — class showing there!`,
   ]),
   finalStretch: (name) => pick([
-    `Down the stretch they come — ${name} in front with three to go!`,
-    `Final stretch — ${name} leads but the field is closing fast!`,
-    `Here they come — ${name} fighting for the win!`,
-    `Three spaces left — it is anybody's race!`,
+    `Down the stretch they come — ${name} in front with the line approaching!`,
+    `Into the final stages — ${name} leads but nothing is settled yet!`,
+    `Here they come for home — ${name} out front but the field is closing!`,
+    `This is where it counts — ${name} digging deep in the final stretch!`,
+    `The finish line is in sight — ${name} is fighting for glory!`,
+  ]),
+  turnaround: (name) => pick([
+    `${name} makes the turn — heading for home now!`,
+    `${name} rounds the bend and starts the journey back — still in this!`,
+    `The turnaround — ${name} is first to start the return leg!`,
+    `${name} hits the top of the track and wheels for home — great position!`,
   ]),
   photoFinish: (a, b) => pick([
-    `${a} and ${b} — it could be a photo finish!`,
-    `We may need the camera — ${a} and ${b} are neck and neck at the wire!`,
-    `It is going to the wire — too close to call!`,
-    `The stewards will review this one — what a finish!`,
+    `${a} and ${b} — we are going to need a photo finish!`,
+    `Too close to call at the wire — ${a} and ${b} in a dead heat!`,
+    `The stewards will be reviewing this one — ${a} and ${b} together!`,
+    `I cannot separate them — ${a} and ${b} hit the line as one!`,
   ]),
   winner: (name, odds) => pick([
-    `${name} wins it! Paying ${odds} to one — what a race!`,
-    `And the winner is ${name}! ${odds} to one — the crowd goes wild!`,
-    `${name} takes The Track trophy! Paying ${odds} to one!`,
-    `It's ${name} crossing first! ${odds} to one — what a performance!`,
+    `${name} wins it! Paying ${odds} to one — a fantastic performance!`,
+    `And the winner is ${name}! ${odds} to one — what a race that was!`,
+    `${name} takes The Track! Paying ${odds} to one — congratulations!`,
+    `${name} crosses first at ${odds} to one — the bettors who backed that horse are celebrating!`,
+    `It is all over — ${name} wins! ${odds} to one pays out — superb!`,
   ]),
   upset: (name, odds) => pick([
-    `Upset alert — ${name} comes from behind to win at ${odds} to one!`,
-    `Nobody saw that coming — ${name} at ${odds} to one takes it all!`,
-    `The longshot comes in! ${name} at ${odds} to one — incredible scenes!`,
-    `${name} with the massive upset! ${odds} to one — unbelievable!`,
+    `Unbelievable — ${name} at ${odds} to one wins this race! What an upset!`,
+    `The longshot lands! ${name} at ${odds} to one — nobody saw that coming!`,
+    `${name} with a massive upset at ${odds} to one — extraordinary scenes!`,
+    `The form book is torn up — ${name} at ${odds} to one takes it all!`,
+    `A shock result — ${name} at ${odds} to one! The crowd cannot believe it!`,
   ]),
   tiebreak: () => pick([
-    `We have a tie! The tiebreaker is underway — everything to play for!`,
-    `Dead heat — the judges call for a tiebreaker race!`,
-    `It cannot be separated — into the tiebreaker they go!`,
+    `We have a dead heat — the tiebreaker is on! Everything to play for!`,
+    `The judges call for a tiebreaker — neither horse will give way!`,
+    `A tie at the line — back they go for the tiebreaker race!`,
+    `We cannot be separated — into extra time we go!`,
   ]),
 };
 
@@ -4549,37 +4571,94 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
             setMovedHorses(moved);
             T(()=>setMovedHorses([]), HORSE_MOVE_DUR + 100);
 
-            // Commentary triggers
-            const cRollNum = rc + 1;
-            const cKey = race.id + '-r' + cRollNum;
-            if(cKey !== lastCommentaryKey && phase !== "tiebreak") {
-              lastCommentaryKey = cKey;
-              if(dr.isDoubles && raceType !== "magic_dice") {
-                const mover = dr.moves[0]?.horse ?? 0;
-                T(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 300);
-              } else if(cRollNum === 2 || cRollNum === 3) {
-                const leader = newPos.indexOf(Math.max(...newPos));
-                if(newPos[leader] > 0) T(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
-              } else if(cRollNum === 6 || cRollNum === 7) {
-                const sorted = [...newPos.entries()].sort((a,b)=>b[1]-a[1]);
-                if(sorted[0][1]>0 && sorted[1][1]>0 && sorted[0][1]-sorted[1][1]<=1) {
-                  T(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sorted[0][0]),horseName(race,sorted[1][0]))), 400);
+            // ── COMMENTARY TRIGGERS ──────────────────────────────────────────
+            // Each trigger uses its own unique key so they don't block each other
+            if(phase !== "tiebreak") {
+              const cRollNum = rc + 1;
+              const isDownBack = raceType==="down_back";
+              const isMagicDice = raceType==="magic_dice";
+              const isWeather = race.condition==="rain"||race.condition==="fog";
+
+              // DOUBLES — fire on actual dice doubles, not magic dice, not weather slide
+              // Check dr.isDoubles AND that it wasn't a fog slide (fog moves backwards)
+              const hasForwardMove = dr.moves.some(m=>(m.steps||0)>0);
+              if(dr.isDoubles && !isMagicDice && hasForwardMove) {
+                const dKey = race.id+'-dbl-'+cRollNum;
+                if(dKey !== lastCommentaryKey) {
+                  lastCommentaryKey = dKey;
+                  const mover = dr.moves.find(m=>(m.steps||0)>0)?.horse ?? dr.moves[0]?.horse ?? 0;
+                  T(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 350);
                 }
               }
-              const leader2 = newPos.indexOf(Math.max(...newPos));
-              if(newPos[leader2] >= 9 && newPos[leader2] <= 10) {
-                const fKey = race.id + '-final';
-                // Only call final stretch if we haven't already called mid-race (i.e. we were here from start)
-                if(fKey !== lastCommentaryKey && lastCommentaryKey !== null) {
+              // EARLY LEADER — rolls 2-4
+              else if(cRollNum>=2 && cRollNum<=4) {
+                const eKey = race.id+'-early';
+                if(eKey !== lastCommentaryKey) {
+                  lastCommentaryKey = eKey;
+                  const leader = newPos.indexOf(Math.max(...newPos));
+                  const gap = Math.max(...newPos) - newPos.sort((a,b)=>b-a)[1];
+                  if(newPos[leader]>0 && gap>=2) {
+                    T(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
+                  }
+                }
+              }
+              // BIG LEAD — any time a horse is 3+ ahead of second place
+              const sortedPos = [...newPos].sort((a,b)=>b-a);
+              const bigLead = sortedPos[0]-sortedPos[1] >= 3;
+              if(bigLead && cRollNum>4) {
+                const blKey = race.id+'-lead-'+Math.floor(cRollNum/3);
+                if(blKey !== lastCommentaryKey) {
+                  lastCommentaryKey = blKey;
+                  const leader = newPos.indexOf(Math.max(...newPos));
+                  T(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader))), 400);
+                }
+              }
+              // MIDRACE CLOSE — around halfway mark
+              const halfway = isDownBack ? TRACK_SPACES : Math.floor(TRACK_SPACES/2);
+              const leaderPos = Math.max(...newPos);
+              if(leaderPos >= halfway-1 && leaderPos <= halfway+1 && cRollNum>3) {
+                const mKey = race.id+'-mid';
+                if(mKey !== lastCommentaryKey) {
+                  lastCommentaryKey = mKey;
+                  const sortedE = [...newPos.entries()].sort((a,b)=>b[1]-a[1]);
+                  if(sortedE[0][1]-sortedE[1][1] <= 2) {
+                    T(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
+                  }
+                }
+              }
+              // FINAL STRETCH — leader hits space 9-10 (or space 3-4 on return leg for down_back)
+              const stretchZone = isDownBack
+                ? (newLeg[newPos.indexOf(Math.max(...newPos))] && Math.max(...newPos) <= 3)
+                : (leaderPos >= 9 && leaderPos <= 10);
+              if(stretchZone) {
+                const fKey = race.id+'-final';
+                if(fKey !== lastCommentaryKey) {
                   lastCommentaryKey = fKey;
-                  T(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader2))), 300);
+                  const leader3 = newPos.indexOf(Math.max(...newPos));
+                  T(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader3))), 300);
                 }
               }
-              if(raceType === "hurdle") {
-                dr.moves.forEach(m => {
-                  const prevPos = ref.current.positions[m.horse] - (m.steps||0);
-                  if(newPos[m.horse] > HURDLE_CELL && prevPos <= HURDLE_CELL) {
-                    T(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+              // HURDLE CLEARED
+              if(raceType==="hurdle") {
+                dr.moves.forEach(m=>{
+                  const prevP = (newPos[m.horse]||0) - (m.steps||0);
+                  if(newPos[m.horse]>HURDLE_CELL && prevP<=HURDLE_CELL) {
+                    const hKey = race.id+'-hurdle-'+m.horse;
+                    if(hKey!==lastCommentaryKey){
+                      lastCommentaryKey=hKey;
+                      T(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+                    }
+                  }
+                });
+              }
+              // TURNAROUND — down_back reaches finish line for first time
+              if(isDownBack) {
+                const newTurners2 = newLeg.map((l,i)=>l&&!ref.current.legDone[i]?i:-1).filter(i=>i>=0);
+                newTurners2.forEach(hi=>{
+                  const tKey = race.id+'-turn-'+hi;
+                  if(tKey!==lastCommentaryKey){
+                    lastCommentaryKey=tKey;
+                    T(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi))), 300);
                   }
                 });
               }
