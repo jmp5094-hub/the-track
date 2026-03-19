@@ -528,6 +528,57 @@ if(typeof window !== "undefined") {
 // ── Individual sound effects ──────────────────────────────────────────────────
 
 
+// ─── BACKGROUND MUSIC ────────────────────────────────────────────────────────
+let bgMusic = null;
+let bgMusicLoaded = false;
+
+function initBgMusic() {
+  if(bgMusic) return;
+  bgMusic = new Audio("/music-race.mp3");
+  bgMusic.loop = true;
+  bgMusic.volume = 0;
+  bgMusic.preload = "auto";
+  bgMusicLoaded = true;
+}
+
+function startBgMusic() {
+  if(!commentaryEnabled) return;
+  initBgMusic();
+  if(bgMusic.paused) {
+    bgMusic.currentTime = bgMusic.currentTime || 0;
+    bgMusic.play().catch(()=>{
+      // Autoplay blocked — retry on next interaction
+      const retry = () => { bgMusic.play().catch(()=>{}); };
+      window.addEventListener("click", retry, {once:true});
+      window.addEventListener("touchstart", retry, {once:true});
+    });
+  }
+  // Fade in to target volume
+  fadeBgMusic(0.18, 1500);
+}
+
+function stopBgMusic(fadeMs=2000) {
+  if(!bgMusic || bgMusic.paused) return;
+  fadeBgMusic(0, fadeMs, ()=>{ bgMusic.pause(); bgMusic.currentTime=0; });
+}
+
+function fadeBgMusic(targetVol, durationMs, onDone) {
+  if(!bgMusic) return;
+  const startVol = bgMusic.volume;
+  const diff = targetVol - startVol;
+  const steps = 30;
+  const stepMs = durationMs / steps;
+  let step = 0;
+  const iv = setInterval(()=>{
+    step++;
+    bgMusic.volume = Math.max(0, Math.min(1, startVol + diff * (step/steps)));
+    if(step >= steps) {
+      clearInterval(iv);
+      if(onDone) onDone();
+    }
+  }, stepMs);
+}
+
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
 // Reset commentary state when race changes
 let _lastRaceId = null;
@@ -536,7 +587,7 @@ const EL_URL = "/api/commentary"; // Vercel serverless proxy — keeps API key s
 let commentaryQueue   = [];
 let commentaryPlaying = false;
 let commentaryEnabled = true;
-let lastCommentaryKey = null; // prevent duplicate triggers
+const firedCommentaryKeys = new Set(); // track all fired keys
 
 async function speakLine(text) {
   if(!commentaryEnabled) return;
@@ -593,7 +644,7 @@ function drainQueue() {
 function resetCommentaryForRace(raceId) {
   if(_lastRaceId !== raceId) {
     _lastRaceId = raceId;
-    lastCommentaryKey = null;
+    firedCommentaryKeys.clear();
     commentaryQueue = [];
     commentaryPlaying = false;
   }
@@ -702,7 +753,7 @@ const COMMENTARY = {
   ]),
 };
 
-function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
+function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; stopBgMusic(500); } }
 
 const sfx = {
   // Rapid click while dice are spinning
@@ -2961,8 +3012,8 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
       const gKey = race.id+'-start';
       const auctionFireTime = race.startTime + 30000;
       const auctionElapsed = Date.now() - auctionFireTime;
-      if(gKey !== lastCommentaryKey && auctionElapsed < 5000){
-        lastCommentaryKey = gKey;
+      if(!firedCommentaryKeys.has(gKey) && auctionElapsed < 5000){
+        firedCommentaryKeys.add(gKey);
         const names = HORSES.map((_,i)=>horseName(race,i));
         setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 1200);
       }
@@ -2970,14 +3021,21 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
     }
   },[raceStarted]);
 
-  // Bugle when 4 seconds to race fire
+  // Bugle + music for auction races
   const bugleFiredRef2 = useRef(false);
+  const auctionMusicRef = useRef(false);
   useEffect(()=>{
+    // Start music when odds reveal begins
+    if((inOdds||raceStarted) && !auctionMusicRef.current){
+      auctionMusicRef.current = true;
+      startBgMusic();
+    }
+    // Bugle at 4 seconds
     if(secsToRaceFire <= 4 && secsToRaceFire > 0 && !bugleFiredRef2.current){
       bugleFiredRef2.current = true;
       sfx.bugle();
     }
-  },[secsToRaceFire]);
+  },[secsToRaceFire, inOdds, raceStarted]);
 
   return (
     <div style={{minHeight:"100vh",background:"#08081a",paddingTop:68,paddingBottom:40}}>
@@ -3606,15 +3664,22 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     }
   },[revealCount_cur]);
 
-  // Fire bugle exactly once when countdown hits 4 or below
+  // Fire bugle + start music when countdown begins
+  const musicStartedRef = useRef(false);
   useEffect(()=>{
     const countdown = devForceStart ? devCountdown : Math.max(0, liveSecs);
+    // Start music when locked (30s countdown)
+    if(!musicStartedRef.current && (isLocked||isRacing)) {
+      musicStartedRef.current = true;
+      startBgMusic();
+    }
+    // Bugle at 4 seconds
     if(countdown <= 4 && countdown > 0 && !bugleFiredRef.current) {
       bugleFiredRef.current = true;
       sfx.bugle();
     }
     if(countdown === 0) bugleFiredRef.current = false;
-  }, [liveSecs, devCountdown, devForceStart]);
+  }, [liveSecs, devCountdown, devForceStart, isLocked, isRacing]);
   if(enteredEarlyRef.current === null) {
     enteredEarlyRef.current = devForceStart ? true : liveSecs > BET_CLOSE_SECS * 0.75;
   }
@@ -4584,8 +4649,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
               const hasForwardMove = dr.moves.some(m=>(m.steps||0)>0);
               if(dr.isDoubles && !isMagicDice && hasForwardMove) {
                 const dKey = race.id+'-dbl-'+cRollNum;
-                if(dKey !== lastCommentaryKey) {
-                  lastCommentaryKey = dKey;
+                if(!firedCommentaryKeys.has(dKey)) {
+                  firedCommentaryKeys.add(dKey);
                   const mover = dr.moves.find(m=>(m.steps||0)>0)?.horse ?? dr.moves[0]?.horse ?? 0;
                   T(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 350);
                 }
@@ -4593,8 +4658,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
               // EARLY LEADER — rolls 2-4
               else if(cRollNum>=2 && cRollNum<=4) {
                 const eKey = race.id+'-early';
-                if(eKey !== lastCommentaryKey) {
-                  lastCommentaryKey = eKey;
+                if(!firedCommentaryKeys.has(eKey)) {
+                  firedCommentaryKeys.add(eKey);
                   const leader = newPos.indexOf(Math.max(...newPos));
                   const gap = Math.max(...newPos) - newPos.sort((a,b)=>b-a)[1];
                   if(newPos[leader]>0 && gap>=2) {
@@ -4607,8 +4672,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
               const bigLead = sortedPos[0]-sortedPos[1] >= 3;
               if(bigLead && cRollNum>4) {
                 const blKey = race.id+'-lead-'+Math.floor(cRollNum/3);
-                if(blKey !== lastCommentaryKey) {
-                  lastCommentaryKey = blKey;
+                if(!firedCommentaryKeys.has(blKey)) {
+                  firedCommentaryKeys.add(blKey);
                   const leader = newPos.indexOf(Math.max(...newPos));
                   T(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader))), 400);
                 }
@@ -4618,8 +4683,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
               const leaderPos = Math.max(...newPos);
               if(leaderPos >= halfway-1 && leaderPos <= halfway+1 && cRollNum>3) {
                 const mKey = race.id+'-mid';
-                if(mKey !== lastCommentaryKey) {
-                  lastCommentaryKey = mKey;
+                if(!firedCommentaryKeys.has(mKey)) {
+                  firedCommentaryKeys.add(mKey);
                   const sortedE = [...newPos.entries()].sort((a,b)=>b[1]-a[1]);
                   if(sortedE[0][1]-sortedE[1][1] <= 2) {
                     T(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
@@ -4632,8 +4697,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                 : (leaderPos >= 9 && leaderPos <= 10);
               if(stretchZone) {
                 const fKey = race.id+'-final';
-                if(fKey !== lastCommentaryKey) {
-                  lastCommentaryKey = fKey;
+                if(!firedCommentaryKeys.has(fKey)) {
+                  firedCommentaryKeys.add(fKey);
                   const leader3 = newPos.indexOf(Math.max(...newPos));
                   T(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader3))), 300);
                 }
@@ -4644,8 +4709,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                   const prevP = (newPos[m.horse]||0) - (m.steps||0);
                   if(newPos[m.horse]>HURDLE_CELL && prevP<=HURDLE_CELL) {
                     const hKey = race.id+'-hurdle-'+m.horse;
-                    if(hKey!==lastCommentaryKey){
-                      lastCommentaryKey=hKey;
+                    if(!firedCommentaryKeys.has(hKey)){
+                      firedCommentaryKeys.add(hKey);
                       T(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
                     }
                   }
@@ -4656,8 +4721,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                 const newTurners2 = newLeg.map((l,i)=>l&&!ref.current.legDone[i]?i:-1).filter(i=>i>=0);
                 newTurners2.forEach(hi=>{
                   const tKey = race.id+'-turn-'+hi;
-                  if(tKey!==lastCommentaryKey){
-                    lastCommentaryKey=tKey;
+                  if(!firedCommentaryKeys.has(tKey)){
+                    firedCommentaryKeys.add(tKey);
                     T(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi))), 300);
                   }
                 });
@@ -5026,8 +5091,8 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         setGateBurst(true);
         setTimeout(() => setGateBurst(false), 700);
         resetCommentaryForRace(race.id);
-        if(lastCommentaryKey !== race.id+'-start') {
-          lastCommentaryKey = race.id+'-start';
+        if(!firedCommentaryKeys.has(race.id+'-start')) {
+          firedCommentaryKeys.add(race.id+'-start');
           // Only announce gates if we just arrived — not mid-race
           if(elapsed < 4000) {
             const names = HORSES.map((_,i)=>horseName(race,i));
@@ -6666,7 +6731,7 @@ function App() {
         }
       }
       setWinner(bgResult.winner);
-      setScreen("payout");
+      setScreen("payout"); stopBgMusic(3000);
       return;
     }
 
@@ -6764,7 +6829,7 @@ function App() {
         setBets(memberResults[user?.username]?.bets || bets);
         setTotalPot(totalPool);
       }
-      setScreen("private-payout");
+      stopBgMusic(3000); setScreen("private-payout");
       return;
     }
 
@@ -6818,7 +6883,7 @@ function App() {
     await fbClearRacePot(selectedRace?.id);
     setBets(activeBets); setTotalPot(activePot);
     setSchedule(s=>s.map(r=>r.id===selectedRace?.id?{...r,status:"finished"}:r));
-    setScreen("payout");
+    setScreen("payout"); stopBgMusic(3000);
   },[bets,totalPot,odds,user,selectedRace,activePrivateRace,updateBalance,]);
 
   // Launch a private race — build a synthetic race object and go straight to RaceScreen
@@ -6847,6 +6912,7 @@ function App() {
   };
 
   const goLobby=()=>{
+    stopBgMusic(1500);
     setScreen("lobby");
     setWinner(null);
     setSelectedRace(null);
