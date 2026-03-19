@@ -529,6 +529,8 @@ if(typeof window !== "undefined") {
 
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
+// Reset commentary state when race changes
+let _lastRaceId = null;
 const EL_URL = "/api/commentary"; // Vercel serverless proxy — keeps API key server-side
 
 let commentaryQueue   = [];
@@ -586,6 +588,15 @@ function drainQueue() {
   if(commentaryQueue.length === 0) { commentaryPlaying=false; return; }
   const next = commentaryQueue.shift();
   speakLine(next);
+}
+
+function resetCommentaryForRace(raceId) {
+  if(_lastRaceId !== raceId) {
+    _lastRaceId = raceId;
+    lastCommentaryKey = null;
+    commentaryQueue = [];
+    commentaryPlaying = false;
+  }
 }
 
 function queueCommentary(text, priority=false) {
@@ -2924,9 +2935,11 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   useEffect(()=>{
     if(raceStarted && !firedRaceRef.current){
       firedRaceRef.current = true;
-      // Gates open commentary for auction races
+      // Gates open commentary for auction races — only if race just started
       const gKey = race.id+'-start';
-      if(gKey !== lastCommentaryKey){
+      const auctionFireTime = race.startTime + 30000;
+      const auctionElapsed = Date.now() - auctionFireTime;
+      if(gKey !== lastCommentaryKey && auctionElapsed < 5000){
         lastCommentaryKey = gKey;
         const names = HORSES.map((_,i)=>horseName(race,i));
         setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 1200);
@@ -4556,7 +4569,11 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
               const leader2 = newPos.indexOf(Math.max(...newPos));
               if(newPos[leader2] >= 9 && newPos[leader2] <= 10) {
                 const fKey = race.id + '-final';
-                if(fKey !== lastCommentaryKey) { lastCommentaryKey = fKey; T(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader2))), 300); }
+                // Only call final stretch if we haven't already called mid-race (i.e. we were here from start)
+                if(fKey !== lastCommentaryKey && lastCommentaryKey !== null) {
+                  lastCommentaryKey = fKey;
+                  T(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader2))), 300);
+                }
               }
               if(raceType === "hurdle") {
                 dr.moves.forEach(m => {
@@ -4929,10 +4946,14 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         sfx.gunshot();
         setGateBurst(true);
         setTimeout(() => setGateBurst(false), 700);
+        resetCommentaryForRace(race.id);
         if(lastCommentaryKey !== race.id+'-start') {
           lastCommentaryKey = race.id+'-start';
-          const names = HORSES.map((_,i)=>horseName(race,i));
-          setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 400);
+          // Only announce gates if we just arrived — not mid-race
+          if(elapsed < 4000) {
+            const names = HORSES.map((_,i)=>horseName(race,i));
+            setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 400);
+          }
         }
       }
       if(elapsed < FIRE_OFFSET && !isReplay) return;
