@@ -3654,11 +3654,15 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
   const musicStartedRef = useRef(false);
   useEffect(()=>{
     const countdown = devForceStart ? devCountdown : Math.max(0, liveSecs);
+    // Start music as soon as locked (30s countdown begins)
+    if((isLocked||isRacing) && !musicStartedRef.current){
+      musicStartedRef.current = true;
+      startBgMusic();
+    }
     // Bugle at 4 seconds
     if(countdown <= 4 && countdown > 0 && !bugleFiredRef.current) {
       bugleFiredRef.current = true;
       sfx.bugle();
-      if(!musicStartedRef.current){ musicStartedRef.current=true; startBgMusic(); }
     }
     if(countdown === 0) bugleFiredRef.current = false;
   }, [liveSecs, devCountdown, devForceStart, isLocked, isRacing]);
@@ -4643,8 +4647,8 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                 if(!firedCommentaryKeys.has(eKey)) {
                   firedCommentaryKeys.add(eKey);
                   const leader = newPos.indexOf(Math.max(...newPos));
-                  const gap = Math.max(...newPos) - newPos.sort((a,b)=>b-a)[1];
-                  if(newPos[leader]>0 && gap>=2) {
+                  const gap = Math.max(...newPos) - [...newPos].sort((a,b)=>b-a)[1];
+                  if(newPos[leader]>0 && gap>=1) {
                     T(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
                   }
                 }
@@ -6762,6 +6766,7 @@ function App() {
 
   const handleBetsConfirm=async(finalBets, pot, prevPot=0)=>{
     const delta = pot - prevPot;
+    initBgMusic(); // pre-load music on bet confirm so it's ready when needed
     updateBalance(user.balance - delta);
     // Save user's private bet record
     const c = await fbGetConfirmed(user.uid);
