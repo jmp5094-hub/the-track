@@ -651,6 +651,7 @@ function resetCommentaryForRace(raceId) {
 }
 
 function queueCommentary(text, priority=false) {
+  console.log("[C] queue:", text.slice(0,50), "enabled:", commentaryEnabled);
   if(!commentaryEnabled) return;
   if(priority) {
     // Interrupt current + clear queue
@@ -5169,6 +5170,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                   const newLeg = roll.legDone;
                   const isDownBack = race.type==="down_back";
                   const isMagicDice = race.type==="magic_dice";
+                  console.log("[C] roll",cRollNum,"doubles:",roll.isDoubles,"leader:",Math.max(...newPos),"keys:",firedCommentaryKeys.size);
 
                   // DOUBLES
                   const hasForward = roll.moves.some(m=>(m.steps||0)>0);
