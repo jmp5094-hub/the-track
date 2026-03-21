@@ -5162,6 +5162,103 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                 setPhase(roll.phase||"main"); setRollCount(rollIdx+1);
                 if(roll.phase==="tiebreak"&&roll.tieHorses) setTieHorses(roll.tieHorses);
 
+                // ── COMMENTARY ────────────────────────────────────────────────
+                if(roll.phase !== "tiebreak") {
+                  const cRollNum = rollIdx + 1;
+                  const newPos = roll.positions;
+                  const newLeg = roll.legDone;
+                  const isDownBack = race.type==="down_back";
+                  const isMagicDice = race.type==="magic_dice";
+
+                  // DOUBLES
+                  const hasForward = roll.moves.some(m=>(m.steps||0)>0);
+                  if(roll.isDoubles && !isMagicDice && hasForward) {
+                    const dKey = race.id+'-dbl-'+cRollNum;
+                    if(!firedCommentaryKeys.has(dKey)){
+                      firedCommentaryKeys.add(dKey);
+                      const mover = roll.moves.find(m=>(m.steps||0)>0)?.horse ?? 0;
+                      setTimeout(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 350);
+                    }
+                  }
+                  // EARLY LEADER (rolls 2-4)
+                  else if(cRollNum>=2 && cRollNum<=4) {
+                    const eKey = race.id+'-early';
+                    if(!firedCommentaryKeys.has(eKey)){
+                      firedCommentaryKeys.add(eKey);
+                      const leader = newPos.indexOf(Math.max(...newPos));
+                      const sorted2 = [...newPos].sort((a,b)=>b-a);
+                      if(newPos[leader]>0 && sorted2[0]-sorted2[1]>=1){
+                        setTimeout(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
+                      }
+                    }
+                  }
+
+                  // BIG LEAD (3+ spaces ahead)
+                  const sPos = [...newPos].sort((a,b)=>b-a);
+                  if(sPos[0]-sPos[1]>=3 && cRollNum>4) {
+                    const blKey = race.id+'-lead-'+Math.floor(cRollNum/3);
+                    if(!firedCommentaryKeys.has(blKey)){
+                      firedCommentaryKeys.add(blKey);
+                      const leader = newPos.indexOf(Math.max(...newPos));
+                      setTimeout(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader))), 400);
+                    }
+                  }
+
+                  // MIDRACE (leader near halfway)
+                  const halfway = isDownBack ? TRACK_SPACES : Math.floor(TRACK_SPACES/2);
+                  const leaderPos = Math.max(...newPos);
+                  if(leaderPos>=halfway-1 && leaderPos<=halfway+1 && cRollNum>3){
+                    const mKey = race.id+'-mid';
+                    if(!firedCommentaryKeys.has(mKey)){
+                      firedCommentaryKeys.add(mKey);
+                      const sortedE = [...newPos.entries()].sort((a,b)=>b[1]-a[1]);
+                      if(sortedE[0][1]-sortedE[1][1]<=2){
+                        setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
+                      }
+                    }
+                  }
+
+                  // FINAL STRETCH
+                  const stretchZone = isDownBack
+                    ? (newLeg[newPos.indexOf(leaderPos)] && leaderPos<=3)
+                    : (leaderPos>=9 && leaderPos<=10);
+                  if(stretchZone){
+                    const fKey = race.id+'-final';
+                    if(!firedCommentaryKeys.has(fKey)){
+                      firedCommentaryKeys.add(fKey);
+                      const leader = newPos.indexOf(leaderPos);
+                      setTimeout(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader))), 300);
+                    }
+                  }
+
+                  // HURDLE
+                  if(race.type==="hurdle"){
+                    roll.moves.forEach(m=>{
+                      const prevP = newPos[m.horse] - (m.steps||0);
+                      if(newPos[m.horse]>HURDLE_CELL && prevP<=HURDLE_CELL){
+                        const hKey = race.id+'-hurdle-'+m.horse;
+                        if(!firedCommentaryKeys.has(hKey)){
+                          firedCommentaryKeys.add(hKey);
+                          setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+                        }
+                      }
+                    });
+                  }
+
+                  // TURNAROUND (down_back)
+                  if(isDownBack){
+                    newLeg.forEach((l,hi)=>{
+                      if(l && !roll.legDone[hi]){
+                        const tKey = race.id+'-turn-'+hi;
+                        if(!firedCommentaryKeys.has(tKey)){
+                          firedCommentaryKeys.add(tKey);
+                          setTimeout(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi))), 300);
+                        }
+                      }
+                    });
+                  }
+                }
+
                 const jumpers=roll.moves.filter(m=>m.steps>0&&m.jump).map(m=>m.horse);
                 if(jumpers.length>0){setJumpingHorses(jumpers);sfx.hurdleJump();setTimeout(()=>setJumpingHorses([]),900);}
                 else{const ts=roll.moves.reduce((s,m)=>s+(m.steps>0?m.steps:0),0);if(ts>0)sfx.horseMove(Math.min(ts,3));}
@@ -5182,6 +5279,15 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     eng.winnerFired=true;
                     const w=eng.winner??0;
                     setWinner(w); sfx.finishLine(); sfx.win();
+                    // Winner commentary
+                    const cWinName = horseName(race,w);
+                    const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+                    const cMyBet = parseFloat((bets||{})[w]||0);
+                    const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
+                    setTimeout(()=>queueCommentary(
+                      parseFloat(cOdds)>=5 ? COMMENTARY.upset(cWinName,cOdds) : COMMENTARY.winner(cWinName,cOdds),
+                      true
+                    ), 600);
                     setTimeout(()=>onRaceEnd(w), 2000);
                   }
                   eng.animating=false;
