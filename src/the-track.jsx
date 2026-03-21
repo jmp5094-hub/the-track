@@ -554,7 +554,7 @@ function startBgMusic() {
     });
   }
   // Fade in to target volume
-  fadeBgMusic(0.18, 1500);
+  fadeBgMusic(0.09, 1500);
 }
 
 function stopBgMusic(fadeMs=2000) {
@@ -3016,10 +3016,15 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const bugleFiredRef2 = useRef(false);
   const auctionMusicRef = useRef(false);
   useEffect(()=>{
+    // Start music at 30s countdown
+    if(secsToRaceFire <= 30 && secsToRaceFire > 0 && !auctionMusicRef.current){
+      auctionMusicRef.current = true;
+      startBgMusic();
+    }
+    // Bugle at 4 seconds
     if(secsToRaceFire <= 4 && secsToRaceFire > 0 && !bugleFiredRef2.current){
       bugleFiredRef2.current = true;
       sfx.bugle();
-      if(!auctionMusicRef.current){ auctionMusicRef.current=true; startBgMusic(); }
     }
   },[secsToRaceFire, inOdds, raceStarted]);
 
