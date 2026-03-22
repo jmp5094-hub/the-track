@@ -760,6 +760,13 @@ const COMMENTARY = {
     `The hurdle is no problem for ${name} — not missing a beat!`,
     `${name} takes the hurdle in stride — class showing there!`,
   ]),
+  raceWelcome: (name) => pick([
+    `Welcome to the ${name} — bets are now locked, thirty seconds to post!`,
+    `The ${name} is up next — bets are closed, let's see who's in contention!`,
+    `Ladies and gentlemen, the ${name} — final odds are now on the board!`,
+    `We're thirty seconds from the off in the ${name} — this one looks wide open!`,
+    `The field is set for the ${name} — thirty seconds and counting!`,
+  ]),
   betsClosing: () => pick([
     `Bets are closing — five seconds to get your money down!`,
     `Final five seconds — place your bets now or forever hold your peace!`,
@@ -3851,6 +3858,12 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     if((isLocked||isRacing) && !musicStartedRef.current){
       musicStartedRef.current = true;
       startBgMusic();
+      // Welcome commentary when 30s countdown starts
+      const wKey = race.id+'-welcome';
+      if(!firedCommentaryKeys.has(wKey)) {
+        firedCommentaryKeys.add(wKey);
+        setTimeout(()=>queueCommentary(COMMENTARY.raceWelcome(race.name), 2), 800);
+      }
     }
     // Bets closing commentary — fires when betting window has 5 seconds left
     if(betsLeft <= 5 && betsLeft > 0 && st === "betting" && !betsCallFiredRef.current) {
