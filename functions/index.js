@@ -436,6 +436,8 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
   return races;
 }
 
+const TOPUP_THRESHOLD = 30;
+
 // ─── MAIN CRON FUNCTION ───────────────────────────────────────────────────────
 // Runs every minute — manages schedule and pre-computes race roll histories
 exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB" }, async () => {
@@ -456,8 +458,6 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
   const futureCount = (races) => !races ? 0 :
     races.filter(r => r.status !== 'finished' && r.startTime > now).length;
 
-  const TOPUP_THRESHOLD = 30;
-  const BATCH = 64;
 
   // Helper: append new races after the last existing race
   const topUpSchedule = (existing, genFn) => {
