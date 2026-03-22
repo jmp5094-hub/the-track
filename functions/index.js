@@ -397,7 +397,7 @@ function generateSchedule(startCursor, seedsDoc) {
   let cursor = startCursor;
   for(let i = 0; i < 64; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
-    const raceId    = `r${i}_${now}`;
+    const raceId    = `r${i}_${Date.now()}${i}`;
     const condition = pickCondition(type, raceId);
     const seedHex   = generateFairSeed();
     const seedHash  = sha256(seedHex);
@@ -418,7 +418,7 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
   let cursor = startCursor;
   for(let i = 0; i < 64; i++) {
     const type      = RACE_TYPES[i % RACE_TYPES.length];
-    const raceId    = `a${i}_${now}`;
+    const raceId    = `a${i}_${Date.now()}${i}`;
     const condition = pickCondition(type, raceId);
     const seedHex   = generateFairSeed();
     const seedHash  = sha256(seedHex);
@@ -497,47 +497,61 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
     return fireTime > now && fireTime <= now + 2 * 60 * 1000;
   });
 
-  const rollsSnap = await db.doc("global/raceRolls").get();
-  let rollsDoc  = rollsSnap.exists ? rollsSnap.data() : {};
-
-  // Trim old roll entries to prevent doc from growing unboundedly
+  // Use subcollection raceRolls/{raceId} — no 1MB limit
   const TWO_HOURS = 2 * 60 * 60 * 1000;
-  const trimmedRolls = {};
-  for(const [raceId, data] of Object.entries(rollsDoc)) {
-    if(data.computedAt && now - data.computedAt < TWO_HOURS) {
-      trimmedRolls[raceId] = data;
+
+  // Delete old roll docs
+  const oldRollsSnap = await db.collection("raceRolls").get();
+  const deleteOps = [];
+  for(const doc of oldRollsSnap.docs) {
+    const data = doc.data();
+    if(!data.computedAt || now - data.computedAt > TWO_HOURS) {
+      deleteOps.push(doc.ref.delete());
     }
   }
-  const trimCount = Object.keys(rollsDoc).length - Object.keys(trimmedRolls).length;
-  if(trimCount > 0) console.log(`Trimmed ${trimCount} old roll entries`);
-  rollsDoc = trimmedRolls;
+  if(deleteOps.length > 0) {
+    await Promise.all(deleteOps);
+    console.log(`Deleted ${deleteOps.length} old roll docs`);
+  }
 
-  let changed = trimCount > 0;
+  // Get existing roll IDs
+  const existingRollIds = new Set(
+    oldRollsSnap.docs
+      .filter(d => { const data=d.data(); return data.computedAt && now-data.computedAt < TWO_HOURS; })
+      .map(d => d.id)
+  );
+
+  // Pre-compute missing rolls
+  const writeOps = [];
   for(const race of upcoming) {
-    if(rollsDoc[race.id]) continue; // already computed
+    if(existingRollIds.has(race.id)) continue;
     console.log("Pre-computing rolls for", race.id, race.name);
     const { winner, rolls } = simulateRaceWithHistory(race.type, race.condition || "sunny", race.seed);
     const visualFinishAt = (race.isAuction ? race.startTime + 30000 : race.startTime) + 1300 + rolls.length * ROLL_INTERVAL;
-    rollsDoc[race.id] = { winner, rolls, visualFinishAt, computedAt: now };
-    changed = true;
+    writeOps.push(db.collection("raceRolls").doc(race.id).set({ winner, rolls, visualFinishAt, computedAt: now }));
   }
-
-  if(changed) {
-    await db.doc("global/raceRolls").set(rollsDoc);
-    console.log("Saved roll histories, total entries:", Object.keys(rollsDoc).length);
+  if(writeOps.length > 0) {
+    await Promise.all(writeOps);
+    console.log("Saved", writeOps.length, "roll histories");
   }
 
   // ── 3. Mark finished races ────────────────────────────────────────────────
   // Max race = 60 rolls * ROLL_INTERVAL + 40s buffer
   const MAX_RACE_MS = 60 * ROLL_INTERVAL + 40000;
 
+  // Load roll metadata for finish detection
+  const rollMetaSnap = await db.collection("raceRolls").get();
+  const rollMeta = {};
+  for(const doc of rollMetaSnap.docs) {
+    const d = doc.data();
+    rollMeta[doc.id] = { visualFinishAt: d.visualFinishAt };
+  }
+
   const shouldBeFinished = (r) => {
     if(r.status === "finished") return false;
     const fireTime = r.isAuction ? r.startTime + 30000 : r.startTime;
-    const rollData = rollsDoc[r.id];
-    // If we have roll data, use the exact visualFinishAt
+    const rollData = rollMeta[r.id];
     if(rollData && now > rollData.visualFinishAt + 30000) return true;
-    // If no roll data but race started long enough ago, mark finished anyway
     if(now > fireTime + MAX_RACE_MS) return true;
     return false;
   };
@@ -624,17 +638,16 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
     const ft = r.isAuction ? r.startTime + 30000 : r.startTime;
     return ft > now && ft <= now + 3 * 60 * 1000;
   });
-  const rollsSnap = await db.doc("global/raceRolls").get();
-  const rollsDoc2  = rollsSnap.exists ? rollsSnap.data() : {};
-  let changed = false;
+  const existingRollsSnap = await db.collection("raceRolls").get();
+  const existingIds = new Set(existingRollsSnap.docs.map(d => d.id));
+  const writeOps2 = [];
   for(const race of upcoming) {
-    if(rollsDoc2[race.id]) continue;
+    if(existingIds.has(race.id)) continue;
     const { winner, rolls } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
     const visualFinishAt = (race.isAuction ? race.startTime+30000 : race.startTime) + 1300 + rolls.length * ROLL_INTERVAL;
-    rollsDoc2[race.id] = { winner, rolls, visualFinishAt, computedAt: now };
-    changed = true;
+    writeOps2.push(db.collection("raceRolls").doc(race.id).set({ winner, rolls, visualFinishAt, computedAt: now }));
   }
-  if(changed) await db.doc("global/raceRolls").set(rollsDoc2);
+  if(writeOps2.length > 0) await Promise.all(writeOps2);
 
   res.json({
     ok: true,

@@ -34,7 +34,12 @@ const fbSaveAuctionSchedule = async (data) => setDoc(doc(db,"global","auctionSch
 const fbGetRaceResults  = async () => { const d = await getDoc(doc(db,"global","raceResults")); return d.exists() ? d.data().results || {} : {}; };
 const fbSaveRaceResults = async (r) => setDoc(doc(db,"global","raceResults"), {results:r});
 // Roll histories — pre-computed by Cloud Function, read by all clients for replay
-const fbGetRaceRolls    = async () => { const d = await getDoc(doc(db,"global","raceRolls")); return d.exists() ? d.data() : {}; };
+const fbGetRaceRolls    = async () => {
+  const snap = await getDocs(collection(db, "raceRolls"));
+  const result = {};
+  snap.forEach(d => { result[d.id] = d.data(); });
+  return result;
+};
 
 // Per-user bets
 const fbGetConfirmed  = async (uid) => { const d = await getDoc(doc(db,"bets",uid)); return d.exists() ? d.data().confirmed || {} : {}; };
