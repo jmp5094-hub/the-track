@@ -498,9 +498,9 @@ const getAudioCtx = () => {
 // ── Background race results storage ──────────────────────────────────────────
 const getRaceResults  = () => { try { return JSON.parse(localStorage.getItem("tt_race_results")||"{}"); } catch { return {}; } };
 const saveRaceResults = r  => localStorage.setItem("tt_race_results", JSON.stringify(r));
-const getSoundEnabled = () => { try { return localStorage.getItem("tt_sound")!=="0"; } catch { return true; } };
+const getSoundEnabled = () => { try { return localStorage.getItem("tt_sound")==="1"; } catch { return false; } };
 const setSoundEnabled = (v) => { try { localStorage.setItem("tt_sound", v?"1":"0"); } catch {} };
-const getMusicEnabled = () => { try { return localStorage.getItem("tt_music")!=="0"; } catch { return true; } };
+const getMusicEnabled = () => { try { return localStorage.getItem("tt_music")==="1"; } catch { return false; } };
 const setMusicEnabled = (v) => { try { localStorage.setItem("tt_music", v?"1":"0"); } catch {} };
 
 // ── Global game clock (respects dev 4x speed) ────────────────────────────────
@@ -649,7 +649,7 @@ const EL_URL = "/api/commentary"; // Vercel serverless proxy — keeps API key s
 
 let commentaryQueue   = [];
 let commentaryPlaying = false;
-let commentaryEnabled = true;
+let commentaryEnabled = getSoundEnabled(); // off by default until user enables
 let lastCommentaryTime = 0;   // timestamp of last commentary start
 const COMMENTARY_COOLDOWN = 3000; // ms minimum between tier-2/3 lines
 const firedCommentaryKeys = new Set(); // track all fired keys
