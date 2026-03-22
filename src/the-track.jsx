@@ -615,6 +615,7 @@ let commentaryQueue   = [];
 let commentaryPlaying = false;
 let commentaryEnabled = true;
 let lastCommentaryTime = 0;   // timestamp of last commentary start
+const COMMENTARY_COOLDOWN = 3000; // ms minimum between tier-2/3 lines
 const firedCommentaryKeys = new Set(); // track all fired keys
 
 async function speakLine(text) {
