@@ -540,9 +540,7 @@ const _masterUnlock = () => {
         else { a.pause(); a.currentTime=0; a.muted=false; }
       }).catch(()=>{ a.muted=false; });
     });
-    // 3. Unlock bugle — muted so no sound on unlock
-    _bugleAudio.muted=true;
-    _bugleAudio.play().then(()=>{ _bugleAudio.pause(); _bugleAudio.muted=false; }).catch(()=>{ _bugleAudio.muted=false; });
+
   }
 };
 if(typeof window !== "undefined") {
@@ -555,9 +553,15 @@ const unlockAudio = _masterUnlock; // keep old name working
 // ── Individual sound effects ──────────────────────────────────────────────────
 
 
-// Pre-create bugle audio element at module level for iOS unlock
-const _bugleAudio = new Audio("/Bugle.mp3");
-_bugleAudio.preload = "auto";
+// Bugle audio — created lazily on first use, not at module load
+let _bugleAudio = null;
+function _getBugle() {
+  if(!_bugleAudio) {
+    _bugleAudio = new Audio("/Bugle.mp3");
+    _bugleAudio.preload = "none";
+  }
+  return _bugleAudio;
+}
 
 // ─── BACKGROUND MUSIC — iOS-safe unified audio manager ───────────────────────
 // iOS requires all Audio elements to be .play()'d synchronously inside a user
@@ -1190,7 +1194,7 @@ const sfx = {
   }),
 
   bugle: () => {
-    const audio = _bugleAudio;
+    const audio = _getBugle();
     audio.currentTime = 0;
     audio.volume = 0.9;
     audio.play().catch(()=>{
