@@ -601,54 +601,46 @@ function fadeAudio(audio, targetVol, durationMs, onDone) {
   }, durationMs/steps);
 }
 
-function _playTrack(name, stopOthersMs=800) {
-  if(!musicEnabled) return;
-  const target = MUSIC_TRACKS[name].targetVol;
-  // Fade out all other tracks
+// _desiredTrack = what SHOULD be playing regardless of mute state
+// musicEnabled   = whether audio is actually audible
+// These are completely separate concerns.
+let _desiredTrack = null;
+
+function _applyTrack(name) {
+  // Transition to new track — fade out others, fade in new one
   Object.keys(MUSIC_TRACKS).forEach(n=>{
+    const a=_aud[n]; if(!a) return;
     if(n!==name) {
-      const a=_aud[n]; if(!a) return;
-      a._shouldPlay = false;
-      if(!a.paused) fadeAudio(a, 0, stopOthersMs, ()=>{ a.pause(); a.currentTime=0; });
+      if(!a.paused) fadeAudio(a, 0, 800, ()=>{ a.pause(); a.currentTime=0; });
     }
   });
-  _currentTrack = name;
   const a = _getTrack(name);
-  a._shouldPlay = true;
-  // Start playing after other tracks have faded
-  const startDelay = stopOthersMs > 0 ? Math.min(stopOthersMs, 600) : 0;
+  const targetVol = musicEnabled ? MUSIC_TRACKS[name].targetVol : 0;
   setTimeout(()=>{
-    if(!a._shouldPlay) return; // cancelled before we started
+    if(_desiredTrack !== name) return; // already changed
     if(a.paused) {
       a.volume = 0;
       a.play().catch(()=>{
-        // Blocked — retry on next gesture
         ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>{
-          if(a._shouldPlay) a.play().catch(()=>{});
+          if(_desiredTrack===name) { a.play().catch(()=>{}); }
         },{once:true,passive:true}));
       });
     }
-    fadeAudio(a, target, 1500);
-  }, startDelay);
+    fadeAudio(a, targetVol, 1500);
+  }, 600);
 }
 
-function _stopTrack(name, fadeMs=1500, cb) {
-  const a = _aud[name]; if(!a||a.paused){ cb?.(); return; }
-  if(a) a._shouldPlay = false;
-  fadeAudio(a, 0, fadeMs, ()=>{ a.pause(); a.currentTime=0; cb?.(); });
-}
-
-// Public API — same names as before so all callers work unchanged
-function startLobbyMusic()         { _playTrack("lobby");                      }
-function startBgMusic()            { _playTrack("countdown");                   }
-function startRaceMusic()          { _playTrack("race");                        }
-function stopLobbyMusic(ms=1500)   { _stopTrack("lobby", ms);                  }
-function fadeBgMusic(v,ms,cb)      { fadeAudio(_aud.countdown, v, ms||1500, cb); }
-function stopBgMusic(ms=2000)      { _stopTrack("countdown",ms); _stopTrack("race",ms); }
-function stopAllMusic(ms=1500)     { Object.keys(MUSIC_TRACKS).forEach(n=>_stopTrack(n,ms)); _currentTrack=null; }
-function initBgMusic()             {}  // no-op — tracks pre-created above
-function initRaceMusic()           {}  // no-op
-function initLobbyMusic()          {}  // no-op
+// Public: set which track should play (ignores mute — music flows naturally)
+function startLobbyMusic()   { if(_desiredTrack==="lobby") return; _desiredTrack="lobby";     _applyTrack("lobby");     }
+function startBgMusic()      { if(_desiredTrack==="countdown") return; _desiredTrack="countdown"; _applyTrack("countdown"); }
+function startRaceMusic()    { _desiredTrack="race";     _applyTrack("race");      }
+function stopLobbyMusic(ms)  { if(_desiredTrack!=="lobby") return; _desiredTrack=null; const a=_aud.lobby; if(a&&!a.paused) fadeAudio(a,0,ms||1500,()=>{a.pause();a.currentTime=0;}); }
+function fadeBgMusic(v,ms,cb){ const a=_aud.countdown; if(a) fadeAudio(a,v,ms||1500,cb); }
+function stopBgMusic(ms=2000){ ["countdown","race"].forEach(n=>{ _desiredTrack=null; const a=_aud[n]; if(a&&!a.paused) fadeAudio(a,0,ms,()=>{a.pause();a.currentTime=0;}); }); }
+function stopAllMusic(ms=1500){ Object.keys(MUSIC_TRACKS).forEach(n=>{ const a=_aud[n]; if(a&&!a.paused) fadeAudio(a,0,ms,()=>{a.pause();a.currentTime=0;}); }); _desiredTrack=null; }
+function initBgMusic()   {}
+function initRaceMusic() {}
+function initLobbyMusic(){}
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
 // Reset commentary state when race changes
@@ -958,14 +950,20 @@ function setCommentaryEnabled(v) {
 let musicEnabled = getMusicEnabled(); // sync with localStorage on startup
 function setMusicEnabledGlobal(v) {
   musicEnabled = v;
-  setMusicEnabled(v); // always keep localStorage in sync
+  setMusicEnabled(v);
   if(!v) {
-    const was = _currentTrack;
-    stopAllMusic(300);
-    _currentTrack = was;
+    // Mute — fade all playing tracks to 0 but keep them running
+    Object.keys(MUSIC_TRACKS).forEach(n=>{
+      const a=_aud[n]; if(!a||a.paused) return;
+      fadeAudio(a, 0, 500);
+    });
   } else {
-    // Restore track — small delay to let stop complete
-    if(_currentTrack) setTimeout(()=>_playTrack(_currentTrack), 400);
+    // Unmute — restore volume of the desired track
+    if(_desiredTrack) {
+      const a=_aud[_desiredTrack];
+      if(a && !a.paused) fadeAudio(a, MUSIC_TRACKS[_desiredTrack].targetVol, 500);
+      else if(a && a.paused) { a.play().catch(()=>{}); fadeAudio(a, MUSIC_TRACKS[_desiredTrack].targetVol, 800); }
+    }
   }
 }
 
