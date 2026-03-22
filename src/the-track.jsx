@@ -493,8 +493,10 @@ const getAudioCtx = () => {
 // ── Background race results storage ──────────────────────────────────────────
 const getRaceResults  = () => { try { return JSON.parse(localStorage.getItem("tt_race_results")||"{}"); } catch { return {}; } };
 const saveRaceResults = r  => localStorage.setItem("tt_race_results", JSON.stringify(r));
-const getSoundEnabled = () => { try { return localStorage.getItem("tt_sound")==="1"; } catch { return false; } };
+const getSoundEnabled = () => { try { return localStorage.getItem("tt_sound")!=="0"; } catch { return true; } };
 const setSoundEnabled = (v) => { try { localStorage.setItem("tt_sound", v?"1":"0"); } catch {} };
+const getMusicEnabled = () => { try { return localStorage.getItem("tt_music")!=="0"; } catch { return true; } };
+const setMusicEnabled = (v) => { try { localStorage.setItem("tt_music", v?"1":"0"); } catch {} };
 
 // ── Global game clock (respects dev 4x speed) ────────────────────────────────
 let _gameTimeOffset = 0;
@@ -568,7 +570,7 @@ function fadeAudio(audio, targetVol, durationMs, onDone) {
 
 // Start countdown music (30s screen)
 function startBgMusic() {
-  if(!commentaryEnabled) return;
+  if(!musicEnabled) return;
   initBgMusic();
   initRaceMusic(); // pre-load race track
   if(bgMusic.paused) {
@@ -578,7 +580,7 @@ function startBgMusic() {
       window.addEventListener("touchstart", retry, {once:true});
     });
   }
-  fadeAudio(bgMusic, 0.09, 1500);
+  fadeAudio(bgMusic,   0.05, 1500);
 }
 
 // Called on bugle — fade out countdown music
@@ -588,7 +590,7 @@ function fadeBgMusic(targetVol, durationMs, onDone) {
 
 // Called on gunshot — start race music from 4s mark
 function startRaceMusic() {
-  if(!commentaryEnabled) return;
+  if(!musicEnabled) return;
   initRaceMusic();
   raceMusic.currentTime = 0;
   raceMusic.volume = 0;
@@ -597,7 +599,7 @@ function startRaceMusic() {
     window.addEventListener("click", retry, {once:true});
     window.addEventListener("touchstart", retry, {once:true});
   });
-  fadeAudio(raceMusic, 0.07, 1500);
+  fadeAudio(raceMusic, 0.03, 1500);
 }
 
 // Stop everything
@@ -877,7 +879,12 @@ const COMMENTARY = {
   ]),
 };
 
-function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; stopBgMusic(500); } else { initBgMusic(); initRaceMusic(); } }
+function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
+let musicEnabled = true;
+function setMusicEnabledGlobal(v) {
+  musicEnabled = v;
+  if(!v) { stopBgMusic(500); }
+}
 
 const sfx = {
   // Rapid click while dice are spinning
@@ -2495,12 +2502,51 @@ function BankPanel({ user, onClose, onBalanceChange }) {
   );
 }
 
-// ─── MUTE BUTTON ──────────────────────────────────────────────────────────────
+// ─── SOUND CONTROLS — two toggles: sfx/commentary + music ───────────────────
 function MuteButton({ size=28 }) {
+  const [sfxOn,   setSfxOn]   = useState(getSoundEnabled());
+  const [musicOn, setMusicOn] = useState(getMusicEnabled());
+
+  const toggleSfx = () => {
+    const v = !sfxOn;
+    setSfxOn(v);
+    setSoundEnabled(v);
+    setCommentaryEnabled(v);
+    if(v) sfx.betConfirm();
+  };
+
+  const toggleMusic = () => {
+    const v = !musicOn;
+    setMusicOn(v);
+    setMusicEnabled(v);
+    setMusicEnabledGlobal(v);
+  };
+
+  const btnStyle = (active) => ({
+    width:size, height:size, borderRadius:7,
+    border:`1px solid ${active?"rgba(255,255,255,0.25)":"rgba(255,255,255,0.08)"}`,
+    background: active?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",
+    cursor:"pointer", fontSize:size*0.48,
+    display:"flex", alignItems:"center", justifyContent:"center",
+    transition:"all 0.15s", opacity: active?1:0.45,
+  });
+
+  return (
+    <div style={{display:"flex",gap:4}}>
+      <button onClick={toggleSfx}   title={sfxOn?"Mute sound & commentary":"Unmute sound & commentary"} style={btnStyle(sfxOn)}>
+        {sfxOn?"🔊":"🔇"}
+      </button>
+      <button onClick={toggleMusic} title={musicOn?"Mute music":"Unmute music"} style={btnStyle(musicOn)}>
+        {musicOn?"🎵":"🔕"}
+      </button>
+    </div>
+  );
+}
+
+function MuteButton_UNUSED({ size=28 }) {
   const [on, setOn] = useState(getSoundEnabled());
   const toggle = () => {
     const v = !on; setOn(v); setSoundEnabled(v); setCommentaryEnabled(v);
-
     if(v) sfx.betConfirm();
   };
   return (
@@ -2583,6 +2629,8 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
   ];
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
   const toggleSound = () => { const v=!soundOn; setSoundOn(v); setSoundEnabled(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); };
+  const [musicOn2, setMusicOn2] = useState(getMusicEnabled());
+  const toggleMusic2 = () => { const v=!musicOn2; setMusicOn2(v); setMusicEnabled(v); setMusicEnabledGlobal(v); };
 
   const closeMenu = (fn) => { setMenuOpen(false); fn && fn(); };
 
@@ -2598,9 +2646,12 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
               <span style={{fontSize:12}}>🏦</span>
               <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12}}>${fmt2(user.balance)}</span>
             </button>
-            {/* Sound toggle */}
-            <button onClick={()=>{ const v=!getSoundEnabled(); setSoundEnabled(v); setSoundOn(v); if(v) sfx.betConfirm(); }} style={{width:32,height:32,borderRadius:8,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {/* Sound + Music toggles */}
+            <button onClick={()=>{ const v=!getSoundEnabled(); setSoundEnabled(v); setSoundOn(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); }} style={{width:32,height:32,borderRadius:8,background:getSoundEnabled()?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:getSoundEnabled()?1:0.45}}>
               {soundOn?"🔊":"🔇"}
+            </button>
+            <button onClick={()=>{ const v=!getMusicEnabled(); setMusicEnabled(v); setMusicEnabledGlobal(v); }} style={{width:32,height:32,borderRadius:8,background:getMusicEnabled()?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:getMusicEnabled()?1:0.45}}>
+              {getMusicEnabled()?"🎵":"🔕"}
             </button>
             {/* Burger */}
             <button onClick={()=>setMenuOpen(o=>!o)} style={{position:"relative",width:36,height:36,borderRadius:8,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
