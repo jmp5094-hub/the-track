@@ -4839,7 +4839,6 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                     const cMyBet = parseFloat(bets?.[w]||0);
                     const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
                     const cUpset = parseFloat(cOdds) >= 5;
-                    T(()=>queueCommentary(cUpset?COMMENTARY.upset(cWinName,cOdds):COMMENTARY.winner(cWinName,cOdds), 1), 600);
                     T(()=>onWinner(w), 2600);
                   }
                 }
@@ -5468,15 +5467,6 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     eng.winnerFired=true;
                     const w=eng.winner??0;
                     setWinner(w); sfx.finishLine(); sfx.win();
-                    // Winner commentary
-                    const cWinName = horseName(race,w);
-                    const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
-                    const cMyBet = parseFloat((bets||{})[w]||0);
-                    const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
-                    setTimeout(()=>queueCommentary(
-                      parseFloat(cOdds)>=5 ? COMMENTARY.upset(cWinName,cOdds) : COMMENTARY.winner(cWinName,cOdds),
-                      true
-                    ), 600);
                     setTimeout(()=>onRaceEnd(w), 2000);
                   }
                   eng.animating=false;
