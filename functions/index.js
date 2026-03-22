@@ -408,7 +408,7 @@ function generateSchedule(startCursor, seedsDoc) {
       startTime: cursor, status: "upcoming", seedHash, seed: seedInt,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
-    cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
+    cursor += (1 + Math.floor(Math.random() * 3)) * 60 * 1000;
   }
   return races;
 }
@@ -431,7 +431,7 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
       seedHash, seed: seedInt,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
-    cursor += (1 + Math.floor(Math.random() * 5)) * 60 * 1000;
+    cursor += (1 + Math.floor(Math.random() * 3)) * 60 * 1000;
   }
   return races;
 }
@@ -454,9 +454,9 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
 
   // Count unfinished future races
   const futureCount = (races) => !races ? 0 :
-    races.filter(r => r.status !== 'finished' && r.startTime > now - 5 * 60 * 1000).length;
+    races.filter(r => r.status !== 'finished' && r.startTime > now).length;
 
-  const TOPUP_THRESHOLD = 10;
+  const TOPUP_THRESHOLD = 30;
   const BATCH = 64;
 
   // Helper: append new races after the last existing race
@@ -469,7 +469,7 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
   const trimOld = (races) => {
     const finished = races.filter(r => r.status === 'finished');
     const rest = races.filter(r => r.status !== 'finished');
-    return [...finished.slice(-20), ...rest];
+    return [...finished.slice(-5), ...rest];
   };
 
   // Regenerate or top-up regular schedule
@@ -574,7 +574,7 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
   return null;
 });
 
-// ─── HTTP TRIGGER (for testing / manual invoke) ──────────────────────────────
+// ─── HTTP TRIGGER (for testing / manual top-up) ─────────────────────────────
 exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
   const now = Date.now();
   const [schedSnap, auctionSnap, seedsSnapH] = await Promise.all([
@@ -582,32 +582,65 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
     db.doc("global/auctionSchedule").get(),
     db.doc("private/raceSeeds").get(),
   ]);
-  let schedule     = schedSnap.exists     ? schedSnap.data().races : null;
-  let auctionSched = auctionSnap.exists   ? auctionSnap.data().races : null;
-  const hasFuture  = (races) => races && races.some(r => r.startTime > now - 30*60*1000);
-  if(!hasFuture(schedule)) {
-    const sd1 = {}; schedule = generateSchedule(now, sd1);
-    await Promise.all([db.doc("global/schedule").set({ races: schedule, generatedAt: now }), db.doc("private/raceSeeds").set(sd1)]);
+  let schedule     = schedSnap.exists   ? schedSnap.data().races : null;
+  let auctionSched = auctionSnap.exists ? auctionSnap.data().races : null;
+  const seedsDoc   = seedsSnapH.exists  ? seedsSnapH.data()       : {};
+
+  const futureCountH = (races) => !races ? 0 :
+    races.filter(r => r.status !== "finished" && r.startTime > now).length;
+
+  const trimOldH = (races) => {
+    const finished = races.filter(r => r.status === "finished");
+    const rest     = races.filter(r => r.status !== "finished");
+    return [...finished.slice(-5), ...rest];
+  };
+
+  const topUpH = (existing, genFn) => {
+    const lastTime = existing.reduce((m,r) => Math.max(m, r.startTime), now);
+    return [...existing, ...genFn(lastTime + 60000, seedsDoc)];
+  };
+
+  if(!schedule || schedule.length === 0) {
+    schedule = generateSchedule(now + 60000, seedsDoc);
+  } else if(futureCountH(schedule) < TOPUP_THRESHOLD) {
+    schedule = topUpH(trimOldH(schedule), generateSchedule);
   }
-  if(!hasFuture(auctionSched)) {
-    const sd2 = {}; auctionSched = generateAuctionSchedule(now, sd2);
-    await Promise.all([db.doc("global/auctionSchedule").set({ races: auctionSched, generatedAt: now }), db.doc("private/raceSeeds").set(sd2)]);
+
+  if(!auctionSched || auctionSched.length === 0) {
+    auctionSched = generateAuctionSchedule(now + 60000, seedsDoc);
+  } else if(futureCountH(auctionSched) < TOPUP_THRESHOLD) {
+    auctionSched = topUpH(trimOldH(auctionSched), generateAuctionSchedule);
   }
+
+  await Promise.all([
+    db.doc("global/schedule").set({ races: schedule, generatedAt: now }),
+    db.doc("global/auctionSchedule").set({ races: auctionSched, generatedAt: now }),
+    db.doc("private/raceSeeds").set(seedsDoc),
+  ]);
+
+  // Pre-compute rolls for next 3 minutes
   const allRaces = [...schedule, ...auctionSched];
   const upcoming = allRaces.filter(r => {
     const ft = r.isAuction ? r.startTime + 30000 : r.startTime;
     return ft > now && ft <= now + 3 * 60 * 1000;
   });
   const rollsSnap = await db.doc("global/raceRolls").get();
-  const rollsDoc  = rollsSnap.exists ? rollsSnap.data() : {};
+  const rollsDoc2  = rollsSnap.exists ? rollsSnap.data() : {};
   let changed = false;
   for(const race of upcoming) {
-    if(rollsDoc[race.id]) continue;
+    if(rollsDoc2[race.id]) continue;
     const { winner, rolls } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed);
     const visualFinishAt = (race.isAuction ? race.startTime+30000 : race.startTime) + 1300 + rolls.length * ROLL_INTERVAL;
-    rollsDoc[race.id] = { winner, rolls, visualFinishAt, computedAt: now };
+    rollsDoc2[race.id] = { winner, rolls, visualFinishAt, computedAt: now };
     changed = true;
   }
-  if(changed) await db.doc("global/raceRolls").set(rollsDoc);
-  res.json({ ok: true, time: new Date().toISOString(), racesPrepped: upcoming.length });
+  if(changed) await db.doc("global/raceRolls").set(rollsDoc2);
+
+  res.json({
+    ok: true,
+    time: new Date().toISOString(),
+    futureRaces: futureCountH(schedule),
+    futureAuctions: futureCountH(auctionSched),
+    racesPrepped: upcoming.length,
+  });
 });
