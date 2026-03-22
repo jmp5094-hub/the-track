@@ -886,23 +886,24 @@ const COMMENTARY = {
 
 function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
 let musicEnabled = true;
+let activeMusicTrack = null; // "bg" | "race" | null
+
 function setMusicEnabledGlobal(v) {
   musicEnabled = v;
   if(!v) {
-    stopBgMusic(500);
+    // Pause both tracks but remember which was active
+    if(raceMusic && !raceMusic.paused) { activeMusicTrack = "race"; raceMusic.pause(); }
+    else if(bgMusic && !bgMusic.paused) { activeMusicTrack = "bg"; bgMusic.pause(); }
   } else {
-    // Re-enable — restart whichever track should be playing
-    // Check if we're in a race (raceMusic exists and was playing) or lobby/countdown
-    if(raceMusic && raceMusic.paused && bgMusic && bgMusic.paused) {
-      // Both paused — restart bgMusic (safest default, race will restart raceMusic on next gunshot)
-      startBgMusic();
-    } else if(raceMusic && raceMusic.paused) {
+    // Resume only the track that was playing before mute
+    if(activeMusicTrack === "race" && raceMusic) {
       raceMusic.play().catch(()=>{});
       fadeAudio(raceMusic, 0.03, 1000);
-    } else if(bgMusic && bgMusic.paused) {
+    } else if(activeMusicTrack === "bg" && bgMusic) {
       bgMusic.play().catch(()=>{});
       fadeAudio(bgMusic, 0.05, 1000);
     }
+    // If nothing was tracked, don't start anything — let normal flow handle it
   }
 }
 
