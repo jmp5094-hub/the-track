@@ -601,26 +601,35 @@ function fadeAudio(audio, targetVol, durationMs, onDone) {
   }, durationMs/steps);
 }
 
-function _playTrack(name) {
+function _playTrack(name, stopOthersMs=800) {
   if(!musicEnabled) return;
   const target = MUSIC_TRACKS[name].targetVol;
   // Fade out all other tracks
   Object.keys(MUSIC_TRACKS).forEach(n=>{
     if(n!==name) {
-      const a=_aud[n]; if(!a||a.paused) return;
-      fadeAudio(a, 0, 800, ()=>{ a.pause(); a.currentTime=0; });
+      const a=_aud[n]; if(!a) return;
+      a._shouldPlay = false;
+      if(!a.paused) fadeAudio(a, 0, stopOthersMs, ()=>{ a.pause(); a.currentTime=0; });
     }
   });
   _currentTrack = name;
   const a = _getTrack(name);
   a._shouldPlay = true;
-  a.volume = 0;
-  if(a.paused) {
-    a.play().catch(()=>{
-      // Will retry on next user gesture via _masterUnlock → _shouldPlay flag
-    });
-  }
-  fadeAudio(a, target, 1500);
+  // Start playing after other tracks have faded
+  const startDelay = stopOthersMs > 0 ? Math.min(stopOthersMs, 600) : 0;
+  setTimeout(()=>{
+    if(!a._shouldPlay) return; // cancelled before we started
+    if(a.paused) {
+      a.volume = 0;
+      a.play().catch(()=>{
+        // Blocked — retry on next gesture
+        ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>{
+          if(a._shouldPlay) a.play().catch(()=>{});
+        },{once:true,passive:true}));
+      });
+    }
+    fadeAudio(a, target, 1500);
+  }, startDelay);
 }
 
 function _stopTrack(name, fadeMs=1500, cb) {
@@ -3784,9 +3793,13 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
 // onRaceStart: called when clock hits zero
 function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBets, confirmedPot, sharedPot, onRaceStart, devForceStart, onDevForceStart, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
   useEffect(()=>{
-    // Start lobby music when entering betting screen, if not already locked
+    // User tapped to get here — pre-unlock bugle now while we're in a gesture context
+    // We can't call play() here (not sync gesture) but we can load it
+    const b = _getBugle();
+    b.load();
+    // Start lobby music if not already in countdown/race
     startLobbyMusic();
-    return ()=>{}; // don't stop on unmount — goLobby handles that
+    return ()=>{};
   },[]);
   const rt = RACE_TYPES[race.type];
 
@@ -3900,8 +3913,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     // Start music as soon as locked (30s countdown begins)
     if((isLocked||isRacing) && !musicStartedRef.current){
       musicStartedRef.current = true;
-      stopLobbyMusic(1000); // fade out lobby music
-      setTimeout(()=>startBgMusic(), 500); // start countdown music
+      startBgMusic(); // _playTrack handles crossfade internally
       // Welcome commentary when 30s countdown starts
       const wKey = race.id+'-welcome';
       if(!firedCommentaryKeys.has(wKey)) {
@@ -7320,13 +7332,14 @@ function App() {
   // Lobby music controller
   useEffect(()=>{
     if(screen==="lobby" && user) {
-      setTimeout(()=>startLobbyMusic(), 300);
-    } else if(screen==="race" || screen==="payout" || screen==="private-payout") {
-      stopLobbyMusic(500);
+      startLobbyMusic(); // crossfade from whatever is playing
     }
+    // race/payout music handled by RaceScreen and handleRaceEnd
   },[screen, user]);
 
   const handleEnterRace=async(race)=>{ // async only needed for payout path
+    // Pre-load bugle synchronously — user just tapped, iOS will allow it
+    { const b=_getBugle(); if(b.readyState===0) b.load(); }
     const st = raceStatus(race, gameNow());
     const results = _cachedRaceResultsRef.current;
     const bgResult = results[race.id];
@@ -7540,9 +7553,8 @@ function App() {
   };
 
   const goLobby=()=>{
-    stopBgMusic(1500);
     setScreen("lobby");
-    setTimeout(()=>startLobbyMusic(), 1600);
+    startLobbyMusic(); // crossfade handled internally
     setWinner(null);
     setSelectedRace(null);
     setBets({});
