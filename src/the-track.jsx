@@ -1040,36 +1040,11 @@ const sfx = {
     rev.start(ctx.currentTime+0.05); rev.stop(ctx.currentTime+0.45);
   }),
 
-  bugle: () => playSound(ctx => {
-    const notes = [
-      {f:392,t:0.00,d:0.14},{f:523,t:0.15,d:0.14},{f:659,t:0.30,d:0.14},
-      {f:784,t:0.45,d:0.22},{f:784,t:0.69,d:0.09},{f:659,t:0.80,d:0.09},
-      {f:784,t:0.91,d:0.30},{f:880,t:1.23,d:0.14},{f:784,t:1.39,d:0.14},
-      {f:659,t:1.55,d:0.14},{f:523,t:1.71,d:0.14},{f:659,t:1.87,d:0.22},
-      {f:784,t:2.11,d:0.09},{f:659,t:2.22,d:0.09},{f:523,t:2.33,d:0.14},
-      {f:392,t:2.49,d:0.14},{f:523,t:2.65,d:0.50},
-    ];
-    notes.forEach(({f,t,d})=>{
-      [1,2,3,4,5,6].forEach((h,i)=>{
-        const osc = ctx.createOscillator();
-        const g   = ctx.createGain();
-        const dist = ctx.createWaveShaper();
-        const curve = new Float32Array(256);
-        for(let j=0;j<256;j++){ const x=j*2/256-1; curve[j]=x*(1+0.3*Math.abs(x)); }
-        dist.curve = curve;
-        osc.connect(dist); dist.connect(g); g.connect(ctx.destination);
-        osc.type = "sawtooth";
-        osc.frequency.value = f * h;
-        const w = [1,0.55,0.38,0.22,0.12,0.07][i] * 0.15;
-        g.gain.setValueAtTime(0, ctx.currentTime+t);
-        g.gain.linearRampToValueAtTime(w*1.4, ctx.currentTime+t+0.008);
-        g.gain.linearRampToValueAtTime(w, ctx.currentTime+t+0.04);
-        g.gain.setValueAtTime(w, ctx.currentTime+t+d-0.04);
-        g.gain.linearRampToValueAtTime(0, ctx.currentTime+t+d);
-        osc.start(ctx.currentTime+t); osc.stop(ctx.currentTime+t+d+0.05);
-      });
-    });
-  }),
+  bugle: () => {
+    const audio = new Audio("/Bugle.mp3");
+    audio.volume = 0.9;
+    audio.play().catch(()=>{});
+  },
 };
 
 // Profile: { bio, avatar (emoji), joinedDate }
@@ -3074,10 +3049,10 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
       startBgMusic();
     }
     // Bugle at 4 seconds
-    if(secsToRaceFire <= 4 && secsToRaceFire > 0 && !bugleFiredRef2.current){
+    if(secsToRaceFire <= 8 && secsToRaceFire > 0 && !bugleFiredRef2.current){
       bugleFiredRef2.current = true;
       sfx.bugle();
-      fadeBgMusic(0, 2000);
+      fadeBgMusic(0, 3000);
     }
   },[secsToRaceFire, inOdds, raceStarted]);
 
@@ -3718,10 +3693,10 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
       startBgMusic();
     }
     // Bugle at 4 seconds
-    if(countdown <= 4 && countdown > 0 && !bugleFiredRef.current) {
+    if(countdown <= 8 && countdown > 0 && !bugleFiredRef.current) {
       bugleFiredRef.current = true;
       sfx.bugle();
-      fadeBgMusic(0, 2000);
+      fadeBgMusic(0, 3000);
     }
     if(countdown === 0) bugleFiredRef.current = false;
   }, [liveSecs, devCountdown, devForceStart, isLocked, isRacing]);
