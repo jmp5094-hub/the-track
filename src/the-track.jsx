@@ -760,6 +760,12 @@ const COMMENTARY = {
     `The hurdle is no problem for ${name} — not missing a beat!`,
     `${name} takes the hurdle in stride — class showing there!`,
   ]),
+  hurdleDoubles: (name) => pick([
+    `Doubles AND the hurdle — ${name} clears it in one spectacular move!`,
+    `${name} rolls doubles right at the hurdle — flies straight over!`,
+    `What timing — doubles for ${name} and straight over the obstacle!`,
+    `${name} hits doubles at exactly the right moment — clears the hurdle with ease!`,
+  ]),
   finalStretch: (name) => pick([
     `Down the stretch they come — ${name} in front with the line approaching!`,
     `Into the final stages — ${name} leads but nothing is settled yet!`,
@@ -4678,11 +4684,16 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
       } else if(raceType==="hurdle") {
         const hurdlePos = HURDLE_CELL + 1;
         const atHurdle  = newPos[horse] === hurdlePos - 1;
-        if(atHurdle) {
+        if(steps < 0) {
+          // Fog slide — always moves back regardless of hurdle position
+          newPos[horse] = Math.max(0, newPos[horse] + steps);
+        } else if(atHurdle) {
           if(isDoubles) {
+            // Doubles at hurdle — jumps over
             newPos[horse] = hurdlePos + 1;
             newSkip[horse] = "jump";
           }
+          // Non-doubles at hurdle — stays put (waiting for doubles)
         } else {
           const dest = newPos[horse] + steps;
           if(dest >= hurdlePos && newPos[horse] < hurdlePos - 1) {
@@ -5285,7 +5296,11 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
           const hKey = race.id+'-hurdle-'+m.horse;
           if(!firedCommentaryKeys.has(hKey)) {
             firedCommentaryKeys.add(hKey);
-            setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse)), 2), 350);
+            const wasDoubles = isDoubles && prevP === HURDLE_CELL;
+            const line = wasDoubles
+              ? COMMENTARY.hurdleDoubles(horseName(race,m.horse))
+              : COMMENTARY.hurdle(horseName(race,m.horse));
+            setTimeout(()=>queueCommentary(line, 2), 350);
           }
         }
       });
