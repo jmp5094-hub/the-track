@@ -651,7 +651,6 @@ function resetCommentaryForRace(raceId) {
 }
 
 function queueCommentary(text, priority=false) {
-  console.log("[C] queue:", text.slice(0,50), "enabled:", commentaryEnabled);
   if(!commentaryEnabled) return;
   if(priority) {
     // Interrupt current + clear queue
@@ -745,6 +744,17 @@ const COMMENTARY = {
     `${name} with a massive upset at ${odds} to one — extraordinary scenes!`,
     `The form book is torn up — ${name} at ${odds} to one takes it all!`,
     `A shock result — ${name} at ${odds} to one! The crowd cannot believe it!`,
+  ]),
+  weather: (condition, name) => condition==="fog" ? pick([
+    `${name} loses footing in the fog — slides back!`,
+    `The fog claims ${name} — slipping on the track!`,
+    `Treacherous conditions — ${name} slides backwards!`,
+    `${name} caught out by the fog — loses a space!`,
+  ]) : pick([
+    `The rain is causing havoc — ${name} splashes through the mud!`,
+    `Heavy going out there — ${name} battling the conditions!`,
+    `Rain affects ${name} — this weather is changing everything!`,
+    `Mud and rain — ${name} is struggling in these conditions!`,
   ]),
   tiebreak: () => pick([
     `We have a dead heat — the tiebreaker is on! Everything to play for!`,
@@ -5014,6 +5024,138 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const [rolling,        setRolling]        = useState(false);
   const [rollCount,      setRollCount]      = useState(0);
   const rollCountRef = useRef(0);
+
+  // ── COMMENTARY — fires on every roll via rollCount state ─────────────────
+  const prevRollCountRef = useRef(0);
+  useEffect(() => {
+    if(rollCount === 0 || rollCount === prevRollCountRef.current) return;
+    prevRollCountRef.current = rollCount;
+    if(phase === "tiebreak") return;
+
+    const isDownBack = race.type === "down_back";
+    const isMagicDice = race.type === "magic_dice";
+    const isDoubles = diceResult?.isDoubles && !isMagicDice;
+    const hasForward = diceResult?.moves?.some(m => (m.steps||0) > 0);
+
+    // DOUBLES
+    if(isDoubles && hasForward) {
+      const dKey = race.id+'-dbl-'+rollCount;
+      if(!firedCommentaryKeys.has(dKey)) {
+        firedCommentaryKeys.add(dKey);
+        const mover = diceResult.moves.find(m=>(m.steps||0)>0)?.horse ?? 0;
+        setTimeout(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 400);
+      }
+    }
+    // EARLY LEADER (rolls 2-4)
+    else if(rollCount>=2 && rollCount<=4) {
+      const eKey = race.id+'-early';
+      if(!firedCommentaryKeys.has(eKey)) {
+        firedCommentaryKeys.add(eKey);
+        const leader = positions.indexOf(Math.max(...positions));
+        const sorted = [...positions].sort((a,b)=>b-a);
+        if(positions[leader]>0 && sorted[0]-sorted[1]>=1) {
+          setTimeout(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
+        }
+      }
+    }
+
+    // BIG LEAD
+    const sPos = [...positions].sort((a,b)=>b-a);
+    if(sPos[0]-sPos[1]>=3 && rollCount>4) {
+      const blKey = race.id+'-lead-'+Math.floor(rollCount/3);
+      if(!firedCommentaryKeys.has(blKey)) {
+        firedCommentaryKeys.add(blKey);
+        const leader = positions.indexOf(Math.max(...positions));
+        setTimeout(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader))), 400);
+      }
+    }
+
+    // MIDRACE
+    const halfway = isDownBack ? TRACK_SPACES : Math.floor(TRACK_SPACES/2);
+    const leaderPos = Math.max(...positions);
+    if(leaderPos>=halfway-1 && leaderPos<=halfway+1 && rollCount>3) {
+      const mKey = race.id+'-mid';
+      if(!firedCommentaryKeys.has(mKey)) {
+        firedCommentaryKeys.add(mKey);
+        const sortedE = [...positions.entries()].sort((a,b)=>b[1]-a[1]);
+        if(sortedE[0][1]-sortedE[1][1]<=2) {
+          setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
+        }
+      }
+    }
+
+    // FINAL STRETCH
+    const stretchZone = isDownBack
+      ? (legDone[positions.indexOf(leaderPos)] && leaderPos<=3)
+      : (leaderPos>=9 && leaderPos<=10);
+    if(stretchZone) {
+      const fKey = race.id+'-final';
+      if(!firedCommentaryKeys.has(fKey)) {
+        firedCommentaryKeys.add(fKey);
+        const leader = positions.indexOf(leaderPos);
+        setTimeout(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader))), 300);
+      }
+    }
+
+    // HURDLE
+    if(race.type==="hurdle" && diceResult?.moves) {
+      diceResult.moves.forEach(m=>{
+        const prevP = positions[m.horse] - (m.steps||0);
+        if(positions[m.horse]>HURDLE_CELL && prevP<=HURDLE_CELL) {
+          const hKey = race.id+'-hurdle-'+m.horse;
+          if(!firedCommentaryKeys.has(hKey)) {
+            firedCommentaryKeys.add(hKey);
+            setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+          }
+        }
+      });
+    }
+
+    // TURNAROUND
+    if(isDownBack && diceResult?.moves) {
+      diceResult.moves.forEach((_,hi)=>{
+        if(legDone[hi]) {
+          const tKey = race.id+'-turn-'+hi;
+          if(!firedCommentaryKeys.has(tKey)) {
+            firedCommentaryKeys.add(tKey);
+            setTimeout(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi))), 300);
+          }
+        }
+      });
+    }
+
+    // WEATHER — rain or fog specific call
+    if(race.condition==="rain"||race.condition==="fog") {
+      const fogSlide = diceResult?.moves?.some(m=>(m.steps||0)<0);
+      if(fogSlide) {
+        const wKey = race.id+'-weather-'+rollCount;
+        if(!firedCommentaryKeys.has(wKey)) {
+          firedCommentaryKeys.add(wKey);
+          const slid = diceResult.moves.find(m=>(m.steps||0)<0)?.horse ?? 0;
+          setTimeout(()=>queueCommentary(COMMENTARY.weather(race.condition, horseName(race,slid))), 350);
+        }
+      }
+    }
+  }, [rollCount]);
+
+  // Winner commentary via useEffect
+  useEffect(()=>{
+    if(winner===null) return;
+    const wKey = race.id+'-winner';
+    if(!firedCommentaryKeys.has(wKey)) {
+      firedCommentaryKeys.add(wKey);
+      const cWinName = horseName(race,winner);
+      const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
+      const cMyBet = parseFloat((bets||{})[winner]||0);
+      const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
+      setTimeout(()=>queueCommentary(
+        parseFloat(cOdds)>=5 ? COMMENTARY.upset(cWinName,cOdds) : COMMENTARY.winner(cWinName,cOdds),
+        true
+      ), 800);
+      stopBgMusic(4000);
+    }
+  },[winner]);
+
   const [winner,         setWinner]         = useState(null);
   const [tieHorses,      setTieHorses]      = useState(null);
   const [phase,          setPhase]          = useState("main");
@@ -5101,7 +5243,6 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
       // Catch up silently if we're behind — jump positions without animation
       if(targetIdx > eng.lastRollIdx + 1) {
-        console.log("[C] CATCHUP from",eng.lastRollIdx,"to",targetIdx);
         const fr = eng.rolls[targetIdx - 1];
         if(fr){ setPositions([...fr.positions]); setLegDone([...fr.legDone]); setPhase(fr.phase||"main"); setRollCount(targetIdx); }
         eng.lastRollIdx = targetIdx - 1;
@@ -5123,7 +5264,6 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         const rollIdx = eng.lastRollIdx + 1;
         const roll = eng.rolls[rollIdx];
         if(!roll) return;
-        console.log("[C] ANIMATE roll",rollIdx,"doubles:",roll?.isDoubles);
         eng.animating  = true;
         eng.lastRollIdx = rollIdx;
         rollCountRef.current = rollIdx + 1;
@@ -5172,7 +5312,6 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                   const newLeg = roll.legDone;
                   const isDownBack = race.type==="down_back";
                   const isMagicDice = race.type==="magic_dice";
-                  console.log("[C] roll",cRollNum,"doubles:",roll.isDoubles,"leader:",Math.max(...newPos),"keys:",firedCommentaryKeys.size);
 
                   // DOUBLES
                   const hasForward = roll.moves.some(m=>(m.steps||0)>0);
