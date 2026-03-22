@@ -5024,6 +5024,19 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const [rolling,        setRolling]        = useState(false);
   const [rollCount,      setRollCount]      = useState(0);
   const rollCountRef = useRef(0);
+  const [winner,         setWinner]         = useState(null);
+  const [tieHorses,      setTieHorses]      = useState(null);
+  const [phase,          setPhase]          = useState("main");
+  const [onFire,         setOnFire]         = useState(Array(6).fill(false));
+  const [movedHorses,    setMovedHorses]    = useState([]);
+  const [jumpingHorses,  setJumpingHorses]  = useState([]);
+  const [slidingHorses,  setSlidingHorses]  = useState([]);
+  const [mudDie,         setMudDie]         = useState(null);
+  const [fogDie,         setFogDie]         = useState(null);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+
+
+  const skipped = Array(6).fill(false); // hurdle skip state (visual only)
 
   // ── COMMENTARY — fires on every roll via rollCount state ─────────────────
   const prevRollCountRef = useRef(0);
@@ -5077,7 +5090,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       const mKey = race.id+'-mid';
       if(!firedCommentaryKeys.has(mKey)) {
         firedCommentaryKeys.add(mKey);
-        const sortedE = [...positions.entries()].sort((a,b)=>b[1]-a[1]);
+        const sortedE = positions.map((v,i)=>[i,v]).sort((a,b)=>b[1]-a[1]);
         if(sortedE[0][1]-sortedE[1][1]<=2) {
           setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
         }
@@ -5111,10 +5124,10 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       });
     }
 
-    // TURNAROUND
-    if(isDownBack && diceResult?.moves) {
-      diceResult.moves.forEach((_,hi)=>{
-        if(legDone[hi]) {
+    // TURNAROUND (down_back)
+    if(isDownBack) {
+      legDone.forEach((l,hi)=>{
+        if(l) {
           const tKey = race.id+'-turn-'+hi;
           if(!firedCommentaryKeys.has(tKey)) {
             firedCommentaryKeys.add(tKey);
@@ -5124,9 +5137,9 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       });
     }
 
-    // WEATHER — rain or fog specific call
-    if(race.condition==="rain"||race.condition==="fog") {
-      const fogSlide = diceResult?.moves?.some(m=>(m.steps||0)<0);
+    // WEATHER
+    if((race.condition==="rain"||race.condition==="fog") && diceResult?.moves) {
+      const fogSlide = diceResult.moves.some(m=>(m.steps||0)<0);
       if(fogSlide) {
         const wKey = race.id+'-weather-'+rollCount;
         if(!firedCommentaryKeys.has(wKey)) {
@@ -5138,7 +5151,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
     }
   }, [rollCount]);
 
-  // Winner commentary via useEffect
+  // Winner commentary
   useEffect(()=>{
     if(winner===null) return;
     const wKey = race.id+'-winner';
@@ -5156,18 +5169,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
     }
   },[winner]);
 
-  const [winner,         setWinner]         = useState(null);
-  const [tieHorses,      setTieHorses]      = useState(null);
-  const [phase,          setPhase]          = useState("main");
-  const [jumpingHorses,  setJumpingHorses]  = useState([]);
-  const [slidingHorses,  setSlidingHorses]  = useState([]);
-  const [mudDie,         setMudDie]         = useState(null);
-  const [fogDie,         setFogDie]         = useState(null);
-  const [overlayVisible, setOverlayVisible] = useState(false);
-  const [onFire,         setOnFire]         = useState(Array(6).fill(false));
-  const [movedHorses,    setMovedHorses]    = useState([]);
 
-  const skipped = Array(6).fill(false); // hurdle skip state (visual only)
 
   // All mutable race state in one ref — no state deps in the loop
   const engineRef = useRef({
