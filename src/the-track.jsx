@@ -529,8 +529,9 @@ if(typeof window !== "undefined") {
 
 
 // ─── BACKGROUND MUSIC ────────────────────────────────────────────────────────
-let bgMusic = null;
-let bgMusicLoaded = false;
+// Two tracks: countdown music (tension build) and race music (Final Fur)
+let bgMusic     = null; // countdown/odds track
+let raceMusic   = null; // race track (Final_Fur.mp3)
 
 function initBgMusic() {
   if(bgMusic) return;
@@ -538,45 +539,71 @@ function initBgMusic() {
   bgMusic.loop = true;
   bgMusic.volume = 0;
   bgMusic.preload = "auto";
-  bgMusicLoaded = true;
 }
 
-function startBgMusic() {
-  if(!commentaryEnabled) return;
-  initBgMusic();
-  if(bgMusic.paused) {
-    bgMusic.currentTime = bgMusic.currentTime || 0;
-    bgMusic.play().catch(()=>{
-      // Autoplay blocked — retry on next interaction
-      const retry = () => { bgMusic.play().catch(()=>{}); };
-      window.addEventListener("click", retry, {once:true});
-      window.addEventListener("touchstart", retry, {once:true});
-    });
-  }
-  // Fade in to target volume
-  fadeBgMusic(0.09, 1500);
+function initRaceMusic() {
+  if(raceMusic) return;
+  raceMusic = new Audio("/Final_Fur.mp3");
+  raceMusic.loop = true;
+  raceMusic.volume = 0;
+  raceMusic.preload = "auto";
 }
 
-function stopBgMusic(fadeMs=2000) {
-  if(!bgMusic || bgMusic.paused) return;
-  fadeBgMusic(0, fadeMs, ()=>{ bgMusic.pause(); bgMusic.currentTime=0; });
-}
-
-function fadeBgMusic(targetVol, durationMs, onDone) {
-  if(!bgMusic) return;
-  const startVol = bgMusic.volume;
+function fadeAudio(audio, targetVol, durationMs, onDone) {
+  if(!audio) { if(onDone) onDone(); return; }
+  const startVol = audio.volume;
   const diff = targetVol - startVol;
   const steps = 30;
   const stepMs = durationMs / steps;
   let step = 0;
   const iv = setInterval(()=>{
     step++;
-    bgMusic.volume = Math.max(0, Math.min(1, startVol + diff * (step/steps)));
+    audio.volume = Math.max(0, Math.min(1, startVol + diff * (step/steps)));
     if(step >= steps) {
       clearInterval(iv);
       if(onDone) onDone();
     }
   }, stepMs);
+}
+
+// Start countdown music (30s screen)
+function startBgMusic() {
+  if(!commentaryEnabled) return;
+  initBgMusic();
+  initRaceMusic(); // pre-load race track
+  if(bgMusic.paused) {
+    bgMusic.play().catch(()=>{
+      const retry = ()=>{ bgMusic.play().catch(()=>{}); };
+      window.addEventListener("click", retry, {once:true});
+      window.addEventListener("touchstart", retry, {once:true});
+    });
+  }
+  fadeAudio(bgMusic, 0.09, 1500);
+}
+
+// Called on bugle — fade out countdown music
+function fadeBgMusic(targetVol, durationMs, onDone) {
+  fadeAudio(bgMusic, targetVol, durationMs, onDone);
+}
+
+// Called on gunshot — start race music from 4s mark
+function startRaceMusic() {
+  if(!commentaryEnabled) return;
+  initRaceMusic();
+  raceMusic.currentTime = 4.0; // skip silent intro
+  raceMusic.volume = 0;
+  raceMusic.play().catch(()=>{
+    const retry = ()=>{ raceMusic.play().catch(()=>{}); };
+    window.addEventListener("click", retry, {once:true});
+    window.addEventListener("touchstart", retry, {once:true});
+  });
+  fadeAudio(raceMusic, 0.12, 1200);
+}
+
+// Stop everything
+function stopBgMusic(fadeMs=2000) {
+  fadeAudio(bgMusic,   0, fadeMs, ()=>{ if(bgMusic)  { bgMusic.pause();   bgMusic.currentTime=0;   } });
+  fadeAudio(raceMusic, 0, fadeMs, ()=>{ if(raceMusic) { raceMusic.pause(); raceMusic.currentTime=0; } });
 }
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
@@ -776,7 +803,7 @@ const COMMENTARY = {
   ]),
 };
 
-function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; stopBgMusic(500); } }
+function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; stopBgMusic(500); } else { initBgMusic(); initRaceMusic(); } }
 
 const sfx = {
   // Rapid click while dice are spinning
@@ -3048,6 +3075,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
     if(secsToRaceFire <= 4 && secsToRaceFire > 0 && !bugleFiredRef2.current){
       bugleFiredRef2.current = true;
       sfx.bugle();
+      fadeBgMusic(0, 2000);
     }
   },[secsToRaceFire, inOdds, raceStarted]);
 
@@ -3691,6 +3719,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     if(countdown <= 4 && countdown > 0 && !bugleFiredRef.current) {
       bugleFiredRef.current = true;
       sfx.bugle();
+      fadeBgMusic(0, 2000);
     }
     if(countdown === 0) bugleFiredRef.current = false;
   }, [liveSecs, devCountdown, devForceStart, isLocked, isRacing]);
