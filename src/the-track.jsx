@@ -543,7 +543,7 @@ function initBgMusic() {
 
 function initRaceMusic() {
   if(raceMusic) return;
-  raceMusic = new Audio("/Final_Fur.mp3");
+  raceMusic = new Audio("/Race_Day.mp3");
   raceMusic.loop = true;
   raceMusic.volume = 0;
   raceMusic.preload = "auto";
@@ -590,14 +590,14 @@ function fadeBgMusic(targetVol, durationMs, onDone) {
 function startRaceMusic() {
   if(!commentaryEnabled) return;
   initRaceMusic();
-  raceMusic.currentTime = 4.0; // skip silent intro
+  raceMusic.currentTime = 0;
   raceMusic.volume = 0;
   raceMusic.play().catch(()=>{
     const retry = ()=>{ raceMusic.play().catch(()=>{}); };
     window.addEventListener("click", retry, {once:true});
     window.addEventListener("touchstart", retry, {once:true});
   });
-  fadeAudio(raceMusic, 0.12, 1200);
+  fadeAudio(raceMusic, 0.07, 1500);
 }
 
 // Stop everything
@@ -802,6 +802,78 @@ const COMMENTARY = {
     `The judges call for a tiebreaker — neither horse will give way!`,
     `A tie at the line — back they go for the tiebreaker race!`,
     `We cannot be separated — into extra time we go!`,
+  ]),
+  wireToWire: (name) => pick([
+    `${name} was never headed — wire to wire, an absolutely dominant performance!`,
+    `From start to finish — ${name} led every step of the way. Magnificent!`,
+    `Wire to wire — ${name} made this look easy from the opening gate!`,
+    `Unchallenged from flag to finish — ${name} wins it wire to wire!`,
+  ]),
+  comeback: (name) => pick([
+    `What a story — ${name} was at the back of the pack and has come through to win it!`,
+    `From last to first — ${name} with an extraordinary comeback victory!`,
+    `They said it couldn't be done — ${name} proves everyone wrong with a stunning finish!`,
+    `The comeback is complete — ${name} from the rear of the field to the winner's enclosure!`,
+  ]),
+  onFire: (name) => pick([
+    `${name} is on fire — three straight rolls hitting that number — this horse is HOT!`,
+    `Watch out for ${name} — rolling hot, three in a row — absolutely on fire!`,
+    `${name} cannot be stopped right now — on fire and eating up the ground!`,
+    `The dice are falling perfectly for ${name} — three consecutive hits — on fire!`,
+  ]),
+  fogSlide: (name) => pick([
+    `The fog costs ${name} — slides back a space in these treacherous conditions!`,
+    `Visibility is zero and ${name} pays the price — slipping back in the fog!`,
+    `${name} loses ground to the fog — a cruel blow in this weather!`,
+    `The fog rolls in and ${name} is the victim — slides backwards!`,
+  ]),
+  mudStuck: (name) => pick([
+    `${name} is stuck in the mud — cannot find any footing on this heavy ground!`,
+    `Heavy going for ${name} — the rain has made this track a real test!`,
+    `${name} struggles in the conditions — the mud is taking its toll!`,
+    `No movement for ${name} — the rain-soaked track is holding them back!`,
+  ]),
+  doubleDoubles: (name) => pick([
+    `Doubles again for ${name} — this horse is rolling hot today!`,
+    `Another doubles! ${name} cannot stop rolling pairs — extraordinary luck!`,
+    `${name} hits doubles for the second time — the dice gods are smiling!`,
+    `Back to back doubles for ${name} — this is remarkable!`,
+  ]),
+  lastToFirst: (name) => pick([
+    `Extraordinary — ${name} has gone from last to first in a single throw!`,
+    `From the back to the front in one roll — ${name} with a stunning move!`,
+    `One roll changes everything — ${name} rockets from last to lead!`,
+    `${name} was stone last and now leads — what a dramatic swing!`,
+  ]),
+  tightField: () => pick([
+    `You couldn't throw a rug over this field — all six horses blanketed together!`,
+    `The entire field is inseparable — this race is truly anyone's to win!`,
+    `Six horses, barely a length between them — what a race this is turning out to be!`,
+    `Blanketed — every horse in contention, nothing to choose between them!`,
+  ]),
+  slowPace: () => pick([
+    `A cautious early pace — nobody wants to show their hand just yet!`,
+    `Tactical early stages — the field is taking its time through these opening rolls!`,
+    `Slow early fractions — this race is being set up for a sprint finish!`,
+    `No one wants to commit early — a patient race developing here!`,
+  ]),
+  magicDice: (name) => pick([
+    `The magic dice strike — ${name} gets a wild move and shakes up this race!`,
+    `Wild card! The magic dice change everything for ${name}!`,
+    `${name} benefits from the magic dice — a dramatic twist in this race!`,
+    `The unpredictable magic dice — and ${name} takes full advantage!`,
+  ]),
+  halfwayLead: (name) => pick([
+    `${name} is starting to boss this race — one horse is taking control at halfway!`,
+    `Halfway home and ${name} is in command — can anyone reel them in?`,
+    `${name} has this race in their pocket at the halfway mark — impressive!`,
+    `One horse is pulling clear — ${name} is asserting dominance at the midpoint!`,
+  ]),
+  tiebreakWinner: (name) => pick([
+    `${name} wins the tiebreaker — settling it in extra time!`,
+    `After the dead heat decider — ${name} claims the glory!`,
+    `The tiebreaker goes to ${name} — what a way to settle it!`,
+    `${name} holds their nerve in the tiebreaker — takes the win!`,
   ]),
 };
 
@@ -5056,7 +5128,13 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const skipped = Array(6).fill(false); // hurdle skip state (visual only)
 
   // ── COMMENTARY — fires on every roll via rollCount state ─────────────────
-  const prevRollCountRef = useRef(0);
+  const prevRollCountRef   = useRef(0);
+  const raceTrackingRef    = useRef({
+    leaderHistory: [],    // leader horse index each roll
+    posHistory:    [],    // positions snapshot each roll
+    doublesCount:  0,     // how many doubles this race
+    fireCalledFor: new Set(), // horses already called on-fire
+  });
   useEffect(() => {
     if(rollCount === 0 || rollCount === prevRollCountRef.current) return;
     prevRollCountRef.current = rollCount;
@@ -5066,6 +5144,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
     const isMagicDice = race.type === "magic_dice";
     const isDoubles = diceResult?.isDoubles && !isMagicDice;
     const hasForward = diceResult?.moves?.some(m => (m.steps||0) > 0);
+    const leaderPos  = Math.max(...positions);
 
     // DOUBLES
     if(isDoubles && hasForward) {
@@ -5102,7 +5181,6 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
     // MIDRACE
     const halfway = isDownBack ? TRACK_SPACES : Math.floor(TRACK_SPACES/2);
-    const leaderPos = Math.max(...positions);
     if(leaderPos>=halfway-1 && leaderPos<=halfway+1 && rollCount>3) {
       const mKey = race.id+'-mid';
       if(!firedCommentaryKeys.has(mKey)) {
@@ -5166,9 +5244,124 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         }
       }
     }
+    // ── UPDATE TRACKING ─────────────────────────────────────────────────
+    const tr = raceTrackingRef.current;
+    tr.posHistory.push([...positions]);
+    const curLeader = positions.indexOf(Math.max(...positions));
+    tr.leaderHistory.push(curLeader);
+
+    // TIGHT FIELD — all horses within 2 spaces (tier 3)
+    if(!isDownBack) {
+      const allPos = [...positions].sort((a,b)=>b-a);
+      if(allPos[0]-allPos[5]<=2 && rollCount>2 && rollCount<8) {
+        const tfKey = race.id+'-tight';
+        if(!firedCommentaryKeys.has(tfKey)) {
+          firedCommentaryKeys.add(tfKey);
+          setTimeout(()=>queueCommentary(COMMENTARY.tightField(), 3), 400);
+        }
+      }
+    }
+
+    // SLOW PACE — leader only at space 2 or less after 4 rolls (tier 3)
+    if(rollCount===4 && leaderPos<=2) {
+      const spKey = race.id+'-slow';
+      if(!firedCommentaryKeys.has(spKey)) {
+        firedCommentaryKeys.add(spKey);
+        setTimeout(()=>queueCommentary(COMMENTARY.slowPace(), 3), 400);
+      }
+    }
+
+    // HALFWAY CLEAR LEAD — leader 3+ ahead at halfway (tier 3)
+    const halfway2 = isDownBack ? TRACK_SPACES : Math.floor(TRACK_SPACES/2);
+    if(leaderPos>=halfway2-1 && leaderPos<=halfway2+1) {
+      const hlKey = race.id+'-halfLead';
+      if(!firedCommentaryKeys.has(hlKey) && !firedCommentaryKeys.has(race.id+'-mid')) {
+        const sPos2 = [...positions].sort((a,b)=>b-a);
+        if(sPos2[0]-sPos2[1]>=3) {
+          firedCommentaryKeys.add(hlKey);
+          setTimeout(()=>queueCommentary(COMMENTARY.halfwayLead(horseName(race,curLeader)), 3), 400);
+        }
+      }
+    }
+
+    // ON FIRE — check onFire state (tier 2)
+    onFire.forEach((fire,hi)=>{
+      if(fire && !tr.fireCalledFor.has(hi)) {
+        tr.fireCalledFor.add(hi);
+        const fKey = race.id+'-fire-'+hi;
+        if(!firedCommentaryKeys.has(fKey)) {
+          firedCommentaryKeys.add(fKey);
+          setTimeout(()=>queueCommentary(COMMENTARY.onFire(horseName(race,hi)), 2), 400);
+        }
+      }
+    });
+
+    // DOUBLE DOUBLES — second doubles in race (tier 2)
+    if(isDoubles && hasForward) {
+      tr.doublesCount = (tr.doublesCount||0) + 1;
+      if(tr.doublesCount === 2) {
+        const ddKey = race.id+'-dbl2';
+        if(!firedCommentaryKeys.has(ddKey)) {
+          firedCommentaryKeys.add(ddKey);
+          const mover2 = diceResult.moves.find(m=>(m.steps||0)>0)?.horse ?? 0;
+          setTimeout(()=>queueCommentary(COMMENTARY.doubleDoubles(horseName(race,mover2)), 2), 400);
+        }
+      }
+    }
+
+    // LAST TO FIRST — horse was last prev roll, now leads (tier 2)
+    if(tr.posHistory.length>=2 && diceResult?.moves) {
+      const prevPos2 = tr.posHistory[tr.posHistory.length-2];
+      const prevMin = Math.min(...prevPos2);
+      const wasLast = diceResult.moves.filter(m=>prevPos2[m.horse]===prevMin);
+      wasLast.forEach(m=>{
+        if(positions[m.horse]===Math.max(...positions) && positions[m.horse]>prevPos2[m.horse]) {
+          const ltfKey = race.id+'-ltf-'+rollCount;
+          if(!firedCommentaryKeys.has(ltfKey)) {
+            firedCommentaryKeys.add(ltfKey);
+            setTimeout(()=>queueCommentary(COMMENTARY.lastToFirst(horseName(race,m.horse)), 2), 400);
+          }
+        }
+      });
+    }
+
+    // MAGIC DICE wild move (tier 2)
+    if(isMagicDice && diceResult?.wildMove != null) {
+      const mdKey = race.id+'-magic-'+rollCount;
+      if(!firedCommentaryKeys.has(mdKey)) {
+        firedCommentaryKeys.add(mdKey);
+        const beneficiary = diceResult.moves.find(m=>m.steps>0)?.horse ?? 0;
+        setTimeout(()=>queueCommentary(COMMENTARY.magicDice(horseName(race,beneficiary)), 2), 350);
+      }
+    }
+
+    // FOG SLIDE specific call (tier 2) — more detailed than generic weather
+    if(race.condition==="fog" && diceResult?.moves) {
+      const fogSliders = diceResult.moves.filter(m=>m.fog && (m.steps||0)<0);
+      fogSliders.forEach(m=>{
+        const fsKey = race.id+'-fogslide-'+m.horse+'-'+rollCount;
+        if(!firedCommentaryKeys.has(fsKey)) {
+          firedCommentaryKeys.add(fsKey);
+          setTimeout(()=>queueCommentary(COMMENTARY.fogSlide(horseName(race,m.horse)), 2), 350);
+        }
+      });
+    }
+
+    // MUD STUCK — horse doesn't move in rain (tier 2)
+    if(race.condition==="rain" && diceResult?.moves) {
+      const stuck = diceResult.moves.filter(m=>(m.steps||0)===0);
+      stuck.forEach(m=>{
+        const msKey = race.id+'-mud-'+m.horse+'-'+rollCount;
+        if(!firedCommentaryKeys.has(msKey)) {
+          firedCommentaryKeys.add(msKey);
+          setTimeout(()=>queueCommentary(COMMENTARY.mudStuck(horseName(race,m.horse)), 2), 350);
+        }
+      });
+    }
+
   }, [rollCount]);
 
-  // Winner commentary
+  // Winner commentary — detects wire-to-wire, comeback, tiebreak, upset
   useEffect(()=>{
     if(winner===null) return;
     const wKey = race.id+'-winner';
@@ -5178,10 +5371,25 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
       const cMyBet = parseFloat((bets||{})[winner]||0);
       const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
-      setTimeout(()=>queueCommentary(
-        parseFloat(cOdds)>=5 ? COMMENTARY.upset(cWinName,cOdds) : COMMENTARY.winner(cWinName,cOdds),
-        1
-      ), 800);
+      const tr = raceTrackingRef.current;
+
+      // Detect special win types
+      const wireToWire = tr.leaderHistory.length>=4 &&
+        tr.leaderHistory.every(l=>l===winner);
+      const halfwayIdx = Math.floor(tr.posHistory.length/2);
+      const posAtHalf  = tr.posHistory[halfwayIdx]||[];
+      const wasLast    = posAtHalf.length>0 &&
+        posAtHalf[winner]===Math.min(...posAtHalf);
+      const isTiebreak = phase==="tiebreak";
+
+      let line;
+      if(isTiebreak)        line = COMMENTARY.tiebreakWinner(cWinName);
+      else if(wireToWire)   line = COMMENTARY.wireToWire(cWinName);
+      else if(wasLast)      line = COMMENTARY.comeback(cWinName);
+      else if(parseFloat(cOdds)>=5) line = COMMENTARY.upset(cWinName,cOdds);
+      else                  line = COMMENTARY.winner(cWinName,cOdds);
+
+      setTimeout(()=>queueCommentary(line, 1), 800);
       stopBgMusic(4000);
     }
   },[winner]);
