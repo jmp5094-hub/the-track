@@ -521,19 +521,50 @@ const playSound = (fn) => {
   } catch(e) {}
 };
 
-// Unlock audio context on first user gesture anywhere in the app
-const unlockAudio = () => {
-  const ctx = getAudioCtx();
-  if(ctx.state==="suspended") ctx.resume().catch(()=>{});
+// Master audio unlock — fires on EVERY gesture until confirmed unlocked
+// Handles both Web Audio API (sfx) and HTML Audio (music/bugle/commentary)
+let _masterUnlocked = false;
+const _masterUnlock = () => {
+  // 1. Resume Web Audio context for sfx
+  if(_audioCtx && _audioCtx.state==="suspended") _audioCtx.resume().catch(()=>{});
+  if(!_masterUnlocked) {
+    _masterUnlocked = true;
+    // 2. Unlock + resume any music tracks that should be playing
+    Object.keys(MUSIC_TRACKS||{}).forEach(name=>{
+      const a=_aud[name]; if(!a) return;
+      if(a._shouldPlay && a.paused) {
+        a.play().catch(()=>{});
+      } else if(!a._shouldPlay && !a.paused) {
+        // just unlock — play+pause
+        const v=a.volume; a.volume=0;
+        a.play().then(()=>{ if(!a._shouldPlay){a.pause();a.currentTime=0;} a.volume=v; }).catch(()=>{});
+      }
+    });
+    // 3. Unlock bugle
+    if(_bugleAudio.paused) { _bugleAudio.volume=0; _bugleAudio.play().then(()=>_bugleAudio.pause()).catch(()=>{}); }
+    // 4. Retry pending commentary
+    if(window._commentaryPool) {
+      window._commentaryPool.forEach(a=>{
+        if(a.src && a.paused && a.readyState>=2) a.play().catch(()=>{});
+      });
+    }
+    // 5. Retry pending audio
+    if(pendingAudio) { pendingAudio.play().catch(()=>{}); pendingAudio=null; }
+  }
 };
 if(typeof window !== "undefined") {
-  ["touchstart","mousedown","keydown"].forEach(evt =>
-    window.addEventListener(evt, unlockAudio, {once:true, passive:true})
+  ["touchstart","mousedown","click","keydown"].forEach(evt=>
+    window.addEventListener(evt, _masterUnlock, {passive:true})
   );
 }
+const unlockAudio = _masterUnlock; // keep old name working
 
 // ── Individual sound effects ──────────────────────────────────────────────────
 
+
+// Pre-create bugle audio element at module level for iOS unlock
+const _bugleAudio = new Audio("/Bugle.mp3");
+_bugleAudio.preload = "auto";
 
 // ─── BACKGROUND MUSIC — iOS-safe unified audio manager ───────────────────────
 // iOS requires all Audio elements to be .play()'d synchronously inside a user
@@ -557,27 +588,6 @@ function _getTrack(name) {
   }
   return _aud[name];
 }
-
-// Pre-create all tracks immediately so they load in background
-Object.keys(MUSIC_TRACKS).forEach(_getTrack);
-
-// Unlock all audio on first gesture — critical for iOS
-let _unlockDone = false;
-function _unlockAllAudio() {
-  if(_unlockDone) return;
-  _unlockDone = true;
-  // Play+pause each track to unlock iOS autoplay restriction
-  Object.keys(MUSIC_TRACKS).forEach(name => {
-    const a = _getTrack(name);
-    a.play().then(()=>{ if(a.volume===0){ a.pause(); a.currentTime=0; } }).catch(()=>{});
-  });
-  // Also unlock bugle
-  const b = new Audio("/Bugle.mp3");
-  b.volume=0; b.play().then(()=>b.pause()).catch(()=>{});
-}
-['touchstart','mousedown','click'].forEach(e=>{
-  window.addEventListener(e, _unlockAllAudio, {passive:true});
-});
 
 function fadeAudio(audio, targetVol, durationMs, onDone) {
   if(!audio) { if(onDone) onDone?.(); return; }
@@ -606,10 +616,11 @@ function _playTrack(name) {
   });
   _currentTrack = name;
   const a = _getTrack(name);
+  a._shouldPlay = true;
   a.volume = 0;
   if(a.paused) {
     a.play().catch(()=>{
-      ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>a.play().catch(()=>{}),{once:true,passive:true}));
+      // Will retry on next user gesture via _masterUnlock → _shouldPlay flag
     });
   }
   fadeAudio(a, target, 1500);
@@ -617,6 +628,7 @@ function _playTrack(name) {
 
 function _stopTrack(name, fadeMs=1500, cb) {
   const a = _aud[name]; if(!a||a.paused){ cb?.(); return; }
+  if(a) a._shouldPlay = false;
   fadeAudio(a, 0, fadeMs, ()=>{ a.pause(); a.currentTime=0; cb?.(); });
 }
 
@@ -644,6 +656,19 @@ let lastCommentaryTime = 0;   // timestamp of last commentary start
 const COMMENTARY_COOLDOWN = 3000; // ms minimum between tier-2/3 lines
 const firedCommentaryKeys = new Set(); // track all fired keys
 
+// Pre-create commentary audio element once — iOS requires unlock before async use
+let _commentaryAudio = null;
+function _getCommentaryAudio() {
+  if(!_commentaryAudio) {
+    _commentaryAudio = new Audio();
+    _commentaryAudio.preload = "none";
+    // Register for master unlock
+    if(!window._commentaryPool) window._commentaryPool = [];
+    window._commentaryPool.push(_commentaryAudio);
+  }
+  return _commentaryAudio;
+}
+
 async function speakLine(text) {
   if(!commentaryEnabled) return;
   lastCommentaryTime = Date.now();
@@ -653,15 +678,12 @@ async function speakLine(text) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text })
     });
-    if(!res.ok) {
-
-      commentaryPlaying = false;
-      drainQueue();
-      return;
-    }
+    if(!res.ok) { commentaryPlaying=false; drainQueue(); return; }
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    // Reuse pre-unlocked audio element
+    const audio = _getCommentaryAudio();
+    audio.src = url;
     audio.volume = 0.85;
     commentaryPlaying = true;
     audio.onended = () => {
@@ -669,20 +691,18 @@ async function speakLine(text) {
       URL.revokeObjectURL(url);
       drainQueue();
     };
-    audio.onerror = (e) => {
+    audio.onerror = () => { commentaryPlaying=false; drainQueue(); };
+    audio.load(); // iOS requires load() after src change
+    audio.play().catch(() => {
+      // Still blocked — queue for next gesture
+      pendingAudio = audio;
       commentaryPlaying = false;
-      drainQueue();
-    };
-    const playPromise = audio.play();
-    if(playPromise) {
-      playPromise.catch(() => {
-        pendingAudio = audio;
-        commentaryPlaying = false;
-        const retry = () => { if(pendingAudio){ pendingAudio.play().catch(()=>{}); pendingAudio=null; } };
-        window.addEventListener("click", retry, {once:true, passive:true});
-        window.addEventListener("touchstart", retry, {once:true, passive:true});
-      });
-    }
+      const retry = () => {
+        if(pendingAudio){ pendingAudio.play().catch(()=>{}); pendingAudio=null; }
+      };
+      window.addEventListener("touchstart", retry, {once:true, passive:true});
+      window.addEventListener("click",      retry, {once:true, passive:true});
+    });
   } catch(e) {
     commentaryPlaying = false;
     drainQueue();
@@ -1173,12 +1193,7 @@ const sfx = {
   }),
 
   bugle: () => {
-    // Reuse a single bugle element so iOS unlock carries over
-    if(!sfx._bugle) {
-      sfx._bugle = new Audio("/Bugle.mp3");
-      sfx._bugle.preload = "auto";
-    }
-    const audio = sfx._bugle;
+    const audio = _bugleAudio;
     audio.currentTime = 0;
     audio.volume = 0.9;
     audio.play().catch(()=>{
@@ -3953,7 +3968,6 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
           <span style={{color:rt.color,fontSize:11,fontWeight:700,letterSpacing:2}}>{rt.label.toUpperCase()}</span>
         </div>
 
-        <ProvablyFairBadge race={race}/>
         {/* Countdown ring */}
         <div style={{position:"relative",width:140,height:140,marginBottom:16,flexShrink:0}}>
           <svg width="140" height="140" style={{position:"absolute",top:0,left:0,transform:"rotate(-90deg)"}}>
