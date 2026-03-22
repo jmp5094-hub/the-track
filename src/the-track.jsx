@@ -5267,13 +5267,14 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         sfx.gunshot();
         setGateBurst(true);
         setTimeout(() => setGateBurst(false), 700);
+        if(!isReplay) startRaceMusic();
         resetCommentaryForRace(race.id);
         if(!firedCommentaryKeys.has(race.id+'-start')) {
           firedCommentaryKeys.add(race.id+'-start');
           // Only announce gates if we just arrived — not mid-race
           if(elapsed < 4000) {
             const names = HORSES.map((_,i)=>horseName(race,i));
-            setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names), 2), 400);
+            setTimeout(()=>{ queueCommentary(COMMENTARY.gatesOpen(names), 2); lastCommentaryTime=0; }, 400);
           }
         }
       }
