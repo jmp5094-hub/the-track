@@ -525,31 +525,24 @@ const playSound = (fn) => {
 // Handles both Web Audio API (sfx) and HTML Audio (music/bugle/commentary)
 let _masterUnlocked = false;
 const _masterUnlock = () => {
-  // 1. Resume Web Audio context for sfx
+  // 1. Resume Web Audio context for sfx (always needed)
   if(_audioCtx && _audioCtx.state==="suspended") _audioCtx.resume().catch(()=>{});
+  // Retry pending commentary on every gesture
+  if(pendingAudio) { pendingAudio.play().catch(()=>{}); pendingAudio=null; }
   if(!_masterUnlocked) {
     _masterUnlocked = true;
-    // 2. Unlock + resume any music tracks that should be playing
+    // 2. Unlock music tracks — use muted:true so no audible blip on iOS
     Object.keys(MUSIC_TRACKS||{}).forEach(name=>{
       const a=_aud[name]; if(!a) return;
-      if(a._shouldPlay && a.paused) {
-        a.play().catch(()=>{});
-      } else if(!a._shouldPlay && !a.paused) {
-        // just unlock — play+pause
-        const v=a.volume; a.volume=0;
-        a.play().then(()=>{ if(!a._shouldPlay){a.pause();a.currentTime=0;} a.volume=v; }).catch(()=>{});
-      }
+      a.muted=true;
+      a.play().then(()=>{
+        if(a._shouldPlay){ a.muted=false; }
+        else { a.pause(); a.currentTime=0; a.muted=false; }
+      }).catch(()=>{ a.muted=false; });
     });
-    // 3. Unlock bugle
-    if(_bugleAudio.paused) { _bugleAudio.volume=0; _bugleAudio.play().then(()=>_bugleAudio.pause()).catch(()=>{}); }
-    // 4. Retry pending commentary
-    if(window._commentaryPool) {
-      window._commentaryPool.forEach(a=>{
-        if(a.src && a.paused && a.readyState>=2) a.play().catch(()=>{});
-      });
-    }
-    // 5. Retry pending audio
-    if(pendingAudio) { pendingAudio.play().catch(()=>{}); pendingAudio=null; }
+    // 3. Unlock bugle — muted so no sound on unlock
+    _bugleAudio.muted=true;
+    _bugleAudio.play().then(()=>{ _bugleAudio.pause(); _bugleAudio.muted=false; }).catch(()=>{ _bugleAudio.muted=false; });
   }
 };
 if(typeof window !== "undefined") {
@@ -944,18 +937,22 @@ const COMMENTARY = {
   ]),
 };
 
-function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
-let musicEnabled = true;
+function setCommentaryEnabled(v) {
+  commentaryEnabled = v;
+  setSoundEnabled(v); // keep localStorage in sync
+  if(!v) { commentaryQueue=[]; commentaryPlaying=false; }
+}
+let musicEnabled = getMusicEnabled(); // sync with localStorage on startup
 function setMusicEnabledGlobal(v) {
   musicEnabled = v;
+  setMusicEnabled(v); // always keep localStorage in sync
   if(!v) {
-    // Remember current track then stop all
     const was = _currentTrack;
-    stopAllMusic(500);
-    _currentTrack = was; // preserve so we can restore
+    stopAllMusic(300);
+    _currentTrack = was;
   } else {
-    // Restore whichever track was playing
-    if(_currentTrack) _playTrack(_currentTrack);
+    // Restore track — small delay to let stop complete
+    if(_currentTrack) setTimeout(()=>_playTrack(_currentTrack), 400);
   }
 }
 
