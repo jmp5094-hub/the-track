@@ -5101,6 +5101,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
       // Catch up silently if we're behind — jump positions without animation
       if(targetIdx > eng.lastRollIdx + 1) {
+        console.log("[C] CATCHUP from",eng.lastRollIdx,"to",targetIdx);
         const fr = eng.rolls[targetIdx - 1];
         if(fr){ setPositions([...fr.positions]); setLegDone([...fr.legDone]); setPhase(fr.phase||"main"); setRollCount(targetIdx); }
         eng.lastRollIdx = targetIdx - 1;
@@ -5122,6 +5123,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         const rollIdx = eng.lastRollIdx + 1;
         const roll = eng.rolls[rollIdx];
         if(!roll) return;
+        console.log("[C] ANIMATE roll",rollIdx,"doubles:",roll?.isDoubles);
         eng.animating  = true;
         eng.lastRollIdx = rollIdx;
         rollCountRef.current = rollIdx + 1;
