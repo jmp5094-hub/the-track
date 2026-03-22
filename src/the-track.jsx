@@ -614,6 +614,7 @@ const EL_URL = "/api/commentary"; // Vercel serverless proxy — keeps API key s
 let commentaryQueue   = [];
 let commentaryPlaying = false;
 let commentaryEnabled = true;
+let lastCommentaryTime = 0;   // timestamp of last commentary start
 const firedCommentaryKeys = new Set(); // track all fired keys
 
 async function speakLine(text) {
