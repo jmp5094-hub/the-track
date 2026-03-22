@@ -536,9 +536,10 @@ if(typeof window !== "undefined") {
 
 
 // ─── BACKGROUND MUSIC ────────────────────────────────────────────────────────
-// Two tracks: countdown music (tension build) and race music (Final Fur)
+// Three tracks: lobby, countdown/odds, race
 let bgMusic     = null; // countdown/odds track
-let raceMusic   = null; // race track (Final_Fur.mp3)
+let raceMusic   = null; // race track
+let lobbyMusic  = null; // lobby/betting screen track
 
 function initBgMusic() {
   if(bgMusic) return;
@@ -546,6 +547,32 @@ function initBgMusic() {
   bgMusic.loop = true;
   bgMusic.volume = 0;
   bgMusic.preload = "auto";
+}
+
+function initLobbyMusic() {
+  if(lobbyMusic) return;
+  lobbyMusic = new Audio("/Lobby_music.mp3");
+  lobbyMusic.loop = true;
+  lobbyMusic.volume = 0;
+  lobbyMusic.preload = "auto";
+}
+
+function startLobbyMusic() {
+  if(!musicEnabled) return;
+  initLobbyMusic();
+  if(lobbyMusic.paused) {
+    lobbyMusic.play().catch(()=>{
+      const retry = ()=>{ lobbyMusic.play().catch(()=>{}); };
+      window.addEventListener("click", retry, {once:true});
+      window.addEventListener("touchstart", retry, {once:true});
+    });
+  }
+  fadeAudio(lobbyMusic, 0.05, 2000);
+}
+
+function stopLobbyMusic(fadeMs=1500) {
+  if(!lobbyMusic || lobbyMusic.paused) return;
+  fadeAudio(lobbyMusic, 0, fadeMs, ()=>{ lobbyMusic.pause(); lobbyMusic.currentTime=0; });
 }
 
 function initRaceMusic() {
@@ -607,10 +634,16 @@ function startRaceMusic() {
   fadeAudio(raceMusic, 0.03, 1500);
 }
 
-// Stop everything
+// Stop race/countdown music only (not lobby)
 function stopBgMusic(fadeMs=2000) {
   fadeAudio(bgMusic,   0, fadeMs, ()=>{ if(bgMusic)  { bgMusic.pause();   bgMusic.currentTime=0;   } });
   fadeAudio(raceMusic, 0, fadeMs, ()=>{ if(raceMusic) { raceMusic.pause(); raceMusic.currentTime=0; } });
+}
+
+// Stop all music including lobby
+function stopAllMusic(fadeMs=1500) {
+  stopBgMusic(fadeMs);
+  stopLobbyMusic(fadeMs);
 }
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
@@ -906,24 +939,25 @@ const COMMENTARY = {
 
 function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
 let musicEnabled = true;
-let activeMusicTrack = null; // "bg" | "race" | null
+let activeMusicTrack = null; // "bg" | "race" | "lobby" | null
 
 function setMusicEnabledGlobal(v) {
   musicEnabled = v;
   if(!v) {
-    // Pause both tracks but remember which was active
-    if(raceMusic && !raceMusic.paused) { activeMusicTrack = "race"; raceMusic.pause(); }
-    else if(bgMusic && !bgMusic.paused) { activeMusicTrack = "bg"; bgMusic.pause(); }
+    if(raceMusic && !raceMusic.paused)   { activeMusicTrack = "race";  raceMusic.pause(); }
+    else if(bgMusic && !bgMusic.paused)  { activeMusicTrack = "bg";    bgMusic.pause(); }
+    else if(lobbyMusic && !lobbyMusic.paused) { activeMusicTrack = "lobby"; lobbyMusic.pause(); }
   } else {
-    // Resume only the track that was playing before mute
     if(activeMusicTrack === "race" && raceMusic) {
       raceMusic.play().catch(()=>{});
       fadeAudio(raceMusic, 0.03, 1000);
     } else if(activeMusicTrack === "bg" && bgMusic) {
       bgMusic.play().catch(()=>{});
       fadeAudio(bgMusic, 0.05, 1000);
+    } else if(activeMusicTrack === "lobby" && lobbyMusic) {
+      lobbyMusic.play().catch(()=>{});
+      fadeAudio(lobbyMusic, 0.05, 1000);
     }
-    // If nothing was tracked, don't start anything — let normal flow handle it
   }
 }
 
@@ -3745,6 +3779,11 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
 // onConfirmBets: called once when user locks bets — just saves, no race start
 // onRaceStart: called when clock hits zero
 function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBets, confirmedPot, sharedPot, onRaceStart, devForceStart, onDevForceStart, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
+  useEffect(()=>{
+    // Start lobby music when entering betting screen, if not already locked
+    startLobbyMusic();
+    return ()=>{}; // don't stop on unmount — goLobby handles that
+  },[]);
   const rt = RACE_TYPES[race.type];
 
   // live clock — re-render every second
@@ -3857,7 +3896,8 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     // Start music as soon as locked (30s countdown begins)
     if((isLocked||isRacing) && !musicStartedRef.current){
       musicStartedRef.current = true;
-      startBgMusic();
+      stopLobbyMusic(1000); // fade out lobby music
+      setTimeout(()=>startBgMusic(), 500); // start countdown music
       // Welcome commentary when 30s countdown starts
       const wKey = race.id+'-welcome';
       if(!firedCommentaryKeys.has(wKey)) {
@@ -7272,7 +7312,16 @@ function App() {
   },[user]);
 
   const handleLogin=u=>{ setUser(u); };
-  const handleLogout=()=>{ signOut(auth); setUser(null); setScreen("lobby"); };
+  const handleLogout=()=>{ signOut(auth); setUser(null); stopAllMusic(500); setScreen("lobby"); };
+
+  // Lobby music controller
+  useEffect(()=>{
+    if(screen==="lobby" && user) {
+      setTimeout(()=>startLobbyMusic(), 300);
+    } else if(screen==="race" || screen==="payout" || screen==="private-payout") {
+      stopLobbyMusic(500);
+    }
+  },[screen, user]);
 
   const handleEnterRace=async(race)=>{ // async only needed for payout path
     const st = raceStatus(race, gameNow());
@@ -7490,6 +7539,7 @@ function App() {
   const goLobby=()=>{
     stopBgMusic(1500);
     setScreen("lobby");
+    setTimeout(()=>startLobbyMusic(), 1600);
     setWinner(null);
     setSelectedRace(null);
     setBets({});
