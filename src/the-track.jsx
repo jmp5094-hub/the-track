@@ -591,6 +591,7 @@ const firedCommentaryKeys = new Set(); // track all fired keys
 
 async function speakLine(text) {
   if(!commentaryEnabled) return;
+  lastCommentaryTime = Date.now();
   try {
     const res = await fetch(EL_URL, {
       method: "POST",
@@ -650,20 +651,31 @@ function resetCommentaryForRace(raceId) {
   }
 }
 
-function queueCommentary(text, priority=false) {
+// tier 1 = always plays (winner, upset, tiebreak, final stretch)
+// tier 2 = plays only if nothing playing + cooldown elapsed (doubles, big lead, weather)
+// tier 3 = plays only if completely silent + cooldown elapsed (early leader, midrace)
+function queueCommentary(text, tier=2) {
   if(!commentaryEnabled) return;
-  if(priority) {
-    // Interrupt current + clear queue
+  const now = Date.now();
+
+  if(tier === 1) {
+    // Always plays — clear queue, wait for current line to finish then play
     commentaryQueue = [text];
-    if(commentaryPlaying) {
-      commentaryPlaying = false;
-      speakLine(text);
-    } else {
+    if(!commentaryPlaying) drainQueue();
+    // If playing, it will drain after current line ends
+  } else if(tier === 2) {
+    // Only if nothing playing and cooldown elapsed
+    if(!commentaryPlaying && now - lastCommentaryTime > COMMENTARY_COOLDOWN) {
+      commentaryQueue = [text];
       drainQueue();
     }
+    // Otherwise drop it — stale commentary is worse than no commentary
   } else {
-    if(commentaryQueue.length < 2) commentaryQueue.push(text); // cap queue
-    if(!commentaryPlaying) drainQueue();
+    // tier 3 — only if completely silent and cooldown elapsed
+    if(!commentaryPlaying && commentaryQueue.length === 0 && now - lastCommentaryTime > COMMENTARY_COOLDOWN) {
+      commentaryQueue = [text];
+      drainQueue();
+    }
   }
 }
 
@@ -4783,7 +4795,7 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                     setPhase("tiebreak");
                     setTieHorses(potentialWinners);
                     setRollCount(0);
-                    T(()=>queueCommentary(COMMENTARY.tiebreak(), true), 300);
+                    T(()=>queueCommentary(COMMENTARY.tiebreak(), 1), 300);
                     T(doRoll, 2400);
                   } else {
                     ref.current.winner  = w;
@@ -4796,7 +4808,7 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                     const cMyBet = parseFloat(bets?.[w]||0);
                     const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
                     const cUpset = parseFloat(cOdds) >= 5;
-                    T(()=>queueCommentary(cUpset?COMMENTARY.upset(cWinName,cOdds):COMMENTARY.winner(cWinName,cOdds), true), 600);
+                    T(()=>queueCommentary(cUpset?COMMENTARY.upset(cWinName,cOdds):COMMENTARY.winner(cWinName,cOdds), 1), 600);
                     T(()=>onWinner(w), 2600);
                   }
                 }
@@ -5056,7 +5068,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       if(!firedCommentaryKeys.has(dKey)) {
         firedCommentaryKeys.add(dKey);
         const mover = diceResult.moves.find(m=>(m.steps||0)>0)?.horse ?? 0;
-        setTimeout(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 400);
+        setTimeout(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover)), 2), 400);
       }
     }
     // EARLY LEADER (rolls 2-4)
@@ -5067,7 +5079,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         const leader = positions.indexOf(Math.max(...positions));
         const sorted = [...positions].sort((a,b)=>b-a);
         if(positions[leader]>0 && sorted[0]-sorted[1]>=1) {
-          setTimeout(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
+          setTimeout(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader)), 3), 400);
         }
       }
     }
@@ -5079,7 +5091,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       if(!firedCommentaryKeys.has(blKey)) {
         firedCommentaryKeys.add(blKey);
         const leader = positions.indexOf(Math.max(...positions));
-        setTimeout(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader))), 400);
+        setTimeout(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader)), 2), 400);
       }
     }
 
@@ -5092,7 +5104,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         firedCommentaryKeys.add(mKey);
         const sortedE = positions.map((v,i)=>[i,v]).sort((a,b)=>b[1]-a[1]);
         if(sortedE[0][1]-sortedE[1][1]<=2) {
-          setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
+          setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0])), 3), 400);
         }
       }
     }
@@ -5106,7 +5118,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       if(!firedCommentaryKeys.has(fKey)) {
         firedCommentaryKeys.add(fKey);
         const leader = positions.indexOf(leaderPos);
-        setTimeout(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader))), 300);
+        setTimeout(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader)), 1), 300);
       }
     }
 
@@ -5118,7 +5130,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
           const hKey = race.id+'-hurdle-'+m.horse;
           if(!firedCommentaryKeys.has(hKey)) {
             firedCommentaryKeys.add(hKey);
-            setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+            setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse)), 2), 350);
           }
         }
       });
@@ -5131,7 +5143,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
           const tKey = race.id+'-turn-'+hi;
           if(!firedCommentaryKeys.has(tKey)) {
             firedCommentaryKeys.add(tKey);
-            setTimeout(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi))), 300);
+            setTimeout(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi)), 1), 300);
           }
         }
       });
@@ -5145,7 +5157,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
         if(!firedCommentaryKeys.has(wKey)) {
           firedCommentaryKeys.add(wKey);
           const slid = diceResult.moves.find(m=>(m.steps||0)<0)?.horse ?? 0;
-          setTimeout(()=>queueCommentary(COMMENTARY.weather(race.condition, horseName(race,slid))), 350);
+          setTimeout(()=>queueCommentary(COMMENTARY.weather(race.condition, horseName(race,slid)), 2), 350);
         }
       }
     }
@@ -5163,7 +5175,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
       setTimeout(()=>queueCommentary(
         parseFloat(cOdds)>=5 ? COMMENTARY.upset(cWinName,cOdds) : COMMENTARY.winner(cWinName,cOdds),
-        true
+        1
       ), 800);
       stopBgMusic(4000);
     }
@@ -5232,7 +5244,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
           // Only announce gates if we just arrived — not mid-race
           if(elapsed < 4000) {
             const names = HORSES.map((_,i)=>horseName(race,i));
-            setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names)), 400);
+            setTimeout(()=>queueCommentary(COMMENTARY.gatesOpen(names), 2), 400);
           }
         }
       }
@@ -5322,7 +5334,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     if(!firedCommentaryKeys.has(dKey)){
                       firedCommentaryKeys.add(dKey);
                       const mover = roll.moves.find(m=>(m.steps||0)>0)?.horse ?? 0;
-                      setTimeout(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover))), 350);
+                      setTimeout(()=>queueCommentary(COMMENTARY.doubles(horseName(race,mover)), 2), 350);
                     }
                   }
                   // EARLY LEADER (rolls 2-4)
@@ -5333,7 +5345,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                       const leader = newPos.indexOf(Math.max(...newPos));
                       const sorted2 = [...newPos].sort((a,b)=>b-a);
                       if(newPos[leader]>0 && sorted2[0]-sorted2[1]>=1){
-                        setTimeout(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader))), 400);
+                        setTimeout(()=>queueCommentary(COMMENTARY.earlyLeader(horseName(race,leader)), 3), 400);
                       }
                     }
                   }
@@ -5345,7 +5357,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     if(!firedCommentaryKeys.has(blKey)){
                       firedCommentaryKeys.add(blKey);
                       const leader = newPos.indexOf(Math.max(...newPos));
-                      setTimeout(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader))), 400);
+                      setTimeout(()=>queueCommentary(COMMENTARY.bigLead(horseName(race,leader)), 2), 400);
                     }
                   }
 
@@ -5358,7 +5370,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                       firedCommentaryKeys.add(mKey);
                       const sortedE = [...newPos.entries()].sort((a,b)=>b[1]-a[1]);
                       if(sortedE[0][1]-sortedE[1][1]<=2){
-                        setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0]))), 400);
+                        setTimeout(()=>queueCommentary(COMMENTARY.midraceClose(horseName(race,sortedE[0][0]),horseName(race,sortedE[1][0])), 3), 400);
                       }
                     }
                   }
@@ -5372,7 +5384,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     if(!firedCommentaryKeys.has(fKey)){
                       firedCommentaryKeys.add(fKey);
                       const leader = newPos.indexOf(leaderPos);
-                      setTimeout(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader))), 300);
+                      setTimeout(()=>queueCommentary(COMMENTARY.finalStretch(horseName(race,leader)), 1), 300);
                     }
                   }
 
@@ -5384,7 +5396,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                         const hKey = race.id+'-hurdle-'+m.horse;
                         if(!firedCommentaryKeys.has(hKey)){
                           firedCommentaryKeys.add(hKey);
-                          setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse))), 350);
+                          setTimeout(()=>queueCommentary(COMMENTARY.hurdle(horseName(race,m.horse)), 2), 350);
                         }
                       }
                     });
@@ -5397,7 +5409,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                         const tKey = race.id+'-turn-'+hi;
                         if(!firedCommentaryKeys.has(tKey)){
                           firedCommentaryKeys.add(tKey);
-                          setTimeout(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi))), 300);
+                          setTimeout(()=>queueCommentary(COMMENTARY.turnaround(horseName(race,hi)), 1), 300);
                         }
                       }
                     });
