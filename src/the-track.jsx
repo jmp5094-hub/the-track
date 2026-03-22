@@ -2652,11 +2652,11 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
               <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12}}>${fmt2(user.balance)}</span>
             </button>
             {/* Sound + Music toggles */}
-            <button onClick={()=>{ const v=!getSoundEnabled(); setSoundEnabled(v); setSoundOn(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); }} style={{width:32,height:32,borderRadius:8,background:getSoundEnabled()?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:getSoundEnabled()?1:0.45}}>
+            <button onClick={toggleSound} style={{width:32,height:32,borderRadius:8,background:soundOn?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:soundOn?1:0.45}}>
               {soundOn?"🔊":"🔇"}
             </button>
-            <button onClick={()=>{ const v=!getMusicEnabled(); setMusicEnabled(v); setMusicEnabledGlobal(v); }} style={{width:32,height:32,borderRadius:8,background:getMusicEnabled()?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:getMusicEnabled()?1:0.45}}>
-              {getMusicEnabled()?"🎵":"🔕"}
+            <button onClick={toggleMusic2} style={{width:32,height:32,borderRadius:8,background:musicOn2?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:musicOn2?1:0.45}}>
+              {musicOn2?"🎵":"🔕"}
             </button>
             {/* Burger */}
             <button onClick={()=>setMenuOpen(o=>!o)} style={{position:"relative",width:36,height:36,borderRadius:8,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
