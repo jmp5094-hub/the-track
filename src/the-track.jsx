@@ -535,116 +535,102 @@ if(typeof window !== "undefined") {
 // ── Individual sound effects ──────────────────────────────────────────────────
 
 
-// ─── BACKGROUND MUSIC ────────────────────────────────────────────────────────
-// Three tracks: lobby, countdown/odds, race
-let bgMusic     = null; // countdown/odds track
-let raceMusic   = null; // race track
-let lobbyMusic  = null; // lobby/betting screen track
+// ─── BACKGROUND MUSIC — iOS-safe unified audio manager ───────────────────────
+// iOS requires all Audio elements to be .play()'d synchronously inside a user
+// gesture before async playback is allowed. We pre-create all tracks and unlock
+// them all together on the first user tap.
 
-function initBgMusic() {
-  if(bgMusic) return;
-  bgMusic = new Audio("/The_Final_Furlong_2026-03-19T020327.mp3");
-  bgMusic.loop = true;
-  bgMusic.volume = 0;
-  bgMusic.preload = "auto";
-}
+const MUSIC_TRACKS = {
+  lobby:     { src:"/Lobby_music.mp3",                            targetVol:0.05 },
+  countdown: { src:"/The_Final_Furlong_2026-03-19T020327.mp3",    targetVol:0.05 },
+  race:      { src:"/Race_Day.mp3",                               targetVol:0.03 },
+};
+const _aud = {};       // name → Audio element
+let _audUnlocked = false;
+let _currentTrack = null;
 
-function initLobbyMusic() {
-  if(lobbyMusic) return;
-  lobbyMusic = new Audio("/Lobby_music.mp3");
-  lobbyMusic.loop = true;
-  lobbyMusic.volume = 0;
-  lobbyMusic.preload = "auto";
-}
-
-function startLobbyMusic() {
-  if(!musicEnabled) return;
-  initLobbyMusic();
-  if(lobbyMusic.paused) {
-    lobbyMusic.play().catch(()=>{
-      const retry = ()=>{ lobbyMusic.play().catch(()=>{}); };
-      window.addEventListener("click", retry, {once:true});
-      window.addEventListener("touchstart", retry, {once:true});
-    });
+function _getTrack(name) {
+  if(!_aud[name]) {
+    const a = new Audio(MUSIC_TRACKS[name].src);
+    a.loop = true; a.volume = 0; a.preload = "auto";
+    _aud[name] = a;
   }
-  fadeAudio(lobbyMusic, 0.05, 2000);
+  return _aud[name];
 }
 
-function stopLobbyMusic(fadeMs=1500) {
-  if(!lobbyMusic || lobbyMusic.paused) return;
-  fadeAudio(lobbyMusic, 0, fadeMs, ()=>{ lobbyMusic.pause(); lobbyMusic.currentTime=0; });
-}
+// Pre-create all tracks immediately so they load in background
+Object.keys(MUSIC_TRACKS).forEach(_getTrack);
 
-function initRaceMusic() {
-  if(raceMusic) return;
-  raceMusic = new Audio("/Race_Day.mp3");
-  raceMusic.loop = true;
-  raceMusic.volume = 0;
-  raceMusic.preload = "auto";
+// Unlock all audio on first gesture — critical for iOS
+let _unlockDone = false;
+function _unlockAllAudio() {
+  if(_unlockDone) return;
+  _unlockDone = true;
+  // Play+pause each track to unlock iOS autoplay restriction
+  Object.keys(MUSIC_TRACKS).forEach(name => {
+    const a = _getTrack(name);
+    a.play().then(()=>{ if(a.volume===0){ a.pause(); a.currentTime=0; } }).catch(()=>{});
+  });
+  // Also unlock bugle
+  const b = new Audio("/Bugle.mp3");
+  b.volume=0; b.play().then(()=>b.pause()).catch(()=>{});
 }
+['touchstart','mousedown','click'].forEach(e=>{
+  window.addEventListener(e, _unlockAllAudio, {passive:true});
+});
 
 function fadeAudio(audio, targetVol, durationMs, onDone) {
-  if(!audio) { if(onDone) onDone(); return; }
+  if(!audio) { if(onDone) onDone?.(); return; }
+  if(audio._fadeIv) { clearInterval(audio._fadeIv); audio._fadeIv=null; }
   const startVol = audio.volume;
   const diff = targetVol - startVol;
-  const steps = 30;
-  const stepMs = durationMs / steps;
+  if(Math.abs(diff)<0.001) { if(onDone) onDone?.(); return; }
+  const steps = Math.max(1, Math.round(durationMs/50));
   let step = 0;
-  const iv = setInterval(()=>{
+  audio._fadeIv = setInterval(()=>{
     step++;
-    audio.volume = Math.max(0, Math.min(1, startVol + diff * (step/steps)));
-    if(step >= steps) {
-      clearInterval(iv);
-      if(onDone) onDone();
-    }
-  }, stepMs);
+    audio.volume = Math.max(0, Math.min(1, startVol+diff*(step/steps)));
+    if(step>=steps){ clearInterval(audio._fadeIv); audio._fadeIv=null; if(onDone) onDone?.(); }
+  }, durationMs/steps);
 }
 
-// Start countdown music (30s screen)
-function startBgMusic() {
+function _playTrack(name) {
   if(!musicEnabled) return;
-  initBgMusic();
-  initRaceMusic(); // pre-load race track
-  if(bgMusic.paused) {
-    bgMusic.play().catch(()=>{
-      const retry = ()=>{ bgMusic.play().catch(()=>{}); };
-      window.addEventListener("click", retry, {once:true});
-      window.addEventListener("touchstart", retry, {once:true});
+  const target = MUSIC_TRACKS[name].targetVol;
+  // Fade out all other tracks
+  Object.keys(MUSIC_TRACKS).forEach(n=>{
+    if(n!==name) {
+      const a=_aud[n]; if(!a||a.paused) return;
+      fadeAudio(a, 0, 800, ()=>{ a.pause(); a.currentTime=0; });
+    }
+  });
+  _currentTrack = name;
+  const a = _getTrack(name);
+  a.volume = 0;
+  if(a.paused) {
+    a.play().catch(()=>{
+      ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>a.play().catch(()=>{}),{once:true,passive:true}));
     });
   }
-  fadeAudio(bgMusic,   0.05, 1500);
+  fadeAudio(a, target, 1500);
 }
 
-// Called on bugle — fade out countdown music
-function fadeBgMusic(targetVol, durationMs, onDone) {
-  fadeAudio(bgMusic, targetVol, durationMs, onDone);
+function _stopTrack(name, fadeMs=1500, cb) {
+  const a = _aud[name]; if(!a||a.paused){ cb?.(); return; }
+  fadeAudio(a, 0, fadeMs, ()=>{ a.pause(); a.currentTime=0; cb?.(); });
 }
 
-// Called on gunshot — start race music from 4s mark
-function startRaceMusic() {
-  if(!musicEnabled) return;
-  initRaceMusic();
-  raceMusic.currentTime = 0;
-  raceMusic.volume = 0;
-  raceMusic.play().catch(()=>{
-    const retry = ()=>{ raceMusic.play().catch(()=>{}); };
-    window.addEventListener("click", retry, {once:true});
-    window.addEventListener("touchstart", retry, {once:true});
-  });
-  fadeAudio(raceMusic, 0.03, 1500);
-}
-
-// Stop race/countdown music only (not lobby)
-function stopBgMusic(fadeMs=2000) {
-  fadeAudio(bgMusic,   0, fadeMs, ()=>{ if(bgMusic)  { bgMusic.pause();   bgMusic.currentTime=0;   } });
-  fadeAudio(raceMusic, 0, fadeMs, ()=>{ if(raceMusic) { raceMusic.pause(); raceMusic.currentTime=0; } });
-}
-
-// Stop all music including lobby
-function stopAllMusic(fadeMs=1500) {
-  stopBgMusic(fadeMs);
-  stopLobbyMusic(fadeMs);
-}
+// Public API — same names as before so all callers work unchanged
+function startLobbyMusic()         { _playTrack("lobby");                      }
+function startBgMusic()            { _playTrack("countdown");                   }
+function startRaceMusic()          { _playTrack("race");                        }
+function stopLobbyMusic(ms=1500)   { _stopTrack("lobby", ms);                  }
+function fadeBgMusic(v,ms,cb)      { fadeAudio(_aud.countdown, v, ms||1500, cb); }
+function stopBgMusic(ms=2000)      { _stopTrack("countdown",ms); _stopTrack("race",ms); }
+function stopAllMusic(ms=1500)     { Object.keys(MUSIC_TRACKS).forEach(n=>_stopTrack(n,ms)); _currentTrack=null; }
+function initBgMusic()             {}  // no-op — tracks pre-created above
+function initRaceMusic()           {}  // no-op
+function initLobbyMusic()          {}  // no-op
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
 // Reset commentary state when race changes
@@ -687,15 +673,16 @@ async function speakLine(text) {
       commentaryPlaying = false;
       drainQueue();
     };
-    audio.play().catch(() => {
-      // Autoplay blocked — store and retry on next user gesture
-      pendingAudio = audio;
-      commentaryPlaying = false;
-      // Hook into existing unlock system
-      const retry = () => { if(pendingAudio){ pendingAudio.play().catch(()=>{}); pendingAudio=null; } };
-      window.addEventListener("click", retry, {once:true});
-      window.addEventListener("touchstart", retry, {once:true});
-    });
+    const playPromise = audio.play();
+    if(playPromise) {
+      playPromise.catch(() => {
+        pendingAudio = audio;
+        commentaryPlaying = false;
+        const retry = () => { if(pendingAudio){ pendingAudio.play().catch(()=>{}); pendingAudio=null; } };
+        window.addEventListener("click", retry, {once:true, passive:true});
+        window.addEventListener("touchstart", retry, {once:true, passive:true});
+      });
+    }
   } catch(e) {
     commentaryPlaying = false;
     drainQueue();
@@ -939,25 +926,16 @@ const COMMENTARY = {
 
 function setCommentaryEnabled(v) { commentaryEnabled = v; if(!v) { commentaryQueue=[]; commentaryPlaying=false; } }
 let musicEnabled = true;
-let activeMusicTrack = null; // "bg" | "race" | "lobby" | null
-
 function setMusicEnabledGlobal(v) {
   musicEnabled = v;
   if(!v) {
-    if(raceMusic && !raceMusic.paused)   { activeMusicTrack = "race";  raceMusic.pause(); }
-    else if(bgMusic && !bgMusic.paused)  { activeMusicTrack = "bg";    bgMusic.pause(); }
-    else if(lobbyMusic && !lobbyMusic.paused) { activeMusicTrack = "lobby"; lobbyMusic.pause(); }
+    // Remember current track then stop all
+    const was = _currentTrack;
+    stopAllMusic(500);
+    _currentTrack = was; // preserve so we can restore
   } else {
-    if(activeMusicTrack === "race" && raceMusic) {
-      raceMusic.play().catch(()=>{});
-      fadeAudio(raceMusic, 0.03, 1000);
-    } else if(activeMusicTrack === "bg" && bgMusic) {
-      bgMusic.play().catch(()=>{});
-      fadeAudio(bgMusic, 0.05, 1000);
-    } else if(activeMusicTrack === "lobby" && lobbyMusic) {
-      lobbyMusic.play().catch(()=>{});
-      fadeAudio(lobbyMusic, 0.05, 1000);
-    }
+    // Restore whichever track was playing
+    if(_currentTrack) _playTrack(_currentTrack);
   }
 }
 
@@ -1195,9 +1173,19 @@ const sfx = {
   }),
 
   bugle: () => {
-    const audio = new Audio("/Bugle.mp3");
+    // Reuse a single bugle element so iOS unlock carries over
+    if(!sfx._bugle) {
+      sfx._bugle = new Audio("/Bugle.mp3");
+      sfx._bugle.preload = "auto";
+    }
+    const audio = sfx._bugle;
+    audio.currentTime = 0;
     audio.volume = 0.9;
-    audio.play().catch(()=>{});
+    audio.play().catch(()=>{
+      ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>{
+        audio.currentTime=0; audio.play().catch(()=>{});
+      },{once:true,passive:true}));
+    });
   },
 };
 
