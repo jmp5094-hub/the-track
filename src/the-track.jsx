@@ -760,6 +760,13 @@ const COMMENTARY = {
     `The hurdle is no problem for ${name} — not missing a beat!`,
     `${name} takes the hurdle in stride — class showing there!`,
   ]),
+  betsClosing: () => pick([
+    `Bets are closing — five seconds to get your money down!`,
+    `Final five seconds — place your bets now or forever hold your peace!`,
+    `The window is closing — five, four, three, two, one — bets are locked!`,
+    `Last chance to bet — five seconds on the clock!`,
+    `Five seconds to betting close — make your move!`,
+  ]),
   hurdleDoubles: (name) => pick([
     `Doubles AND the hurdle — ${name} clears it in one spectacular move!`,
     `${name} rolls doubles right at the hurdle — flies straight over!`,
@@ -3834,15 +3841,24 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
   },[revealCount_cur]);
 
   // Fire bugle + start music when countdown begins
-  const musicStartedRef = useRef(false);
+  const musicStartedRef   = useRef(false);
+  const betsCallFiredRef  = useRef(false);
   useEffect(()=>{
     const countdown = devForceStart ? devCountdown : Math.max(0, liveSecs);
+    const betsLeft  = Math.max(0, liveSecs - BET_CLOSE_SECS); // secs until betting closes
+
     // Start music as soon as locked (30s countdown begins)
     if((isLocked||isRacing) && !musicStartedRef.current){
       musicStartedRef.current = true;
       startBgMusic();
     }
-    // Bugle at 4 seconds
+    // Bets closing commentary — fires when betting window has 5 seconds left
+    if(betsLeft <= 5 && betsLeft > 0 && st === "betting" && !betsCallFiredRef.current) {
+      betsCallFiredRef.current = true;
+      queueCommentary(COMMENTARY.betsClosing(), 2);
+    }
+    if(betsLeft === 0) betsCallFiredRef.current = false;
+    // Bugle at 8 seconds of race countdown
     if(countdown <= 8 && countdown > 0 && !bugleFiredRef.current) {
       bugleFiredRef.current = true;
       sfx.bugle();
