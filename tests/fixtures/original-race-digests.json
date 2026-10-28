@@ -1,0 +1,92 @@
+[
+  {
+    "type": "standard",
+    "condition": "sunny",
+    "seeds": 250,
+    "sha256": "c386d797c2eec078082d475f5120688203afff5b92feb73fe886d258cbcd9720"
+  },
+  {
+    "type": "standard",
+    "condition": "rain",
+    "seeds": 250,
+    "sha256": "2a62831a6b0c5db95db53d8539b522a6b9fc5af4f80583691d3255ebdb3768f1"
+  },
+  {
+    "type": "standard",
+    "condition": "fog",
+    "seeds": 250,
+    "sha256": "6fcaa3a915b0d97672a97ab84446de46fb42367f9ef8d6166474a734cffa9f2f"
+  },
+  {
+    "type": "down_back",
+    "condition": "sunny",
+    "seeds": 250,
+    "sha256": "5e207d42c5561e29434ac1214454b0a18e2e11caf0293e139280d12b0964b970"
+  },
+  {
+    "type": "down_back",
+    "condition": "rain",
+    "seeds": 250,
+    "sha256": "f375df21b3a54f2bff4a79dc47687913f3eb92e3cf1ff697767d52e3bddcb271"
+  },
+  {
+    "type": "down_back",
+    "condition": "fog",
+    "seeds": 250,
+    "sha256": "7286f5b3e8a476884437b79cb28e62b5f1b284662414fb7ef167cc36053f3b26"
+  },
+  {
+    "type": "hurdle",
+    "condition": "sunny",
+    "seeds": 250,
+    "sha256": "a70907df41422c74a7e0ce7dd4c27b8f540599b5910916d57fa3786970ed8f95"
+  },
+  {
+    "type": "hurdle",
+    "condition": "rain",
+    "seeds": 250,
+    "sha256": "4d6c8f5afc9d8f584c64fbb2fae6aa3edbfd68b74722f4f8637200cb49541508"
+  },
+  {
+    "type": "hurdle",
+    "condition": "fog",
+    "seeds": 250,
+    "sha256": "47cae86872e4652ce589cfde55d6472956bcd0c2cbe5f826f704601a1e364fe6"
+  },
+  {
+    "type": "magic_dice",
+    "condition": "sunny",
+    "seeds": 250,
+    "sha256": "02e0713aab4ed2b27b8c3ad83298f87140f6f5af8e6f2cc631ca43e5ba440ef7"
+  },
+  {
+    "type": "magic_dice",
+    "condition": "rain",
+    "seeds": 250,
+    "sha256": "02e0713aab4ed2b27b8c3ad83298f87140f6f5af8e6f2cc631ca43e5ba440ef7"
+  },
+  {
+    "type": "magic_dice",
+    "condition": "fog",
+    "seeds": 250,
+    "sha256": "02e0713aab4ed2b27b8c3ad83298f87140f6f5af8e6f2cc631ca43e5ba440ef7"
+  },
+  {
+    "type": "triple_dice",
+    "condition": "sunny",
+    "seeds": 250,
+    "sha256": "10ce1e58f2b031c873865f5b0d7cb5d3848cc04cc6aa84af787fbf4b49cc3391"
+  },
+  {
+    "type": "triple_dice",
+    "condition": "rain",
+    "seeds": 250,
+    "sha256": "5138007d8d683379a63f72f0c709f9e5d6bf0a0bf855d0caf37c3741515d40d6"
+  },
+  {
+    "type": "triple_dice",
+    "condition": "fog",
+    "seeds": 250,
+    "sha256": "310e5fbac54c7654293eec68c70f40bad179b5d2823988e2e572cfeb4538419a"
+  }
+]

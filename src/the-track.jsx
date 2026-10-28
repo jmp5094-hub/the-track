@@ -1,4 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { simulateRaceWithHistory } from "./cinematic/rules.mjs";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
+import ClubhouseLobby from "./cinematic/ClubhouseLobby";
+import { TicketRoom, RevealRoom } from "./cinematic/TicketRoom";
+import ResultRoom from "./cinematic/ResultRoom";
+const CinematicRaceRoom = lazy(() => import("./cinematic/RaceRoom"));
 import LottieHorse, { OutlineFilters, getCoatIndex, getCoatName } from "./LottieHorse";
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
@@ -2692,16 +2697,7 @@ function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onPrivateRaces, on
 }
 
 function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions, onLogout, onBank, onHowTo, pendingCount }) {
-  const profile  = getProfile(user.username);
-  const avatar   = profile.avatar || "🏇";
   const [menuOpen, setMenuOpen] = useState(false);
-  const [winWidth, setWinWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 800);
-  useEffect(()=>{
-    const handler = () => setWinWidth(window.innerWidth);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-  const isMobile = winWidth < 600;
 
   const navItems = [
     ["🏠","Lobby",         onLobby,         null],
@@ -2720,101 +2716,12 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
 
   const closeMenu = (fn) => { setMenuOpen(false); fn && fn(); };
 
-  if(isMobile) {
-    return (
-      <>
-        {/* Mobile bar: logo left, balance + burger right */}
-        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"rgba(8,8,26,0.97)",backdropFilter:"blur(16px)",borderBottom:"1px solid #00f5ff18",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",height:52}}>
-          <button onClick={onLobby} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:14,letterSpacing:2,textShadow:"0 0 12px #00f5ff"}}>🏇 THE TRACK</button>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {/* Balance pill */}
-            <button onClick={onBank} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",background:"rgba(255,215,0,0.08)",border:"1px solid #ffd70033",borderRadius:20,cursor:"pointer"}}>
-              <span style={{fontSize:12}}>🏦</span>
-              <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12}}>${fmt2(user.balance)}</span>
-            </button>
-            {/* Sound + Music toggles */}
-            <button onClick={toggleSound} style={{width:32,height:32,borderRadius:8,background:soundOn?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:soundOn?1:0.45}}>
-              {soundOn?"🔊":"🔇"}
-            </button>
-            <button onClick={toggleMusic2} style={{width:32,height:32,borderRadius:8,background:musicOn2?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:musicOn2?1:0.45}}>
-              {musicOn2?"🎵":"🔕"}
-            </button>
-            {/* Burger */}
-            <button onClick={()=>setMenuOpen(o=>!o)} style={{position:"relative",width:36,height:36,borderRadius:8,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
-              {[0,1,2].map(i=>(
-                <div key={i} style={{width:16,height:2,borderRadius:1,background:"#fff",transition:"all 0.2s",
-                  transform: menuOpen ? (i===0?"rotate(45deg) translate(4px,4px)":i===2?"rotate(-45deg) translate(4px,-4px)":"scaleX(0)") : "none",
-                  opacity: menuOpen && i===1 ? 0 : 1,
-                }}/>
-              ))}
-              {pendingCount>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#ff2d55",color:"#fff",borderRadius:"50%",width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700}}>{pendingCount}</span>}
-            </button>
-          </div>
-        </div>
-
-        {/* Dropdown menu */}
-        {menuOpen && (
-          <div style={{position:"fixed",top:52,left:0,right:0,zIndex:299,background:"rgba(8,8,26,0.98)",backdropFilter:"blur(20px)",borderBottom:"1px solid #00f5ff18",padding:"8px 0",animation:"slideIn 0.15s ease-out"}}>
-            {/* Profile header */}
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid #ffffff08",marginBottom:4}}>
-              <span style={{fontSize:22}}>{avatar}</span>
-              <div>
-                <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{user.username}</div>
-                <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:11}}>${fmt2(user.balance)}</div>
-              </div>
-            </div>
-            {navItems.map(([icon,lbl,fn,badge])=>(
-              <button key={lbl} onClick={()=>closeMenu(fn)} style={{
-                width:"100%",display:"flex",alignItems:"center",gap:12,padding:"13px 16px",
-                background:"transparent",border:"none",cursor:"pointer",
-                borderBottom:"1px solid #ffffff06",textAlign:"left",
-              }}
-                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.05)"}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-              >
-                <span style={{fontSize:16,width:22,textAlign:"center"}}>{icon}</span>
-                <span style={{color:lbl==="Sign Out"?"#ff2d55":"#ffffffcc",fontSize:14,fontWeight:600,flex:1}}>{lbl}</span>
-                {badge&&<span style={{background:"#ff2d55",color:"#fff",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700}}>{badge}</span>}
-              </button>
-            ))}
-          </div>
-        )}
-        {/* Dim backdrop */}
-        {menuOpen&&<div style={{position:"fixed",inset:0,top:52,zIndex:298,background:"rgba(0,0,0,0.4)"}} onClick={()=>setMenuOpen(false)}/>}
-      </>
-    );
-  }
-
-  // ── Desktop / landscape ────────────────────────────────────────────────────
-  return (
-    <div style={{position:"fixed",top:0,left:0,right:0,zIndex:200,background:"rgba(8,8,26,0.96)",backdropFilter:"blur(16px)",borderBottom:"1px solid #00f5ff18",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",height:56,flexShrink:0,gap:8}}>
-      <button onClick={onLobby} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:15,letterSpacing:3,textShadow:"0 0 14px #00f5ff",whiteSpace:"nowrap",flexShrink:0}}>🏇 THE TRACK</button>
-      <div style={{display:"flex",alignItems:"center",gap:4,flex:1,justifyContent:"center"}}>
-        {[
-          ["🏠","Lobby",onLobby,null],
-          ["🔨","Auction Races",onAuctions,null],
-          ["🎫","Active Bets",onMyBets,pendingCount>0?pendingCount:null],
-        ].map(([icon,lbl,fn,badge])=>(
-          <button key={lbl} onClick={fn} style={{position:"relative",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:6,color:"#ffffff66",padding:"5px 10px",cursor:"pointer",fontSize:12,letterSpacing:1,transition:"all 0.15s",whiteSpace:"nowrap"}}
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#fff";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#ffffff66";}}
-          >
-            {icon} {lbl}
-            {badge&&<span style={{position:"absolute",top:-6,right:-6,background:"#ff2d55",color:"#fff",borderRadius:"50%",width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700}}>{badge}</span>}
-          </button>
-        ))}
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-        {/* Balance — display only */}
-        <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70022",borderRadius:8}}>
-          <span style={{fontSize:13}}>🏦</span>
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(user.balance)}</span>
-        </div>
-        <UserMenu avatar={avatar} user={user} onProfile={onProfile} onBank={onBank} onHowTo={onHowTo} onPrivateRaces={onPrivateRaces} onLogout={onLogout}/>
-        <MuteButton/>
-      </div>
-    </div>
-  );
+  return <header className="track-live-nav">
+    <button className="track-wordmark" onClick={onLobby}>THE TRACK</button>
+    <nav aria-label="Main navigation"><button onClick={onLobby}>Clubhouse</button><button onClick={onAuctions}>Auctions</button><button onClick={onPrivateRaces}>Private rooms</button></nav>
+    <div className="track-live-nav-tools"><button className="track-balance" onClick={onBank}>{fmt2(user.balance)} <small>credits</small></button><button onClick={toggleSound} aria-pressed={soundOn} aria-label="Game sound">{soundOn ? 'Sound on' : 'Sound off'}</button><button onClick={toggleMusic2} aria-pressed={musicOn2} aria-label="Background music">{musicOn2 ? 'Music on' : 'Music off'}</button><button aria-expanded={menuOpen} aria-controls="track-account-menu" onClick={()=>setMenuOpen(o=>!o)}>Menu{pendingCount>0 ? ` · ${pendingCount}` : ''}</button></div>
+    {menuOpen && <nav id="track-account-menu" className="track-account-menu" aria-label="Account menu"><strong>{user.username}</strong>{navItems.map(([,label,fn,count])=><button key={label} onClick={()=>closeMenu(fn)}>{label}{count ? ` (${count})` : ''}</button>)}</nav>}
+  </header>;
 }
 
 // ─── MODAL WRAPPER ────────────────────────────────────────────────────────────
@@ -3692,97 +3599,7 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
 }
 
 function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sharedPot={} }) {
-  const withStatus = useMemo(()=>schedule.map(r=>({...r,_st:raceStatus(r,now)})).filter(r=>r._st!=="finished"),[schedule,now]);
-  const sections=[
-    {title:"🔴 LIVE NOW",   filter:r=>r._st==="racing"||r._st==="locked", accent:"#ff2d55"},
-    {title:"🟢 BETTING OPEN",filter:r=>r._st==="betting",                  accent:"#39ff14"},
-    {title:"⏳ UP NEXT",    filter:r=>r._st==="upcoming"&&r.startTime-now<60*60*1000, accent:"#ffd700"},
-    {title:"📅 SCHEDULE",   filter:r=>r._st==="upcoming"&&r.startTime-now>=60*60*1000,accent:"#00f5ff"},
-  ];
-
-  return (
-    <div style={{minHeight:"100vh",background:"#08081a",paddingTop:72,paddingBottom:60}}>
-      <div style={{maxWidth:880,margin:"0 auto",padding:"20px 16px 0"}}>
-        <div style={{textAlign:"center",marginBottom:28}}>
-          <h1 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:26,letterSpacing:5,textShadow:"0 0 24px #00f5ff"}}>RACE LOBBY</h1>
-          <p style={{color:"#ffffff33",fontSize:13,marginTop:4}}>Betting opens up to 3 hours early — pick your race and place your bets.</p>
-        </div>
-        {sections.map(sec=>{
-          const races=withStatus.filter(sec.filter);
-          if(!races.length) return null;
-          return (
-            <div key={sec.title} style={{marginBottom:32}}>
-              <h2 style={{color:sec.accent,fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:3,marginBottom:10,textShadow:`0 0 8px ${sec.accent}`}}>{sec.title}</h2>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {races.map(race=>{
-                  const rt=RACE_TYPES[race.type];
-                  const st=race._st;
-                  const secs=Math.floor((race.startTime-now)/1000);
-                  const draftBet=userBets[race.id]&&Object.keys(userBets[race.id]).length>0;
-                  const confirmedBetData=getConfirmed()[race.id];
-                  const hasBet=draftBet||!!confirmedBetData;
-                  const myAmt=confirmedBetData?confirmedBetData.pot:draftBet?Object.values(userBets[race.id]).reduce((s,v)=>s+(parseFloat(v)||0),0):0;
-                  const betIsConfirmed=!!confirmedBetData;
-                  return (
-                    <div key={race.id} onClick={()=>onEnterRace(race)} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 18px",background:"rgba(255,255,255,0.03)",borderRadius:12,cursor:"pointer",border:`1px solid ${hasBet?rt.color+"66":st==="racing"||st==="locked"?"#ff2d5522":st==="betting"?"#39ff1422":rt.color+"18"}`,boxShadow:hasBet?`0 0 16px ${rt.color}18`:"none",transition:"all 0.15s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
-                      onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}
-                    >
-                      <div style={{width:44,height:44,borderRadius:10,background:`${rt.color}15`,border:`2px solid ${rt.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,position:"relative"}}>
-                        {rt.icon}
-                        {race.condition&&race.condition!=="sunny"&&(
-                          <span style={{position:"absolute",bottom:-6,right:-6,fontSize:14,filter:"drop-shadow(0 0 3px rgba(0,0,0,0.8))"}}>
-                            {TRACK_CONDITIONS[race.condition].icon}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{color:"#fff",fontWeight:700,fontSize:15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{race.name}</div>
-                        <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap",alignItems:"center"}}>
-                          <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
-                          {race.condition&&race.condition!=="sunny"&&(
-                            <span style={{color:TRACK_CONDITIONS[race.condition].color,fontSize:11,fontWeight:600,background:`${TRACK_CONDITIONS[race.condition].color}18`,border:`1px solid ${TRACK_CONDITIONS[race.condition].color}44`,borderRadius:10,padding:"1px 7px"}}>
-                              {TRACK_CONDITIONS[race.condition].icon} {TRACK_CONDITIONS[race.condition].label}
-                            </span>
-                          )}
-                          {hasBet&&<span style={{background:betIsConfirmed?"rgba(0,245,255,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#00f5ff33":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#00f5ff":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
-                          {friendRaces[race.id]>0&&<span style={{background:"rgba(191,95,255,0.12)",border:"1px solid #bf5fff33",borderRadius:10,padding:"1px 8px",color:"#bf5fff",fontSize:11}}>👥 {friendRaces[race.id]}</span>}
-{(sharedPot[race.id]?.totalPot||0)>0&&<span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span>}
-                        </div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0,minWidth:100}}>
-                        {st==="racing"&&(
-                          <div style={{background:"#ff2d55",color:"#fff",padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:1,animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>
-                        )}
-                        {st==="locked"&&(
-                          <div>
-                            <div style={{fontFamily:"'Orbitron',monospace",color:"#ff2d55",fontSize:16,fontWeight:900,textShadow:"0 0 12px #ff2d55",lineHeight:1}}>{secs}s</div>
-                            <div style={{color:"#ff2d5577",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
-                          </div>
-                        )}
-                        {st==="betting"&&(
-                          <div>
-                            <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:15,fontWeight:700,lineHeight:1}}>{fmtCD(secs-BET_CLOSE_SECS)}</div>
-                            <div style={{color:"#39ff1466",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
-                          </div>
-                        )}
-                        {st==="upcoming"&&(
-                          <div>
-                            <div style={{fontFamily:"'Orbitron',monospace",color:secs<600?"#ffd700":"#ffffff44",fontSize:13,lineHeight:1}}>{fmtCD(secs)}</div>
-                            <div style={{color:"#ffffff22",fontSize:10,letterSpacing:1,marginTop:2}}>TO POST</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <ClubhouseLobby schedule={schedule} now={now} onEnterRace={onEnterRace} userBets={userBets} sharedPot={sharedPot} raceStatus={raceStatus} confirmed={getConfirmed()} betCloseSeconds={BET_CLOSE_SECS} />;
 }
 
 // ─── RACE DETAIL / BETTING ────────────────────────────────────────────────────
@@ -3970,251 +3787,11 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
     const timerColor = countdown<=10?"#ff2d55":countdown<=20?"#ffd700":"#00f5ff";
 
-    return (
-      <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 40px",overflowY:"auto"}}>
-        {/* Race header */}
-        <div style={{textAlign:"center",marginBottom:20}}>
-          <div style={{fontSize:32,marginBottom:4}}>{rt.icon}</div>
-          <h2 style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:18,letterSpacing:3,marginBottom:2}}>{race.name}</h2>
-          <span style={{color:rt.color,fontSize:11,fontWeight:700,letterSpacing:2}}>{rt.label.toUpperCase()}</span>
-        </div>
-
-        {/* Countdown ring */}
-        <div style={{position:"relative",width:140,height:140,marginBottom:16,flexShrink:0}}>
-          <svg width="140" height="140" style={{position:"absolute",top:0,left:0,transform:"rotate(-90deg)"}}>
-            <circle cx="70" cy="70" r="60" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7"/>
-            <circle cx="70" cy="70" r="60" fill="none"
-              stroke={timerColor} strokeWidth="7" strokeLinecap="round"
-              strokeDasharray={`${2*Math.PI*60}`}
-              strokeDashoffset={`${2*Math.PI*60*(1-ringPct/100)}`}
-              style={{transition:"stroke-dashoffset 1s linear, stroke 0.5s",filter:`drop-shadow(0 0 6px ${timerColor})`}}
-            />
-          </svg>
-          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-            <div style={{fontFamily:"'Orbitron',monospace",color:timerColor,fontSize:38,fontWeight:900,lineHeight:1,textShadow:`0 0 20px ${timerColor}77`,transition:"color 0.5s"}}>{countdown}</div>
-            <div style={{color:"#ffffff44",fontSize:9,letterSpacing:2,marginTop:2}}>SECONDS</div>
-          </div>
-        </div>
-
-        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:12,animation:"racingBlink 1s infinite"}}>
-          {countdown<=0?"LOADING RACE…":"BETS CLOSED — RACE STARTING"}
-        </div>
-
-        {/* Live pot display */}
-        <div style={{marginBottom:20,padding:"10px 28px",background:"rgba(255,215,0,0.07)",border:"1px solid #ffd70033",borderRadius:12,textAlign:"center"}}>
-          <div style={{color:"#ffffff44",fontSize:10,letterSpacing:3,marginBottom:3}}>🌐 LIVE POT</div>
-          <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:28,fontWeight:900,textShadow:"0 0 20px #ffd70066"}}>${fmt2(spTotal||0)}</div>
-        </div>
-
-        {/* Odds reveal — stage card swipes in from right at fixed height, hangs, then list grows below */}
-        <div style={{width:"100%",maxWidth:480,overflow:"hidden"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <span style={{color:"#ffffff33",fontSize:11,letterSpacing:2}}>RACE ODDS</span>
-            <span style={{color:"#ffffff22",fontSize:10}}>{enteredEarly?"revealing…":"final odds"}</span>
-          </div>
-
-          {/* Stage — fixed height slot where newest card swipes in and hangs */}
-          <div style={{position:"relative",height:72,marginBottom:8,overflow:"hidden"}}>
-            {sortedOdds.map(({h,odds},i)=>{
-              const isNewest = i === revealCount - 1;
-              const myBet = displayBets[h.id];
-              const rank = i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
-              if(!isNewest || revealCount === 0) return null;
-              return (
-                <div key={h.id+"-stage"} style={{
-                  position:"absolute", inset:0,
-                  animation:"oddsSwipeAcross 1.4s cubic-bezier(0.22,1,0.36,1) forwards",
-                }}>
-                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:`${h.color}12`,border:`1px solid ${h.color}88`,borderRadius:12,boxShadow:`0 0 18px ${h.color}33`}}>
-                    <div style={{width:34,height:34,borderRadius:"50%",background:`${h.color}18`,border:`2px solid ${h.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-                    <div style={{flex:1}}>
-                      <div style={{color:h.color,fontWeight:700,fontSize:14}}>{rank} {horseName(race,h.id)}</div>
-                      <div style={{color:"#ffffff33",fontSize:11,marginTop:1}}>{i===0?"FAVOURITE":i===HORSES.length-1?"LONG SHOT":""}</div>
-                    </div>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:odds?"#ffd700":"#ffffff33",fontSize:18,fontWeight:900,textShadow:odds?"0 0 10px #ffd70066":"none"}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
-                      {myBet>0&&<div style={{color:"#00f5ff",fontSize:11,marginTop:1}}>your bet: ${fmt2(parseFloat(myBet))}</div>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* List — previously revealed cards drop in below the stage */}
-          {sortedOdds.map(({h,odds},i)=>{
-            const isInList = i < revealCount - 1; // all except the newest (it's in stage)
-            const myBet = displayBets[h.id];
-            const rank = i===0?"🥇":i===1?"🥈":i===2?"🥉":"";
-            if(!isInList) return null;
-            return (
-              <div key={h.id+"-list"} style={{
-                marginBottom:6,
-                animation:"oddsDropDown 0.4s ease-out forwards",
-              }}>
-                <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:`${h.color}0d`,border:`1px solid ${h.color}44`,borderRadius:10}}>
-                  <div style={{width:28,height:28,borderRadius:"50%",background:`${h.color}18`,border:`1.5px solid ${h.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-                  <div style={{flex:1}}>
-                    <div style={{color:h.color,fontWeight:700,fontSize:12}}>{rank} {horseName(race,h.id)}</div>
-                  </div>
-                  <div style={{fontFamily:"'Orbitron',monospace",color:odds?"#ffd700":"#ffffff33",fontSize:15,fontWeight:900}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
-                  {myBet>0&&<div style={{color:"#00f5ff",fontSize:10}}>💰${fmt2(parseFloat(myBet))}</div>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* User bets summary */}
-        {Object.keys(displayBets).length>0&&(
-          <div style={{width:"100%",maxWidth:480,marginTop:16,padding:"12px 16px",background:"rgba(0,245,255,0.05)",border:"1px solid #00f5ff22",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{color:"#00f5ff",fontSize:12,fontWeight:600}}>✓ Your total bet</span>
-            <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:15}}>${fmt2(Object.values(displayBets).reduce((s,v)=>s+(parseFloat(v)||0),0))}</span>
-          </div>
-        )}
-
-        {/* Chat — available during countdown */}
-        <RaceChat raceId={race.id} user={user} msgs={chatMsgs} setMsgs={setChatMsgs} open={chatOpen} setOpen={setChatOpen} unread={chatUnread} setUnread={setChatUnread}/>
-      </div>
-    );
+    return <><RevealRoom race={race} names={HORSES.map(h=>horseName(race,h.id))} bets={displayBets} totalPot={spTotal} odds={Object.fromEntries(oddsData.map(({h,odds})=>[h.id,odds]))} seconds={countdown} revealCount={revealCount} onBack={onBack}/><RaceChat raceId={race.id} user={user} msgs={chatMsgs} setMsgs={setChatMsgs} open={chatOpen} setOpen={setChatOpen} unread={chatUnread} setUnread={setChatUnread}/></>;
   }
 
   // ── BETTING OPEN or TOO EARLY ──────────────────────────────────────────────
-  return (
-    <div style={{minHeight:"100vh",background:"#08081a",paddingTop:72,paddingBottom:40}}>
-      <div style={{maxWidth:700,margin:"0 auto",padding:"16px 16px 0"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13,marginBottom:14,display:"flex",alignItems:"center",gap:6}}>← Back to Lobby</button>
-
-        {/* Race header */}
-        <div style={{padding:"18px 22px",background:`${rt.color}0a`,border:`1px solid ${rt.color}44`,borderRadius:14,marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <div style={{fontSize:38}}>{rt.icon}</div>
-            <div style={{flex:1}}>
-              <h1 style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:20,letterSpacing:2}}>{race.name}</h1>
-              <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{color:rt.color,fontWeight:700,fontSize:13}}>{rt.label}</span>
-                <span style={{color:"#ffffff33"}}>·</span>
-                <span style={{color:"#ffffff55",fontSize:13}}>🕐 {fmtTime(new Date(race.startTime))}</span>
-                <span style={{color:"#ffffff33"}}>·</span>
-                <span style={{color:"#ffffff44",fontSize:13}}>{rt.dice} dice per roll</span>
-              </div>
-            </div>
-            {canBet&&!confirmed&&<div style={{background:"rgba(57,255,20,0.15)",border:"1px solid #39ff1444",color:"#39ff14",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>BETTING OPEN</div>}
-            {confirmed&&<div style={{background:"rgba(0,245,255,0.15)",border:"1px solid #00f5ff44",color:"#00f5ff",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>✓ BETS CONFIRMED</div>}
-            {st==="upcoming"&&<div style={{color:"#ffffff44",fontFamily:"'Orbitron',monospace",fontSize:13}}>{fmtCD(liveSecs)}</div>}
-          </div>
-          <p style={{color:"#ffffff55",fontSize:13,marginTop:12,lineHeight:1.6}}>{rt.desc}</p>
-        </div>
-
-        {/* Too early — betting not open yet */}
-        {st==="upcoming"&&(
-          <div style={{textAlign:"center",padding:"32px 20px",background:"rgba(255,255,255,0.02)",borderRadius:12,marginBottom:20}}>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:16,marginBottom:8}}>BETTING OPENS IN</div>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:44,textShadow:"0 0 20px #ffd700"}}>{fmtCD(liveSecs - BET_OPEN_HOURS*3600)}</div>
-            <p style={{color:"#ffffff33",marginTop:12,fontSize:12}}>Opens {BET_OPEN_HOURS}h before post · Closes 30s before start</p>
-          </div>
-        )}
-
-        {/* Betting open — timer bar */}
-        {canBet&&(
-          <div style={{marginBottom:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>BETTING CLOSES IN</span>
-              <span style={{fontFamily:"'Orbitron',monospace",color:bettingSecsLeft<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:bettingSecsLeft<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(bettingSecsLeft)}</span>
-            </div>
-            <div style={{height:7,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:bettingSecsLeft<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#00f5ff,#39ff14)",boxShadow:`0 0 8px ${bettingSecsLeft<120?"#ff2d55":"#00f5ff"}`,transition:"width 1s linear"}}/>
-            </div>
-          </div>
-        )}
-
-        {/* Confirmed banner */}
-        {confirmed&&canBet&&(
-          <div style={{background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:10,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:20}}>✅</span>
-            <div>
-              <div style={{color:"#00f5ff",fontWeight:700,fontSize:14}}>Bets Confirmed!</div>
-              <div style={{color:"#ffffff44",fontSize:12,marginTop:2}}>Your bets are locked in. Race fires at post time. Sit tight!</div>
-            </div>
-          </div>
-        )}
-
-        {/* Horse bet cards */}
-        {canBet&&(
-          <>
-            <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-              <div style={{textAlign:"left"}}>
-                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>YOUR BET</div>
-                <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:18}}>${fmt2(totalBet)}</div>
-              </div>
-              <div style={{width:1,height:32,background:"rgba(255,255,255,0.08)"}}/>
-              <div style={{textAlign:"right"}}>
-                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>🌐 LIVE POT</div>
-                <div style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:18,textShadow:"0 0 10px #00f5ff66"}}>${fmt2(sharedPot?.totalPot||0)}</div>
-              </div>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
-              {HORSES.map(h=>{
-                const betVal=localBets[h.id]||"";
-                const betNum=parseFloat(betVal)||0;
-                return (
-                  <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",borderRadius:12,border:`1px solid ${betNum>0?h.color+"55":"rgba(255,255,255,0.06)"}`,boxShadow:betNum>0?`0 0 16px ${h.color}14`:"none",transition:"all 0.2s"}}>
-                    <div style={{width:38,height:38,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,background:`${h.color}15`,border:`2px solid ${h.color}`,boxShadow:`0 0 8px ${h.color}44`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-                    <div style={{flex:1}}><div style={{color:h.color,fontWeight:700,fontSize:14,letterSpacing:1}}>{horseName(race, h.id)}</div></div>
-                    {/* Always editable while betting window is open */}
-                    <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                      <div style={{position:"relative"}}>
-                        <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#ffd70066",fontSize:13,pointerEvents:"none"}}>$</span>
-                        <input type="number" min="0" placeholder="0" value={betVal}
-                          onChange={e=>saveBet(h.id,e.target.value)}
-                          style={{width:86,padding:"7px 7px 7px 20px",background:"rgba(255,255,255,0.06)",border:`1px solid ${betNum>0?h.color+"55":"#ffffff15"}`,borderRadius:7,color:"#fff",fontSize:16,outline:"none"}}/>
-                      </div>
-                      <button onClick={()=>saveBet(h.id,betVal?"":"50")} style={{padding:"7px 11px",borderRadius:7,border:`1px solid ${h.color}44`,background:betNum>0?`${h.color}18`:"transparent",color:betNum>0?h.color:"#ffffff33",cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>{betNum>0?"✓":"+"}</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-
-            {/* Always show action area while betting is open */}
-            <div style={{textAlign:"center"}}>
-              {overBalance&&<p style={{color:"#ff2d55",marginBottom:8,fontSize:13}}>⚠ Exceeds available balance (${fmt2(availableBalance)})</p>}
-              {confirmed ? (
-                <div>
-                  {/* Confirmed state — show green banner + Edit button */}
-                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(0,245,255,0.07)",border:"1px solid #00f5ff44",borderRadius:10,marginBottom:12}}>
-                    <span style={{fontSize:18}}>✅</span>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{color:"#00f5ff",fontWeight:700,fontSize:13}}>Bets Confirmed — ${fmt2(totalBet)} locked</div>
-                      <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>Race fires at post time. You can still edit until bets close.</div>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-                    <button onClick={handleEditBets} style={{padding:"11px 26px",borderRadius:10,border:"1px solid #ffd70044",background:"rgba(255,215,0,0.08)",color:"#ffd700",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12,letterSpacing:2}}>
-                      ✏️ EDIT BETS
-                    </button>
-                    <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"11px 26px",borderRadius:10,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#00f5ff,#39ff14)",color:overBalance||totalBet<=0?"#ffffff33":"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12,letterSpacing:2,boxShadow:overBalance||totalBet<=0?"none":"0 0 20px #00f5ff55"}}>
-                      🔒 UPDATE BETS
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"14px 44px",borderRadius:12,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#00f5ff,#39ff14)",color:overBalance||totalBet<=0?"#ffffff33":"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:3,boxShadow:overBalance||totalBet<=0?"none":"0 0 28px #00f5ff66"}}>
-                    🔒 CONFIRM BETS
-                  </button>
-                  <p style={{color:"#ffffff22",fontSize:11,marginTop:8}}>Race fires at post time · Available: ${fmt2(availableBalance)}</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-
-    </div>
-  );
+  return <TicketRoom race={race} names={HORSES.map(h=>horseName(race,h.id))} description={rt.desc} bets={localBets} total={totalBet} available={availableBalance} overBalance={overBalance} confirmed={confirmed} canBet={canBet} seconds={bettingSecsLeft} onChange={saveBet} onConfirm={handleConfirm} onEdit={handleEditBets} onBack={onBack}/>;
 }
 
 // ─── ODDS REVEAL ──────────────────────────────────────────────────────────────
@@ -4222,28 +3799,7 @@ function OddsRevealScreen({ race, bets, totalPot, odds }) {
   const [count,setCount]=useState(3);
   const rt=RACE_TYPES[race.type];
   useEffect(()=>{const t=setInterval(()=>setCount(c=>Math.max(0,c-1)),1000);return()=>clearInterval(t);},[]);
-  return (
-    <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px"}}>
-      <div style={{fontSize:44,marginBottom:10}}>{rt.icon}</div>
-      <h1 style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:22,letterSpacing:4,textShadow:"0 0 20px #ffd700",marginBottom:4}}>{race.name}</h1>
-      <p style={{color:rt.color,letterSpacing:2,marginBottom:6,fontSize:13,fontWeight:700}}>{rt.label.toUpperCase()}</p>
-      <p style={{color:"#ffffff44",marginBottom:28,letterSpacing:2,fontFamily:"'Orbitron',monospace",fontSize:16}}>RACE STARTS IN {count}…</p>
-      <div style={{width:"100%",maxWidth:460}}>
-        <div style={{background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70033",borderRadius:10,padding:"12px 18px",marginBottom:16,textAlign:"center"}}>
-          <span style={{color:"#ffffff55",fontSize:12,letterSpacing:2}}>🌐 LIVE POT </span>
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:26,textShadow:"0 0 16px #ffd70066"}}>${fmt2(sharedPot?.totalPot||totalPot)}</span>
-        </div>
-        {HORSES.map(h=>(
-          <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:6,background:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${h.color}33`}}>
-            <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:`${h.color}15`,border:`1.5px solid ${h.color}`}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-            <span style={{flex:1,color:h.color,fontWeight:700,fontSize:14}}><HorseName race={race} horseId={h.id}/> <span style={{color:"#ffffff33",fontSize:10,fontWeight:400}}>({getCoatName(horseLottieCoat(race,h.id))})</span></span>
-            <span style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:16}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
-            {bets[h.id]>0&&<span style={{color:"#ffd70088",fontSize:12}}>your: ${bets[h.id]}</span>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <RevealRoom race={race} names={HORSES.map(h=>horseName(race,h.id))} bets={bets} totalPot={totalPot} odds={odds} seconds={count}/>;
 }
 
 // ─── DICE DISPLAY ─────────────────────────────────────────────────────────────
@@ -5045,12 +4601,6 @@ function useRaceEngine(raceType, onWinner, condition="sunny", onGunshot=null, se
                     ref.current.running = false;
                     setWinner(w);
                     sfx.finishLine();
-                    // Winner commentary
-                    const cWinName = horseName(race,w);
-                    const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
-                    const cMyBet = parseFloat(bets?.[w]||0);
-                    const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
-                    const cUpset = parseFloat(cOdds) >= 5;
                     T(()=>onWinner(w), 2600);
                   }
                 }
@@ -5266,6 +4816,7 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
 
 // ─── RACE SCREEN ──────────────────────────────────────────────────────────────
 function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, auctionOwners, replayRolls=null, replayWinner=null, replaySpeed=1, replaySpeedRef=null, isReplay=false }) {
+  const [trackView, setTrackView] = useState("cinematic");
   const rt = RACE_TYPES[race.type];
   const [gateBurst, setGateBurst] = useState(false);
   const [showTie, setShowTie] = useState(false);
@@ -5537,9 +5088,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
     if(!firedCommentaryKeys.has(wKey)) {
       firedCommentaryKeys.add(wKey);
       const cWinName = horseName(race,winner);
-      const cPot = Object.values(bets||{}).reduce((s,v)=>s+(parseFloat(v)||0),0);
-      const cMyBet = parseFloat((bets||{})[winner]||0);
-      const cOdds = cMyBet>0&&cPot>0 ? (cPot/cMyBet).toFixed(1) : (1.5+Math.random()*5).toFixed(1);
+
       const tr = raceTrackingRef.current;
 
       // Detect special win types
@@ -5555,8 +5104,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       if(isTiebreak)        line = COMMENTARY.tiebreakWinner(cWinName);
       else if(wireToWire)   line = COMMENTARY.wireToWire(cWinName);
       else if(wasLast)      line = COMMENTARY.comeback(cWinName);
-      else if(parseFloat(cOdds)>=5) line = COMMENTARY.upset(cWinName,cOdds);
-      else                  line = COMMENTARY.winner(cWinName,cOdds);
+      else                  line = `${cWinName} wins the race! What a finish at The Track!`;
 
       setTimeout(()=>queueCommentary(line, 1), 800);
       stopBgMusic(4000);
@@ -5891,8 +5439,14 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 
   const cond = TRACK_CONDITIONS[race.condition||"sunny"];
 
+  if (trackView === "cinematic") return <Suspense fallback={<div style={{padding:100,background:"#101a16",color:"#e2c58d",minHeight:"100vh"}}>Preparing the racecourse…</div>}>
+    <CinematicRaceRoom race={race} names={HORSES.map((_,i)=>horseName(race,i))} positions={positions} legDone={legDone} diceResult={diceResult} rolling={rolling} rollCount={rollCount} phase={phase} winner={winner} tieHorses={tieHorses} jumpingHorses={jumpingHorses} bets={bets} totalPot={totalPot} selectedHorse={Number(Object.keys(bets||{}).find(k=>Number(bets[k])>0) ?? 0)} isReplay={isReplay} onClassic={()=>setTrackView("classic")} onChat={!isReplay?()=>setChatOpen(true):undefined}/>
+    {!isReplay && winner===null && <RaceChat raceId={race.id} user={user} msgs={chatMsgs} setMsgs={setChatMsgs} open={chatOpen} setOpen={setChatOpen} unread={chatUnread} setUnread={setChatUnread}/>}
+  </Suspense>;
+
   return (
     <div style={{height:"100vh",background:"#08081a",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+      <button onClick={()=>setTrackView("cinematic")} style={{position:"fixed",bottom:14,left:14,zIndex:120,padding:"9px 14px",background:"#d6b77b",color:"#14251a",border:"1px solid #a68a57",borderRadius:4,cursor:"pointer"}}>Cinematic track</button>
       {winner!==null&&<Confetti/>}
 
       {/* TIE dramatic overlay */}
@@ -6349,164 +5903,8 @@ function ConfettiPieces({ color }) {
 
 // ─── PAYOUT SCREEN ────────────────────────────────────────────────────────────
 function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayAgain, onLobby }) {
-  const horse=HORSES[winner], rt=RACE_TYPES[race.type];
-  const wName = horseName(race, winner);
-  const coat  = horseCoat(race, winner);
-  const userBetAmt=bets[winner]||0;
-  const payout=userBetAmt>0&&odds[winner]?userBetAmt*odds[winner]:0;
-
-  // ── Cinematic winner CSS ─────────────────────────────────────────────────────
-  const winCSS = `
-    @keyframes pw_gallopIn {
-      0%   { transform: scaleX(-1) translateX(700px); }
-      65%  { transform: scaleX(-1) translateX(-22px); }
-      82%  { transform: scaleX(-1) translateX(10px); }
-      100% { transform: scaleX(-1) translateX(0); }
-    }
-    @keyframes pw_bounce {
-      0%,100% { transform: scaleX(-1) translateY(0); }
-      50%     { transform: scaleX(-1) translateY(-9px); }
-    }
-    @keyframes pw_glow {
-      0%,100% { filter: ${coat} drop-shadow(0 0 10px ${horse.color}88); }
-      50%     { filter: ${coat} drop-shadow(0 0 32px ${horse.color}) drop-shadow(0 0 60px ${horse.color}66); }
-    }
-    @keyframes pw_crownDrop {
-      0%   { transform: translateX(-50%) translateY(-90px); opacity:0; }
-      100% { transform: translateX(-50%) translateY(-8px);  opacity:1; }
-    }
-    @keyframes pw_crownGlow {
-      0%,100% { filter: drop-shadow(0 0 14px #ffd700) drop-shadow(0 0 36px #ffd70077); }
-      50%     { filter: drop-shadow(0 0 28px #ffd700) drop-shadow(0 0 60px #ffd700aa); }
-    }
-    @keyframes pw_sash {
-      0%   { opacity:1; clip-path: inset(0 100% 0 0); }
-      100% { opacity:1; clip-path: inset(0 0% 0 0); }
-    }
-    @keyframes pw_ringBurst {
-      0%   { transform: translate(-50%,-50%) scale(0.2); opacity:0.9; }
-      100% { transform: translate(-50%,-50%) scale(4);   opacity:0; }
-    }
-    @keyframes pw_starBurst {
-      0%   { opacity:1; transform: translate(-50%,-50%) rotate(var(--a)) translateY(0); }
-      60%  { opacity:1; transform: translate(-50%,-50%) rotate(var(--a)) translateY(var(--d)); }
-      100% { opacity:0; transform: translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--d) * 1.4)); }
-    }
-    @keyframes pw_dust {
-      0%   { opacity:0.7; transform: scale(0.4); }
-      100% { opacity:0;   transform: scale(2.4) translateX(28px); }
-    }
-    @keyframes pw_nameReveal {
-      0%   { opacity:0; transform: scale(0.82) translateY(10px); letter-spacing:10px; }
-      100% { opacity:1; transform: scale(1)    translateY(0);    letter-spacing:3px; }
-    }
-    @keyframes pw_fadeUp {
-      from { opacity:0; transform: translateY(10px); }
-      to   { opacity:1; transform: translateY(0); }
-    }
-    @keyframes pw_spot {
-      0%,100% { opacity:0.5; } 50% { opacity:1; }
-    }
-    @keyframes pw_confetti {
-      0%   { opacity:1; transform: translateY(0)    rotate(0deg)   translateX(0); }
-      50%  { opacity:1; transform: translateY(42vh) rotate(420deg) translateX(var(--dx)); }
-      100% { opacity:0; transform: translateY(100vh) rotate(840deg) translateX(calc(var(--dx)*1.6)); }
-    }
-  `;
-
-  return (
-    <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px",overflowY:"auto",position:"relative",overflow:"hidden"}}>
-      <style>{winCSS}</style>
-
-      {/* Spotlight */}
-      <div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:480,height:"100vh",background:`radial-gradient(ellipse 55% 100% at 50% 0%, ${horse.color}18 0%, transparent 65%)`,pointerEvents:"none",animation:"pw_spot 2s ease-in-out infinite"}}/>
-
-      {/* Confetti */}
-      <ConfettiPieces color={horse.color}/>
-
-      <div style={{color:"#ffffff33",fontSize:11,letterSpacing:3,marginBottom:16,animation:"pw_fadeUp 0.5s ease-out 0.1s both"}}>{rt.icon} {race.name.toUpperCase()}</div>
-
-      {/* ── Horse cinematic ── */}
-      <div style={{position:"relative",marginBottom:0,height:130,width:260,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-
-        {/* Burst rings on skid stop */}
-        {[horse.color,"#ff8c00","#ffffff44"].map((col,i)=>(
-          <div key={i} style={{position:"absolute",top:"50%",left:"50%",width:90,height:90,border:`2px solid ${col}`,borderRadius:"50%",animation:`pw_ringBurst 0.65s ease-out ${0.74+i*0.1}s both`}}/>
-        ))}
-
-        {/* Star burst */}
-        {["⭐","✨","⭐","✨","⭐","✨","⭐"].map((s,i)=>(
-          <div key={i} style={{position:"absolute",top:"50%",left:"50%",fontSize:18,opacity:0,
-            ["--a"]: `${i*51}deg`, ["--d"]: `-${82+i%2*14}px`,
-            animation:`pw_starBurst 0.75s ease-out ${1.65+i*0.04}s both`}}>{s}</div>
-        ))}
-
-        {/* Crown */}
-        <div style={{position:"absolute",top:0,left:"50%",fontSize:48,opacity:0,
-          animation:`pw_crownDrop 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.6s forwards, pw_crownGlow 1.2s ease-in-out 2.1s infinite`,
-          filter:"drop-shadow(0 0 16px #ffd700) drop-shadow(0 0 40px #ffd70077)",zIndex:10}}>👑</div>
-
-        {/* Sash */}
-        <div style={{position:"absolute",top:"44%",left:"50%",transform:"translateX(-50%) rotate(-15deg)",
-          background:"linear-gradient(135deg,#ffd700,#ff8c00,#ffd700)",
-          color:"#08081a",fontSize:12,fontWeight:900,letterSpacing:3,padding:"5px 24px",
-          whiteSpace:"nowrap",opacity:0,clipPath:"inset(0 100% 0 0)",
-          animation:"pw_sash 0.45s ease-out 2.1s forwards",
-          boxShadow:"0 2px 20px #ffd70066",borderTop:"1px solid rgba(255,255,255,0.4)",zIndex:5}}>
-          🏆 &nbsp;WINNER&nbsp; 🏆
-        </div>
-
-        {/* Horse */}
-        <div style={{fontSize:100,lineHeight:1,
-          filter:coat,
-          animation:`pw_gallopIn 0.7s cubic-bezier(0.22,1,0.36,1) 0.1s forwards, pw_bounce 0.22s ease-in-out 0.82s 4, pw_glow 1.5s ease-in-out 2.0s infinite`}}>🐴</div>
-
-        {/* Dust puff */}
-        <div style={{position:"absolute",right:10,bottom:0,fontSize:36,opacity:0,
-          animation:"pw_dust 0.65s ease-out 0.76s forwards"}}>💨</div>
-      </div>
-
-      {/* Winner name */}
-      <div style={{color:"#ffffff33",fontSize:10,letterSpacing:5,marginTop:20,opacity:0,animation:"pw_fadeUp 0.5s ease-out 2.5s forwards"}}>RACE WINNER</div>
-      <div style={{fontFamily:"'Orbitron',monospace",fontSize:26,fontWeight:900,letterSpacing:3,
-        color:horse.color,textShadow:`0 0 30px ${horse.color}, 0 0 60px ${horse.color}66`,
-        textAlign:"center",opacity:0,animation:"pw_nameReveal 0.6s cubic-bezier(0.22,1,0.36,1) 2.7s forwards",marginTop:6}}>{wName}</div>
-      <div style={{color:"#ffffff33",letterSpacing:5,fontSize:10,marginTop:8,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.0s forwards"}}>WINS THE RACE</div>
-      <div style={{width:"100%",maxWidth:440,marginTop:20,marginBottom:20,padding:"18px",borderRadius:14,textAlign:"center",background:payout>0?"rgba(57,255,20,0.07)":"rgba(255,45,85,0.07)",border:`1px solid ${payout>0?"#39ff1433":"#ff2d5533"}`,opacity:0,animation:"pw_fadeUp 0.5s ease-out 3.2s forwards"}}>
-        {payout>0?(
-          <>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:24,textShadow:"0 0 20px #39ff14"}}>YOU WON!</div>
-            <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:22,marginTop:6}}>+${fmt2(payout)}</div>
-            <div style={{color:"#ffffff44",marginTop:4,fontSize:13}}>at {(odds[winner]||1).toFixed(2)}x · bet ${userBetAmt}</div>
-          </>
-        ):(
-          <>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#ff2d55",fontSize:20}}>BETTER LUCK NEXT RACE</div>
-            <div style={{color:"#ffffff33",marginTop:6,fontSize:13}}>{Object.keys(bets).length===0?"No bets placed.":"Your horses didn't finish first."}</div>
-          </>
-        )}
-      </div>
-      <div style={{color:"#ffffff44",marginBottom:6,fontSize:13,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.4s forwards"}}>Balance: <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace"}}>${fmt2(userBalance)}</span></div>
-      <div style={{width:"100%",maxWidth:440,marginBottom:24}}>
-        <div style={{color:"#ffffff22",fontSize:11,letterSpacing:2,marginBottom:8,textAlign:"center"}}>FINAL ODDS</div>
-        {HORSES.map(h=>(
-          <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",marginBottom:4,borderRadius:9,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.id===winner?h.color+"44":"rgba(255,255,255,0.06)"}`}}>
-            <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:`${h.color}15`,border:`1.5px solid ${h.color}`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-            <HorseName race={race} horseId={h.id} style={{flex:1,color:h.id===winner?h.color:"#ffffff66",fontWeight:700,fontSize:13}}/>
-            {h.id===winner&&<span style={{color:"#ffd700",fontSize:10,letterSpacing:1}}>WINNER</span>}
-            <span style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:12}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
-            {bets[h.id]>0&&<span style={{color:"#ffd70055",fontSize:11}}>${bets[h.id]}</span>}
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.5s forwards"}}>
-        <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#00f5ff,#39ff14)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #00f5ff66"}}>🏠 BACK TO LOBBY</button>
-      </div>
-    </div>
-  );
+  return <ResultRoom race={race} names={HORSES.map(h=>horseName(race,h.id))} bets={bets} odds={odds} winner={winner} userBalance={userBalance} onLobby={onLobby}/>;
 }
-
-
 
 // ─── PROVABLY FAIR ────────────────────────────────────────────────────────────
 function ProvablyFairBadge({ race, expanded=false }) {
@@ -7001,85 +6399,6 @@ function simRace(raceType, condition, seed) {
   return { winner: 0, rolls: iters }; // fallback
 }
 // ─── LOCAL RACE SIMULATOR (fallback if cloud function hasn't run yet) ────────
-function simulateRaceWithHistory(raceType, condition, seed) {
-  const die = makeSeededDie(seed);
-  const SPACES = TRACK_SPACES;
-  const HURDLE = HURDLE_CELL + 1;
-  const pos = Array(6).fill(0);
-  const leg = Array(6).fill(false);
-  const skip = Array(6).fill(false);
-  let phase = "main", tieHorses = null;
-  const rollHistory = [];
-
-  const rollDice = (rc) => {
-    const nd = raceType==="triple_dice" ? 3 : 2;
-    const dice = Array.from({length:nd}, die);
-    const isDoubles = nd===2 && dice[0]===dice[1];
-    let moves=[], mudDieIdx=null, fogDieIdx=null, noDoubles=false;
-    if(phase==="tiebreak") {
-      dice.forEach(d=>{ const hi=Math.min(d-1,5); if(tieHorses.includes(hi)) moves.push({horse:hi,steps:1}); });
-    } else if(raceType==="magic_dice") {
-      moves.push({horse:Math.min(dice[0]-1,5), steps:dice[1]});
-    } else if(condition==="rain"&&(rc+1)%3===0) {
-      const si=dice[0]<=dice[1]?0:1; mudDieIdx=si; noDoubles=true;
-      dice.forEach((d,di)=>{ if(di!==si) moves.push({horse:Math.min(d-1,5),steps:1}); });
-    } else if(condition==="fog"&&(rc+1)%4===0) {
-      const fi=rc%nd; fogDieIdx=fi; noDoubles=true;
-      dice.forEach((d,di)=>{ const h=Math.min(d-1,5); moves.push({horse:h,steps:di===fi?-1:1,fog:di===fi}); });
-    } else if(isDoubles) {
-      moves.push({horse:Math.min(dice[0]-1,5),steps:2});
-    } else {
-      dice.forEach(d=>moves.push({horse:Math.min(d-1,5),steps:1}));
-    }
-    return {dice,isDoubles:isDoubles&&!noDoubles,moves,mudDieIdx,fogDieIdx};
-  };
-
-  const applyMv = (moves, isDoubles) => {
-    const fin=[];
-    moves.forEach(({horse,steps})=>{
-      if(skip[horse]){skip[horse]=false;return;}
-      // In tiebreak, only tieHorses run and track is TIEBREAK_SPACES long
-      if(phase==="tiebreak") {
-        if(!tieHorses.includes(horse)) return;
-        pos[horse]=Math.min(TIEBREAK_SPACES, pos[horse]+Math.abs(steps));
-        if(pos[horse]>=TIEBREAK_SPACES) fin.push(horse);
-        return;
-      }
-      if(raceType==="down_back"||raceType==="magic_dice") {
-        if(!leg[horse]){const dest=pos[horse]+steps;if(dest>=SPACES){leg[horse]=true;pos[horse]=Math.max(0,SPACES-(dest-SPACES));if(pos[horse]<=0)fin.push(horse);}else pos[horse]=dest;}
-        else{pos[horse]=Math.max(0,pos[horse]-steps);if(pos[horse]<=0)fin.push(horse);}
-      } else if(raceType==="hurdle") {
-        const hp=HURDLE;
-        if(pos[horse]===hp-1){if(isDoubles){pos[horse]=hp+1;skip[horse]="jump";}}
-        else{const dest=pos[horse]+steps;pos[horse]=dest>=hp&&pos[horse]<hp-1?hp-1:dest===hp?hp-1:Math.min(SPACES,dest);if(pos[horse]>=SPACES)fin.push(horse);}
-      } else {
-        if(steps<0)pos[horse]=Math.max(0,pos[horse]+steps);
-        else{pos[horse]=Math.min(SPACES,pos[horse]+steps);if(pos[horse]>=SPACES)fin.push(horse);}
-      }
-    });
-    skip.forEach((s,i)=>{if(s==="jump")skip[i]=false;});
-    return fin;
-  };
-
-  let iters=0, winner=null;
-  while(iters++<2000&&winner===null) {
-    const rc=rollHistory.length;
-    const roll=rollDice(rc);
-    const fin=applyMv(roll.moves,roll.isDoubles);
-    rollHistory.push({dice:roll.dice,isDoubles:roll.isDoubles,moves:roll.moves,mudDieIdx:roll.mudDieIdx,fogDieIdx:roll.fogDieIdx,positions:[...pos],legDone:[...leg],phase});
-    if(fin.length===1){winner=fin[0];}
-    else if(fin.length>1){
-      phase="tiebreak"; tieHorses=[...fin];
-      for(let i=0;i<6;i++) pos[i]=0; // reset all — only tieHorses will move in applyMv
-      let tb=0;
-      while(tb++<500){const tr=rollDice(rollHistory.length);const tf=applyMv(tr.moves,tr.isDoubles);
-        rollHistory.push({dice:tr.dice,isDoubles:tr.isDoubles,moves:tr.moves,mudDieIdx:tr.mudDieIdx,fogDieIdx:tr.fogDieIdx,positions:[...pos],legDone:[...leg],phase:"tiebreak"});
-        if(tf.length>0){winner=tf[0];break;}}
-      if(winner===null)winner=fin[0];
-    }
-  }
-  return {winner:winner??0, rolls:rollHistory};
-}
 
 function App() {
   // Prevent iOS auto-zoom on input focus by ensuring viewport doesn't scale
