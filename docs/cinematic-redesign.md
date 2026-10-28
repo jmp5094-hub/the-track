@@ -27,6 +27,8 @@ Account panels, auctions, private-room setup and authentication retain their exi
 
 ## Verification
 
+![Animated SVG fallback captured during browser QA](clubhouse-preview.jpg)
+
 `npm test` checks 3,750 complete race histories against frozen digests produced from the original simulator in commit `492cffecfe89d3ae37e1612d79c229a6a73de2b0`: 250 seeds × five formats × three conditions. It also checks pre-close payout concealment, gross-return arithmetic, return-leg ordering, tiebreak filtering and accurate dice callouts.
 
 `npm run build` compiles the full app and the isolated showcase. Existing Lottie eval and large-bundle warnings remain; no new backend dependency is added.
