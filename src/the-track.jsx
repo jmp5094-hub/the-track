@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Broadcast } from "./broadcast/Broadcast";
+import { buildPlayback } from "./broadcast/playback.mjs";
+import broadcastVoice from "./broadcast/voice.json";
+import "./track-theme.css";
 import LottieHorse, { OutlineFilters, getCoatIndex, getCoatName } from "./LottieHorse";
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
@@ -151,7 +155,7 @@ const HORSES = [
   { id:0, name:"Neon Phantom",   color:"#00f5ff" },
   { id:1, name:"Crimson Blaze",  color:"#ff2d55" },
   { id:2, name:"Golden Thunder", color:"#ffd700" },
-  { id:3, name:"Volt Streak",    color:"#39ff14" },
+  { id:3, name:"Volt Streak",    color:"#97bd88" },
   { id:4, name:"Purple Haze",    color:"#bf5fff" },
   { id:5, name:"Solar Flare",    color:"#ff6b00" },
 ];
@@ -183,10 +187,10 @@ const horseLottieCoat = (race, horseId) => {
 };
 
 const RACE_TYPES = {
-  standard:    { label:"Standard",     icon:"🏇", color:"#00f5ff", dice:2, desc:"2 dice per roll — each die moves a horse. Doubles = bonus move!" },
+  standard:    { label:"Standard",     icon:"🏇", color:"#e5b678", dice:2, desc:"2 dice per roll — each die moves a horse. Doubles = bonus move!" },
   down_back:   { label:"Down & Back",  icon:"🔄", color:"#bf5fff", dice:2, desc:"Race out 12 spaces, then race back home. First to return wins!" },
   hurdle:      { label:"Hurdles",      icon:"🚧", color:"#ff6b00", dice:2, desc:"One hurdle in the center — you're blocked until you roll doubles to jump over!" },
-  magic_dice:  { label:"Magic Dice",   icon:"✨", color:"#39ff14", dice:2, desc:"Die 1 picks the horse, Die 2 picks the spaces. Race out and back — first home wins!" },
+  magic_dice:  { label:"Magic Dice",   icon:"✨", color:"#97bd88", dice:2, desc:"Die 1 picks the horse, Die 2 picks the spaces. Race out and back — first home wins!" },
   triple_dice: { label:"Triple Dice",  icon:"🎲", color:"#ff2d55", dice:3, desc:"3 dice rolled each turn — 3 horses move simultaneously. Pure chaos!" },
 };
 
@@ -499,7 +503,7 @@ const getAudioCtx = () => {
 const getRaceResults  = () => { try { return JSON.parse(localStorage.getItem("tt_race_results")||"{}"); } catch { return {}; } };
 const saveRaceResults = r  => localStorage.setItem("tt_race_results", JSON.stringify(r));
 const getSoundEnabled = () => { try { return localStorage.getItem("tt_sound")==="1"; } catch { return false; } };
-const setSoundEnabled = (v) => { try { localStorage.setItem("tt_sound", v?"1":"0"); } catch {} };
+const setSoundEnabled = (v) => { try { localStorage.setItem("tt_sound", v?"1":"0"); } catch {} window.dispatchEvent(new Event("track-sound")); };
 const getMusicEnabled = () => { try { return localStorage.getItem("tt_music")==="1"; } catch { return false; } };
 const setMusicEnabled = (v) => { try { localStorage.setItem("tt_music", v?"1":"0"); } catch {} };
 
@@ -1300,7 +1304,6 @@ function raceStatus(race, now) {
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const GS = `
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Orbitron:wght@700;900&display=swap');
   @keyframes tieFlash {
     0%   { opacity:0; transform:scale(0.8); }
     15%  { opacity:1; transform:scale(1.08); }
@@ -1390,9 +1393,9 @@ const GS = `
     50%     { transform: scaleX(0.9) scaleY(1.25) translateY(-6px); opacity: 0.85; }
   }
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-  body { background:#08081a; overflow-x:hidden; font-family:'Rajdhani','Segoe UI',sans-serif; }
-  ::-webkit-scrollbar { width:6px; background:#0a0a22; }
-  ::-webkit-scrollbar-thumb { background:#00f5ff33; border-radius:3px; }
+  body { background:#141614; overflow-x:hidden; font-family:var(--track-ui); }
+  ::-webkit-scrollbar { width:6px; background:#181a17; }
+  ::-webkit-scrollbar-thumb { background:#e5b67833; border-radius:3px; }
   input { font-family:inherit; }
   input[type=number]::-webkit-outer-spin-button,
   input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; }
@@ -1416,7 +1419,7 @@ const GS = `
 function Confetti() {
   const pieces = useMemo(()=>Array.from({length:80},(_,i)=>({
     id:i, x:Math.random()*100, delay:Math.random()*2.5, dur:2+Math.random()*3,
-    color:["#00f5ff","#39ff14","#ffd700","#ff2d55","#bf5fff","#ff6b00"][i%6],
+    color:["#e5b678","#97bd88","#ffd700","#ff2d55","#bf5fff","#ff6b00"][i%6],
     size:6+Math.random()*12,
   })),[]);
   return (
@@ -1429,6 +1432,10 @@ function Confetti() {
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
+function TrackWordmark() {
+  return <span className="track-wordmark"><span className="track-mark" aria-hidden="true"><i/><i/><i/></span>The Track</span>;
+}
+
 function AuthScreen({ onLogin }) {
   const [mode,setMode]=useState("login");
   const [username,setUsername]=useState("");
@@ -1472,48 +1479,33 @@ function AuthScreen({ onLogin }) {
     setLoading(false);
   };
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <main className="track-auth">
       <style>{GS}</style>
-      <div style={{width:"100%",maxWidth:420,background:"rgba(255,255,255,0.03)",border:"1px solid #00f5ff33",borderRadius:16,padding:"40px 32px",boxShadow:"0 0 80px #00f5ff0a"}}>
-        <div style={{textAlign:"center",marginBottom:32}}>
-          <div style={{fontSize:54}}>🏇</div>
-          <h1 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:34,letterSpacing:5,textShadow:"0 0 24px #00f5ff",marginTop:6}}>THE TRACK</h1>
-          <p style={{color:"#ffffff33",fontSize:12,marginTop:6,letterSpacing:3}}>VIRTUAL HORSE RACING</p>
+      <div className="track-auth-story">
+        <div className="track-auth-brand"><TrackWordmark /></div>
+        <div className="track-auth-title">
+          <p className="track-kicker">Virtual horse racing</p>
+          <h1>Every roll changes the race.</h1>
+          <p>Pick your horse, watch the dice settle, and follow the field to the wire.</p>
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:24}}>
-          {["login","register"].map(m=>(
-            <button key={m} onClick={()=>{setMode(m);setErr("");}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",cursor:"pointer",background:mode===m?"#00f5ff":"rgba(255,255,255,0.04)",color:mode===m?"#08081a":"#ffffff55",fontWeight:700,fontSize:13,letterSpacing:2,textTransform:"uppercase",transition:"all 0.2s"}}>{m==="login"?"Sign In":"Register"}</button>
-          ))}
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {mode==="register" && (
-            <div>
-              <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>Username</label>
-              <input type="text" value={username} onChange={e=>setUsername(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
-                style={{width:"100%",marginTop:4,padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff1a",borderRadius:8,color:"#fff",fontSize:16,outline:"none"}}
-                onFocus={e=>e.target.style.borderColor="#00f5ff"} onBlur={e=>e.target.style.borderColor="#ffffff1a"}/>
-            </div>
-          )}
-          <div>
-            <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>Email</label>
-            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
-              style={{width:"100%",marginTop:4,padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff1a",borderRadius:8,color:"#fff",fontSize:16,outline:"none"}}
-              onFocus={e=>e.target.style.borderColor="#00f5ff"} onBlur={e=>e.target.style.borderColor="#ffffff1a"}/>
-          </div>
-          <div>
-            <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2,textTransform:"uppercase"}}>Password</label>
-            <input type="password" value={p} onChange={e=>setP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
-              style={{width:"100%",marginTop:4,padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff1a",borderRadius:8,color:"#fff",fontSize:16,outline:"none"}}
-              onFocus={e=>e.target.style.borderColor="#00f5ff"} onBlur={e=>e.target.style.borderColor="#ffffff1a"}/>
-          </div>
-        </div>
-        {err&&<p style={{color:"#ff2d55",marginTop:10,fontSize:13,textAlign:"center"}}>{err}</p>}
-        <button onClick={go} disabled={loading} style={{width:"100%",marginTop:20,padding:"14px",borderRadius:10,border:"none",cursor:loading?"not-allowed":"pointer",background:"linear-gradient(135deg,#00f5ff,#0080ff)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:14,letterSpacing:3,boxShadow:"0 0 24px #00f5ff44",opacity:loading?0.7:1}}>
-          {loading?"...":(mode==="login"?"Enter The Track":"Create Account")}
-        </button>
-        <p style={{color:"#ffffff22",fontSize:11,textAlign:"center",marginTop:12,letterSpacing:1}}>New accounts start with $1,000 demo currency</p>
+        <p className="track-image-credit">Racehorse model by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · Recolored</p>
       </div>
-    </div>
+      <div className="track-auth-form">
+        <form onSubmit={e=>{e.preventDefault();go();}}>
+          <div className="track-auth-tabs" aria-label="Account action">
+            {[["login","Sign in"],["register","Register"]].map(([value,label])=>
+              <button key={value} type="button" aria-pressed={mode===value} onClick={()=>{setMode(value);setErr("");}}>{label}</button>)}
+          </div>
+          <h2>{mode==="login"?"Welcome back":"Create an account"}</h2>
+          {mode==="register" && <label>Username<input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" required/></label>}
+          <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required/></label>
+          <label>Password<input type="password" value={p} onChange={e=>setP(e.target.value)} autoComplete={mode==="login"?"current-password":"new-password"} required/></label>
+          {err && <p className="track-auth-error" role="alert">{err}</p>}
+          <button type="submit" className="track-primary" disabled={loading}>{loading?"Please wait…":mode==="login"?"Enter The Track":"Create account"}</button>
+          <p className="track-auth-note">New accounts start with $1,000 in demo currency.</p>
+        </form>
+      </div>
+    </main>
   );
 }
 
@@ -1601,14 +1593,14 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
-      <div style={{width:"100%",maxWidth:420,background:"#0d0d1f",border:"1px solid rgba(0,245,255,0.15)",borderRadius:20,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,0.8)",animation:"slideIn 0.15s ease-out"}} onClick={e=>e.stopPropagation()}>
+      <div style={{width:"100%",maxWidth:420,background:"#0d0d1f",border:"1px solid rgba(229,182,120,0.15)",borderRadius:20,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,0.8)",animation:"slideIn 0.15s ease-out"}} onClick={e=>e.stopPropagation()}>
         {/* Header */}
         <div style={{padding:"20px 20px 16px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
-              <div style={{width:56,height:56,borderRadius:14,background:"rgba(0,245,255,0.08)",border:"2px solid #00f5ff33",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>{avatar}</div>
+              <div style={{width:56,height:56,borderRadius:14,background:"rgba(229,182,120,0.08)",border:"2px solid #e5b67833",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>{avatar}</div>
               <div>
-                <div style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:16,letterSpacing:2}}>{username}</div>
+                <div style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:16,letterSpacing:2}}>{username}</div>
                 <div style={{display:"flex",gap:16,marginTop:4}}>
                   <span style={{color:"#ffffff55",fontSize:11}}><span style={{color:"#fff",fontWeight:700}}>{followerCount}</span> followers</span>
                   <span style={{color:"#ffffff55",fontSize:11}}><span style={{color:"#fff",fontWeight:700}}>{followingCount}</span> following</span>
@@ -1618,7 +1610,7 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
             <button onClick={onClose} style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#ffffff66",cursor:"pointer",width:32,height:32,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
           {uid !== myUid && (
-            <button onClick={handleFollow} disabled={acting} style={{width:"100%",padding:"10px",borderRadius:10,border:"none",cursor:acting?"not-allowed":"pointer",background:isFollowing?"rgba(255,255,255,0.07)":"rgba(0,245,255,0.15)",color:isFollowing?"#ffffff88":"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:2,fontWeight:700,transition:"all 0.15s"}}>
+            <button onClick={handleFollow} disabled={acting} style={{width:"100%",padding:"10px",borderRadius:10,border:"none",cursor:acting?"not-allowed":"pointer",background:isFollowing?"rgba(255,255,255,0.07)":"rgba(229,182,120,0.15)",color:isFollowing?"#ffffff88":"#e5b678",fontFamily:"var(--track-label)",fontSize:12,letterSpacing:2,fontWeight:700,transition:"all 0.15s"}}>
               {acting?"...":(isFollowing?"✓ FOLLOWING":"+ FOLLOW")}
             </button>
           )}
@@ -1633,7 +1625,7 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
 
         {/* Active Bets */}
         <div style={{padding:"16px 20px 20px",maxHeight:"50vh",overflowY:"auto"}}>
-          <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:12}}>ACTIVE RACES</div>
+          <div style={{fontFamily:"var(--track-label)",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:12}}>ACTIVE RACES</div>
           {loading && <div style={{color:"#ffffff33",textAlign:"center",padding:20}}>Loading...</div>}
           {!loading && activeBets.length===0 && <div style={{color:"#ffffff33",textAlign:"center",padding:20,fontSize:13}}>No active bets right now</div>}
           {activeBets.map(({race,st})=>{
@@ -1649,10 +1641,10 @@ function UserProfileModal({ uid, username, myUid, schedule, auctionSchedule, now
                     <div style={{color:rt.color,fontSize:11,marginTop:2}}>{rt.label}</div>
                   </div>
                   <div style={{textAlign:"right"}}>
-                    {st==="racing" && <div style={{color:"#ff2d55",fontSize:11,fontFamily:"'Orbitron',monospace",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
-                    {st==="locked" && <div style={{color:"#ffd700",fontSize:11,fontFamily:"'Orbitron',monospace"}}>LOCKED 🔒</div>}
-                    {st==="betting"&& <div style={{color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>{fmtCD(secs)}</div>}
-                    <div style={{color:"#00f5ff66",fontSize:10,marginTop:2}}>tap to view →</div>
+                    {st==="racing" && <div style={{color:"#ff2d55",fontSize:11,fontFamily:"var(--track-label)",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
+                    {st==="locked" && <div style={{color:"#ffd700",fontSize:11,fontFamily:"var(--track-label)"}}>LOCKED 🔒</div>}
+                    {st==="betting"&& <div style={{color:"#97bd88",fontSize:11,fontFamily:"var(--track-label)"}}>{fmtCD(secs)}</div>}
+                    <div style={{color:"#e5b67866",fontSize:10,marginTop:2}}>tap to view →</div>
                   </div>
                 </div>
               </div>
@@ -1724,38 +1716,38 @@ function FriendsTab({ user, schedule, auctionSchedule, now, onGoToRace, onClose 
       <div style={{display:"flex",gap:8,marginBottom:18}}>
         <div style={{flex:1,padding:"12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,textAlign:"center"}}>
           <div style={{color:"#ffffff33",fontSize:10,letterSpacing:1,marginBottom:4}}>FOLLOWING</div>
-          <div style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:22,fontWeight:700}}>{followingCount}</div>
+          <div style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:22,fontWeight:700}}>{followingCount}</div>
         </div>
         <div style={{flex:1,padding:"12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,textAlign:"center"}}>
           <div style={{color:"#ffffff33",fontSize:10,letterSpacing:1,marginBottom:4}}>FOLLOWERS</div>
-          <div style={{fontFamily:"'Orbitron',monospace",color:"#bf5fff",fontSize:22,fontWeight:700}}>{followerCount}</div>
+          <div style={{fontFamily:"var(--track-label)",color:"#bf5fff",fontSize:22,fontWeight:700}}>{followerCount}</div>
         </div>
       </div>
 
       {/* Search */}
       <div style={{marginBottom:18}}>
-        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FIND PLAYERS</div>
+        <div style={{fontFamily:"var(--track-label)",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FIND PLAYERS</div>
         <div style={{display:"flex",gap:6}}>
           <input value={searchQ} onChange={e=>{setSearchQ(e.target.value);setSearchResult(null);}}
             onKeyDown={e=>e.key==="Enter"&&handleSearch()}
             placeholder="Search by username..."
             style={{flex:1,padding:"9px 12px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#fff",fontSize:13,outline:"none"}}/>
-          <button onClick={handleSearch} style={{padding:"9px 16px",background:"rgba(0,245,255,0.1)",border:"1px solid #00f5ff33",borderRadius:8,color:"#00f5ff",cursor:"pointer",fontSize:13,fontWeight:700}}>Search</button>
+          <button onClick={handleSearch} style={{padding:"9px 16px",background:"rgba(229,182,120,0.1)",border:"1px solid #e5b67833",borderRadius:8,color:"#e5b678",cursor:"pointer",fontSize:13,fontWeight:700}}>Search</button>
         </div>
         {searchResult==="loading" && <div style={{color:"#ffffff44",fontSize:12,marginTop:8}}>Searching...</div>}
         {searchResult==="notfound" && <div style={{color:"#ff2d5588",fontSize:12,marginTop:8}}>No player found with that username</div>}
         {searchResult && searchResult !== "loading" && searchResult !== "notfound" && (
-          <div style={{marginTop:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid #00f5ff22",borderRadius:10,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{marginTop:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid #e5b67822",borderRadius:10,display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:24}}>{searchResult.avatar}</span>
             <span style={{color:"#fff",fontWeight:700,flex:1,fontSize:14}}>{searchResult.username}</span>
-            <button onClick={()=>setViewProfile({uid:searchResult.uid,username:searchResult.username})} style={{padding:"6px 12px",background:"rgba(0,245,255,0.08)",border:"1px solid #00f5ff33",borderRadius:7,color:"#00f5ff",cursor:"pointer",fontSize:12}}>View</button>
+            <button onClick={()=>setViewProfile({uid:searchResult.uid,username:searchResult.username})} style={{padding:"6px 12px",background:"rgba(229,182,120,0.08)",border:"1px solid #e5b67833",borderRadius:7,color:"#e5b678",cursor:"pointer",fontSize:12}}>View</button>
           </div>
         )}
       </div>
 
       {/* Following list */}
       <div>
-        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FOLLOWING</div>
+        <div style={{fontFamily:"var(--track-label)",color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:8}}>FOLLOWING</div>
         {myFriends===null && <div style={{color:"#ffffff33",fontSize:13,textAlign:"center",padding:20}}>Loading...</div>}
         {myFriends!==null && followingCount===0 && <div style={{color:"#ffffff33",fontSize:13,textAlign:"center",padding:"20px 0"}}>Not following anyone yet. Search for players above.</div>}
         {loadingFollowing && <div style={{color:"#ffffff44",fontSize:12,textAlign:"center",padding:"16px 0"}}>Loading followers...</div>}
@@ -1764,16 +1756,16 @@ function FriendsTab({ user, schedule, auctionSchedule, now, onGoToRace, onClose 
             style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,marginBottom:8,cursor:"pointer",transition:"all 0.15s"}}
             onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
             onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}>
-            <div style={{width:44,height:44,borderRadius:12,background:"rgba(0,245,255,0.08)",border:"2px solid #00f5ff22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{f.avatar}</div>
+            <div style={{width:44,height:44,borderRadius:12,background:"rgba(229,182,120,0.08)",border:"2px solid #e5b67822",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{f.avatar}</div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{f.username}</div>
               {f.activeBetCount>0
-                ? <div style={{color:"#39ff14",fontSize:12,marginTop:2}}>🎫 {f.activeBetCount} active bet{f.activeBetCount>1?"s":""} · tap to view</div>
+                ? <div style={{color:"#97bd88",fontSize:12,marginTop:2}}>🎫 {f.activeBetCount} active bet{f.activeBetCount>1?"s":""} · tap to view</div>
                 : <div style={{color:"#ffffff33",fontSize:12,marginTop:2}}>No active bets</div>
               }
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
-              <button onClick={e=>{e.stopPropagation();setViewProfile({uid:f.uid,username:f.username});}} style={{padding:"5px 12px",background:"rgba(0,245,255,0.08)",border:"1px solid #00f5ff33",borderRadius:7,color:"#00f5ff",cursor:"pointer",fontSize:11,fontWeight:700}}>View →</button>
+              <button onClick={e=>{e.stopPropagation();setViewProfile({uid:f.uid,username:f.username});}} style={{padding:"5px 12px",background:"rgba(229,182,120,0.08)",border:"1px solid #e5b67833",borderRadius:7,color:"#e5b678",cursor:"pointer",fontSize:11,fontWeight:700}}>View →</button>
               <button onClick={e=>{e.stopPropagation();handleUnfollow(f.uid);}} style={{padding:"5px 12px",background:"rgba(255,45,85,0.06)",border:"1px solid #ff2d5522",borderRadius:7,color:"#ff2d5566",cursor:"pointer",fontSize:11}}>Unfollow</button>
             </div>
           </div>
@@ -1820,23 +1812,23 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
   const saveBio=()=>{ const p={...profile,bio:bioText}; setProfile(p); saveProfile(user.username,p); setEditBio(false); fbSaveUser(user.uid,{bio:bioText}); };
   const tabS=(id,lbl,icon)=>(
     <button onClick={()=>setTab(id)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",
-      background:tab===id?"#00f5ff":"rgba(255,255,255,0.05)",color:tab===id?"#08081a":"#ffffff55",
-      fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:10,letterSpacing:1,transition:"all 0.2s"
+      background:tab===id?"#e5b678":"rgba(255,255,255,0.05)",color:tab===id?"#141614":"#ffffff55",
+      fontFamily:"var(--track-label)",fontWeight:700,fontSize:10,letterSpacing:1,transition:"all 0.2s"
     }}>{icon} {lbl}</button>
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(8,8,26,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
-      <div style={{width:"100%",maxWidth:580,background:"rgba(10,10,30,0.99)",border:"1px solid #00f5ff22",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:580,background:"rgba(10,10,30,0.99)",border:"1px solid #e5b67822",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:22}}>
           <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <button onClick={()=>setTab("avatar")} style={{width:64,height:64,borderRadius:16,background:"rgba(0,245,255,0.08)",border:"2px solid #00f5ff33",fontSize:34,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title="Change avatar">
+            <button onClick={()=>setTab("avatar")} style={{width:64,height:64,borderRadius:16,background:"rgba(229,182,120,0.08)",border:"2px solid #e5b67833",fontSize:34,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title="Change avatar">
               {profile.avatar||"🏇"}
             </button>
             <div>
-              <h2 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:20,letterSpacing:2}}>{user.username}</h2>
+              <h2 style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:20,letterSpacing:2}}>{user.username}</h2>
               <div style={{color:"#ffffff33",fontSize:11,marginTop:2}}>Member since {new Date(user?.joined||Date.now()).toLocaleDateString()}</div>
-              <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13,marginTop:3}}>${fmt2(user.balance)}</div>
+              <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:13,marginTop:3}}>${fmt2(user.balance)}</div>
             </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#ffffff44",fontSize:24,cursor:"pointer"}}>✕</button>
@@ -1845,11 +1837,11 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
           {editBio?(
             <div>
               <textarea value={bioText} onChange={e=>setBioText(e.target.value)} maxLength={160} rows={3}
-                style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid #00f5ff33",borderRadius:7,color:"#fff",fontSize:16,padding:"8px 10px",outline:"none",resize:"none",fontFamily:"inherit"}}
+                style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid #e5b67833",borderRadius:7,color:"#fff",fontSize:16,padding:"8px 10px",outline:"none",resize:"none",fontFamily:"inherit"}}
                 placeholder="Write something about yourself..."/>
               <div style={{display:"flex",gap:8,marginTop:6,justifyContent:"flex-end"}}>
                 <button onClick={()=>{setEditBio(false);setBioText(profile.bio||"");}} style={{padding:"5px 14px",borderRadius:6,border:"1px solid #ffffff22",background:"transparent",color:"#ffffff55",cursor:"pointer",fontSize:12}}>Cancel</button>
-                <button onClick={saveBio} style={{padding:"5px 14px",borderRadius:6,border:"none",background:"#00f5ff",color:"#08081a",cursor:"pointer",fontSize:12,fontWeight:700}}>Save</button>
+                <button onClick={saveBio} style={{padding:"5px 14px",borderRadius:6,border:"none",background:"#e5b678",color:"#141614",cursor:"pointer",fontSize:12,fontWeight:700}}>Save</button>
               </div>
             </div>
           ):(
@@ -1864,10 +1856,10 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
         </div>
         {tab==="stats"&&(
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {[["Races",totalRaces,"#00f5ff"],["Wins",wins,"#39ff14"],["Win Rate",winRate+"%","#ffd700"],["Wagered","$"+fmt2(totalWagered),"#bf5fff"],["Total Won","$"+fmt2(totalWon),"#39ff14"],["Net P&L",(netPnL>=0?"+$":"−$")+fmt2(Math.abs(netPnL)),netPnL>=0?"#39ff14":"#ff2d55"],["Best Win","$"+fmt2(bestWin),"#ffd700"],["Balance","$"+fmt2(user.balance),"#00f5ff"]].map(([lbl,val,col])=>(
+            {[["Races",totalRaces,"#e5b678"],["Wins",wins,"#97bd88"],["Win Rate",winRate+"%","#ffd700"],["Wagered","$"+fmt2(totalWagered),"#bf5fff"],["Total Won","$"+fmt2(totalWon),"#97bd88"],["Net P&L",(netPnL>=0?"+$":"−$")+fmt2(Math.abs(netPnL)),netPnL>=0?"#97bd88":"#ff2d55"],["Best Win","$"+fmt2(bestWin),"#ffd700"],["Balance","$"+fmt2(user.balance),"#e5b678"]].map(([lbl,val,col])=>(
               <div key={lbl} style={{flex:"1 1 calc(50% - 8px)",padding:"14px",background:"rgba(255,255,255,0.03)",border:"1px solid #ffffff0d",borderRadius:10,textAlign:"center"}}>
                 <div style={{color:"#ffffff33",fontSize:10,letterSpacing:1,marginBottom:5}}>{lbl.toUpperCase()}</div>
-                <div style={{fontFamily:"'Orbitron',monospace",color:col,fontSize:18,fontWeight:700}}>{val}</div>
+                <div style={{fontFamily:"var(--track-label)",color:col,fontSize:18,fontWeight:700}}>{val}</div>
               </div>
             ))}
           </div>
@@ -1882,8 +1874,8 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                     <div><div style={{color:"#fff",fontWeight:700}}>{rt.icon} {race.name}{race.condition&&race.condition!=="sunny"?<span style={{marginLeft:6,fontSize:12}}>{TRACK_CONDITIONS[race.condition].icon}</span>:null}</div><div style={{color:rt.color,fontSize:11}}>{rt.label}{race.condition&&race.condition!=="sunny"?<span style={{color:TRACK_CONDITIONS[race.condition].color,marginLeft:6,fontSize:10}}>{TRACK_CONDITIONS[race.condition].label}</span>:null}</div></div>
                     <div style={{textAlign:"right"}}>
-                      {st==="locked"&&<div style={{color:"#ff2d55",fontFamily:"'Orbitron',monospace",fontSize:13}}>{secs}s</div>}
-                      {st==="betting"&&<div style={{color:"#39ff14",fontSize:12}}>{fmtCD(secs-BET_CLOSE_SECS)} to close</div>}
+                      {st==="locked"&&<div style={{color:"#ff2d55",fontFamily:"var(--track-label)",fontSize:13}}>{secs}s</div>}
+                      {st==="betting"&&<div style={{color:"#97bd88",fontSize:12}}>{fmtCD(secs-BET_CLOSE_SECS)} to close</div>}
                       {st==="racing"&&<div style={{color:"#ff2d55",fontSize:12,animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
                       <div style={{color:"#ffffff33",fontSize:10}}>{fmtTime(new Date(race.startTime))}</div>
                     </div>
@@ -1892,10 +1884,10 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
                     const h=HORSES[parseInt(hid)];
                     return <div key={hid} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:`${h.color}0a`,border:`1px solid ${h.color}22`,borderRadius:7,marginBottom:4}}>
                       <HorseName race={race} horseId={h.id} style={{color:h.color,fontWeight:700,flex:1,fontSize:13}}/>
-                      <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(parseFloat(amt))}</span>
+                      <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:13}}>${fmt2(parseFloat(amt))}</span>
                     </div>;
                   })}
-                  <div style={{textAlign:"right",marginTop:4}}><span style={{color:"#00f5ff",fontSize:11}}>Total locked: ${fmt2(data.pot)}</span></div>
+                  <div style={{textAlign:"right",marginTop:4}}><span style={{color:"#e5b678",fontSize:11}}>Total locked: ${fmt2(data.pot)}</span></div>
                 </div>
               );
             })}
@@ -1907,9 +1899,9 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
             {showProfileReplay && <RaceReplayScreen race={showProfileReplay} onClose={()=>setShowProfileReplay(null)}/>}
             {[...hist].reverse().map((h,i)=>{
               const horse=HORSES[h.horseId]; const rt=RACE_TYPES[h.raceType];
-              return <div key={i} style={{marginBottom:6,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.won?"#39ff1422":"#ff2d5511"}`}}>
+              return <div key={i} style={{marginBottom:6,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.won?"#97bd8822":"#ff2d5511"}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4,marginBottom:4,alignItems:"center"}}>
-                  <span style={{color:"#00f5ff",fontSize:12,fontWeight:600}}>{rt?.icon} {h.raceName||"Race"}</span>
+                  <span style={{color:"#e5b678",fontSize:12,fontWeight:600}}>{rt?.icon} {h.raceName||"Race"}</span>
                   {h.raceId && <button onClick={()=>{
   const found = schedule.find(r=>r.id===h.raceId)||auctionSchedule.find(r=>r.id===h.raceId);
   setShowProfileReplay(found || {id:h.raceId,name:h.raceName,type:h.raceType||"standard",condition:"sunny",seed:1,startTime:h.time||Date.now()});
@@ -1919,7 +1911,7 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                   <span style={{color:horse.color,fontWeight:700,fontSize:13}}>🐴 {horse.name}</span>
                   <span style={{color:"#ffffff44",fontSize:12}}>Bet: <span style={{color:"#ffd700"}}>${h.amount}</span></span>
-                  {h.won?<span style={{color:"#39ff14",fontWeight:700,fontSize:13}}>✓ +${fmt2(h.payout)}</span>:<span style={{color:"#ff2d55",fontSize:13}}>✗ Lost</span>}
+                  {h.won?<span style={{color:"#97bd88",fontWeight:700,fontSize:13}}>✓ +${fmt2(h.payout)}</span>:<span style={{color:"#ff2d55",fontSize:13}}>✗ Lost</span>}
                 </div>
               </div>;
             })}
@@ -1934,8 +1926,8 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
             <div style={{display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center"}}>
               {AVATAR_OPTIONS.map(av=>(
                 <button key={av} onClick={()=>saveAvatar(av)} style={{width:52,height:52,borderRadius:12,fontSize:26,cursor:"pointer",
-                  background:(profile.avatar||"🏇")===av?"rgba(0,245,255,0.15)":"rgba(255,255,255,0.05)",
-                  border:`2px solid ${(profile.avatar||"🏇")===av?"#00f5ff":"rgba(255,255,255,0.1)"}`,
+                  background:(profile.avatar||"🏇")===av?"rgba(229,182,120,0.15)":"rgba(255,255,255,0.05)",
+                  border:`2px solid ${(profile.avatar||"🏇")===av?"#e5b678":"rgba(255,255,255,0.1)"}`,
                   transition:"all 0.15s",display:"flex",alignItems:"center",justifyContent:"center"}}>{av}</button>
               ))}
             </div>
@@ -2004,22 +1996,22 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
   const tabS=(id,lbl,icon)=>(
     <button onClick={()=>setTab(id)} style={{flex:1,padding:"9px 4px",borderRadius:7,border:"none",cursor:"pointer",
       background:tab===id?"#bf5fff":"rgba(255,255,255,0.05)",color:tab===id?"#fff":"#ffffff55",
-      fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:10,letterSpacing:1,transition:"all 0.2s"}}>{icon} {lbl}</button>
+      fontFamily:"var(--track-label)",fontWeight:700,fontSize:10,letterSpacing:1,transition:"all 0.2s"}}>{icon} {lbl}</button>
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(8,8,26,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
       <div style={{width:"100%",maxWidth:600,background:"rgba(10,10,30,0.99)",border:"1px solid #bf5fff33",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out",boxShadow:"0 0 60px #bf5fff0a"}} onClick={e=>e.stopPropagation()}>
         
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
           <div>
-            <h2 style={{fontFamily:"'Orbitron',monospace",color:"#bf5fff",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #bf5fff66"}}>🔒 PRIVATE RACES</h2>
+            <h2 style={{fontFamily:"var(--track-label)",color:"#bf5fff",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #bf5fff66"}}>🔒 PRIVATE RACES</h2>
             <div style={{color:"#ffffff33",fontSize:11,marginTop:2}}>Host or join a private race with friends</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#ffffff44",fontSize:24,cursor:"pointer"}}>✕</button>
         </div>
 
-        {flash&&<div style={{padding:"10px 16px",borderRadius:9,marginBottom:14,textAlign:"center",background:flash.ok?"rgba(57,255,20,0.1)":"rgba(255,45,85,0.1)",border:`1px solid ${flash.ok?"#39ff1444":"#ff2d5544"}`,color:flash.ok?"#39ff14":"#ff2d55",fontWeight:700,fontSize:13,animation:"slideIn 0.2s ease-out"}}>{flash.ok?"✅":"⚠️"} {flash.msg}</div>}
+        {flash&&<div style={{padding:"10px 16px",borderRadius:9,marginBottom:14,textAlign:"center",background:flash.ok?"rgba(151,189,136,0.1)":"rgba(255,45,85,0.1)",border:`1px solid ${flash.ok?"#97bd8844":"#ff2d5544"}`,color:flash.ok?"#97bd88":"#ff2d55",fontWeight:700,fontSize:13,animation:"slideIn 0.2s ease-out"}}>{flash.ok?"✅":"⚠️"} {flash.msg}</div>}
 
         <div style={{display:"flex",gap:5,marginBottom:20}}>
           {tabS("browse","My Races","🏇")}
@@ -2035,8 +2027,8 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
                 <div style={{fontSize:40,marginBottom:12}}>🔒</div>
                 <p style={{color:"#ffffff33",fontSize:13,marginBottom:16}}>No private races yet.</p>
                 <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-                  <button onClick={()=>setTab("create")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#bf5fff",color:"#fff",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12}}>➕ Create Race</button>
-                  <button onClick={()=>setTab("join")} style={{padding:"10px 20px",borderRadius:10,border:"1px solid #bf5fff44",background:"rgba(191,95,255,0.08)",color:"#bf5fff",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12}}>🔑 Join Race</button>
+                  <button onClick={()=>setTab("create")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:"#bf5fff",color:"#fff",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12}}>➕ Create Race</button>
+                  <button onClick={()=>setTab("join")} style={{padding:"10px 20px",borderRadius:10,border:"1px solid #bf5fff44",background:"rgba(191,95,255,0.08)",color:"#bf5fff",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12}}>🔑 Join Race</button>
                 </div>
               </div>
             )}
@@ -2082,7 +2074,7 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
               <div>• Share the generated <span style={{color:"#ffd700",fontWeight:700}}>6-character code</span> with players</div>
               <div>• Everyone places bets, then you hit Start when ready</div>
             </div>
-            <button onClick={createRace} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#bf5fff,#7b2fff)",color:"#fff",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:14,letterSpacing:2,boxShadow:"0 0 24px #bf5fff33"}}>
+            <button onClick={createRace} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#bf5fff,#7b2fff)",color:"#fff",fontFamily:"var(--track-label)",fontWeight:700,fontSize:14,letterSpacing:2,boxShadow:"0 0 24px #bf5fff33"}}>
               🔒 CREATE PRIVATE RACE
             </button>
           </div>
@@ -2094,10 +2086,10 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
             <label style={{color:"#ffffff44",fontSize:11,letterSpacing:2}}>ENTER RACE CODE</label>
             <div style={{display:"flex",gap:8,marginTop:8,marginBottom:16}}>
               <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="ABC123"
-                style={{flex:1,padding:"13px 16px",background:"rgba(255,255,255,0.05)",border:"1px solid #bf5fff33",borderRadius:8,color:"#fff",fontSize:20,outline:"none",fontFamily:"'Orbitron',monospace",letterSpacing:4,textAlign:"center"}}
+                style={{flex:1,padding:"13px 16px",background:"rgba(255,255,255,0.05)",border:"1px solid #bf5fff33",borderRadius:8,color:"#fff",fontSize:20,outline:"none",fontFamily:"var(--track-label)",letterSpacing:4,textAlign:"center"}}
                 onFocus={e=>e.target.style.borderColor="#bf5fff"} onBlur={e=>e.target.style.borderColor="#bf5fff33"}
                 onKeyDown={e=>e.key==="Enter"&&joinRace()}/>
-              <button onClick={joinRace} style={{padding:"13px 22px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#bf5fff,#7b2fff)",color:"#fff",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,whiteSpace:"nowrap"}}>JOIN</button>
+              <button onClick={joinRace} style={{padding:"13px 22px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#bf5fff,#7b2fff)",color:"#fff",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,whiteSpace:"nowrap"}}>JOIN</button>
             </div>
             <p style={{color:"#ffffff33",fontSize:12,textAlign:"center"}}>Ask the race host for their 6-character code</p>
           </div>
@@ -2183,7 +2175,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
 
   const totalMembers=members.length;
   const confirmedCount=members.filter(([,m])=>m.confirmed).length;
-  const timerColor = countdown<=10?"#ff2d55":countdown<=20?"#ffd700":"#00f5ff";
+  const timerColor = countdown<=10?"#ff2d55":countdown<=20?"#ffd700":"#e5b678";
 
   // ── COUNTDOWN SCREEN — shown to everyone once race.started=true ──────────────
   if(race.started && !race.finished && countdown !== null) {
@@ -2194,7 +2186,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
         {/* Header */}
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:24,marginBottom:4}}>{rt.icon}</div>
-          <div style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:15,letterSpacing:2}}>{race.name}</div>
+          <div style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:15,letterSpacing:2}}>{race.name}</div>
           <div style={{color:"#bf5fff",fontSize:11,letterSpacing:2,marginTop:2}}>PRIVATE RACE · BETS CLOSED</div>
         </div>
 
@@ -2209,13 +2201,13 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
                 style={{transition:"stroke-dashoffset 1s linear, stroke 0.5s",filter:`drop-shadow(0 0 6px ${timerColor})`}}/>
             </svg>
             <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-              <div style={{fontFamily:"'Orbitron',monospace",color:timerColor,fontSize:34,fontWeight:900,lineHeight:1,textShadow:`0 0 16px ${timerColor}77`}}>{countdown}</div>
+              <div style={{fontFamily:"var(--track-label)",color:timerColor,fontSize:34,fontWeight:900,lineHeight:1,textShadow:`0 0 16px ${timerColor}77`}}>{countdown}</div>
               <div style={{color:"#ffffff44",fontSize:9,letterSpacing:2,marginTop:2}}>SECS</div>
             </div>
           </div>
         </div>
 
-        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:10,letterSpacing:3,textAlign:"center",marginBottom:16,animation:"racingBlink 1s infinite"}}>
+        <div style={{fontFamily:"var(--track-label)",color:"#ffffff44",fontSize:10,letterSpacing:3,textAlign:"center",marginBottom:16,animation:"racingBlink 1s infinite"}}>
           RACE STARTING SOON
         </div>
 
@@ -2227,7 +2219,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
               ? <span style={{color:"#ffd70088",fontSize:10}}>👑 ADMIN VIEW</span>
               : countdown>10
                 ? <span style={{color:"#ffffff22",fontSize:10}}>reveals at 10s</span>
-                : <span style={{color:"#00f5ff88",fontSize:10}}>final odds</span>
+                : <span style={{color:"#e5b67888",fontSize:10}}>final odds</span>
             }
           </div>
           <div style={{filter: !isHost && countdown>10 ? "blur(6px)" : "none", transition:"filter 0.8s", userSelect: !isHost && countdown>10 ? "none":"auto"}}>
@@ -2243,8 +2235,8 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
                       {isHost&&<div style={{color:"#ffffff33",fontSize:10,marginTop:1}}>${fmt2(totalOnHorse)} bet total</div>}
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:16,fontWeight:900,textShadow:"0 0 8px #ffd70055"}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
-                      {myBetAmt>0&&<div style={{color:"#00f5ff",fontSize:10,marginTop:1}}>you: ${fmt2(myBetAmt)}</div>}
+                      <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:16,fontWeight:900,textShadow:"0 0 8px #ffd70055"}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
+                      {myBetAmt>0&&<div style={{color:"#e5b678",fontSize:10,marginTop:1}}>you: ${fmt2(myBetAmt)}</div>}
                     </div>
                   </div>
                   <div style={{height:3,background:"rgba(255,255,255,0.04)",borderRadius:2,marginTop:2,overflow:"hidden"}}>
@@ -2257,7 +2249,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
           {/* Pool total */}
           <div style={{marginTop:10,padding:"8px 12px",background:"rgba(255,255,255,0.03)",border:"1px solid #ffffff0d",borderRadius:8,display:"flex",justifyContent:"space-between"}}>
             <span style={{color:"#ffffff44",fontSize:11}}>Total pool</span>
-            <span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:13}}>${fmt2(totalPool)}</span>
+            <span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:13}}>${fmt2(totalPool)}</span>
           </div>
         </div>
       </div>
@@ -2266,7 +2258,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
 
   return (
     <div style={{marginBottom:14,padding:"16px",background:"rgba(191,95,255,0.05)",border:`1px solid ${isHost?"#bf5fff44":"#ffffff18"}`,borderRadius:14,animation:"slideIn 0.2s ease-out"}}>
-      {flash&&<div style={{padding:"8px 12px",borderRadius:7,marginBottom:8,textAlign:"center",background:flash.ok?"rgba(57,255,20,0.1)":"rgba(255,45,85,0.1)",border:`1px solid ${flash.ok?"#39ff1444":"#ff2d5544"}`,color:flash.ok?"#39ff14":"#ff2d55",fontSize:12}}>{flash.msg}</div>}
+      {flash&&<div style={{padding:"8px 12px",borderRadius:7,marginBottom:8,textAlign:"center",background:flash.ok?"rgba(151,189,136,0.1)":"rgba(255,45,85,0.1)",border:`1px solid ${flash.ok?"#97bd8844":"#ff2d5544"}`,color:flash.ok?"#97bd88":"#ff2d55",fontSize:12}}>{flash.msg}</div>}
       
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
         <div>
@@ -2274,21 +2266,21 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
           <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
             <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
             <span style={{color:"#ffffff33"}}>·</span>
-            <span style={{color:"#bf5fff",fontFamily:"'Orbitron',monospace",fontSize:13,letterSpacing:2}}>{race.code}</span>
+            <span style={{color:"#bf5fff",fontFamily:"var(--track-label)",fontSize:13,letterSpacing:2}}>{race.code}</span>
             {isHost&&<span style={{background:"rgba(255,215,0,0.12)",border:"1px solid #ffd70033",borderRadius:8,padding:"1px 8px",color:"#ffd700",fontSize:10,fontWeight:700}}>ADMIN</span>}
           </div>
         </div>
         <div style={{textAlign:"right"}}>
           {race.finished&&<span style={{color:"#ffffff44",fontSize:12}}>FINISHED</span>}
           {race.started&&!race.finished&&<span style={{color:"#ff2d55",fontSize:12,animation:"racingBlink 1s infinite"}}>LIVE 🔴</span>}
-          {!race.started&&<span style={{color:"#39ff14",fontSize:12}}>WAITING</span>}
+          {!race.started&&<span style={{color:"#97bd88",fontSize:12}}>WAITING</span>}
         </div>
       </div>
 
       {/* Race code display */}
       <div style={{padding:"8px 12px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70022",borderRadius:8,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{color:"#ffffff55",fontSize:11}}>Share code:</span>
-        <span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:20,letterSpacing:6,fontWeight:900}}>{race.code}</span>
+        <span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:20,letterSpacing:6,fontWeight:900}}>{race.code}</span>
         <button onClick={()=>{navigator.clipboard?.writeText(race.code);showFlash("Code copied!");}} style={{background:"rgba(255,215,0,0.1)",border:"1px solid #ffd70033",borderRadius:6,color:"#ffd700",padding:"4px 10px",cursor:"pointer",fontSize:11}}>Copy</button>
       </div>
 
@@ -2297,9 +2289,9 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
         <div style={{color:"#ffffff33",fontSize:10,letterSpacing:2,marginBottom:6}}>{totalMembers} MEMBER{totalMembers!==1?"S":""} · {confirmedCount} CONFIRMED</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
           {members.map(([uname,m])=>(
-            <div key={uname} style={{padding:"4px 10px",borderRadius:20,background:m.confirmed?"rgba(57,255,20,0.1)":"rgba(255,255,255,0.05)",border:`1px solid ${m.confirmed?"#39ff1433":"#ffffff18"}`,display:"flex",alignItems:"center",gap:5}}>
+            <div key={uname} style={{padding:"4px 10px",borderRadius:20,background:m.confirmed?"rgba(151,189,136,0.1)":"rgba(255,255,255,0.05)",border:`1px solid ${m.confirmed?"#97bd8833":"#ffffff18"}`,display:"flex",alignItems:"center",gap:5}}>
               <span style={{fontSize:11}}>{getProfile(uname).avatar||"🏇"}</span>
-              <span style={{color:m.confirmed?"#39ff14":"#ffffff66",fontSize:11,fontWeight:600}}>{uname}</span>
+              <span style={{color:m.confirmed?"#97bd88":"#ffffff66",fontSize:11,fontWeight:600}}>{uname}</span>
               {uname===race.hostUsername&&<span style={{color:"#ffd70066",fontSize:9}}>★</span>}
               {m.confirmed&&<span style={{color:"#39ff1066",fontSize:9}}>✓</span>}
             </div>
@@ -2334,7 +2326,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
                 <div style={{width:8,height:8,borderRadius:"50%",background:h.color,flexShrink:0}}/>
                 <span style={{flex:1,color:h.color,fontWeight:700,fontSize:12}}>{rank} {name}</span>
                 <span style={{color:"#ffffff33",fontSize:11,marginRight:8}}>${fmt2(totalOnHorse)} on</span>
-                <span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:14,fontWeight:900}}>{odds?`${odds.toFixed(2)}x`:"—"}</span>
+                <span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:14,fontWeight:900}}>{odds?`${odds.toFixed(2)}x`:"—"}</span>
               </div>
             );
           })}
@@ -2347,17 +2339,17 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
           {!betting&&(
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {!confirmed?(
-                <button onClick={()=>setBetting(true)} style={{flex:1,padding:"10px",borderRadius:9,border:"1px solid #bf5fff44",background:"rgba(191,95,255,0.08)",color:"#bf5fff",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12}}>
+                <button onClick={()=>setBetting(true)} style={{flex:1,padding:"10px",borderRadius:9,border:"1px solid #bf5fff44",background:"rgba(191,95,255,0.08)",color:"#bf5fff",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12}}>
                   🎫 Place Bets
                 </button>
               ):(
-                <div style={{flex:1,padding:"10px",borderRadius:9,background:"rgba(57,255,20,0.07)",border:"1px solid #39ff1433",textAlign:"center"}}>
-                  <span style={{color:"#39ff14",fontWeight:700,fontSize:12}}>✓ Bets Confirmed — ${fmt2(Object.values(myBets).reduce((s,v)=>s+(parseFloat(v)||0),0))}</span>
+                <div style={{flex:1,padding:"10px",borderRadius:9,background:"rgba(151,189,136,0.07)",border:"1px solid #97bd8833",textAlign:"center"}}>
+                  <span style={{color:"#97bd88",fontWeight:700,fontSize:12}}>✓ Bets Confirmed — ${fmt2(Object.values(myBets).reduce((s,v)=>s+(parseFloat(v)||0),0))}</span>
                   <button onClick={()=>{setBetting(true);}} style={{marginLeft:10,background:"none",border:"1px solid #ffffff22",borderRadius:5,color:"#ffffff44",padding:"2px 8px",cursor:"pointer",fontSize:10}}>Edit</button>
                 </div>
               )}
               {isHost&&!race.started&&(
-                <button onClick={startRace} style={{padding:"10px 18px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#ff2d55,#ff6b00)",color:"#fff",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12,boxShadow:"0 0 20px #ff2d5533"}}>
+                <button onClick={startRace} style={{padding:"10px 18px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#ff2d55,#ff6b00)",color:"#fff",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,boxShadow:"0 0 20px #ff2d5533"}}>
                   🏁 START RACE
                 </button>
               )}
@@ -2383,7 +2375,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
               })}
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={()=>setBetting(false)} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid #ffffff22",background:"transparent",color:"#ffffff55",cursor:"pointer",fontSize:12}}>Cancel</button>
-                <button onClick={confirmBets} style={{flex:2,padding:"9px",borderRadius:7,border:"none",background:"linear-gradient(135deg,#00f5ff,#39ff14)",color:"#08081a",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12,letterSpacing:1}}>🔒 CONFIRM BETS</button>
+                <button onClick={confirmBets} style={{flex:2,padding:"9px",borderRadius:7,border:"none",background:"linear-gradient(135deg,#e5b678,#97bd88)",color:"#141614",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:1}}>🔒 CONFIRM BETS</button>
               </div>
             </div>
           )}
@@ -2440,21 +2432,21 @@ function BankPanel({ user, onClose, onBalanceChange }) {
   const tabBtn = (id, label, icon) => (
     <button onClick={()=>{setTab(id);setAmount("");setFlash(null);}} style={{
       flex:1, padding:"10px 8px", borderRadius:8, border:"none", cursor:"pointer",
-      background: tab===id ? "#00f5ff" : "rgba(255,255,255,0.05)",
-      color: tab===id ? "#08081a" : "#ffffff55",
-      fontFamily:"'Orbitron',monospace", fontWeight:700, fontSize:11, letterSpacing:1,
+      background: tab===id ? "#e5b678" : "rgba(255,255,255,0.05)",
+      color: tab===id ? "#141614" : "#ffffff55",
+      fontFamily:"var(--track-label)", fontWeight:700, fontSize:11, letterSpacing:1,
       transition:"all 0.2s",
     }}>{icon} {label}</button>
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(8,8,26,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
       <div style={{width:"100%",maxWidth:520,background:"rgba(10,10,30,0.99)",border:"1px solid #ffd70033",borderRadius:20,padding:28,maxHeight:"88vh",overflow:"auto",animation:"slideIn 0.2s ease-out",boxShadow:"0 0 80px #ffd70010"}} onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
           <div>
-            <h2 style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #ffd70066"}}>🏦 MY BANK</h2>
+            <h2 style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #ffd70066"}}>🏦 MY BANK</h2>
             <div style={{color:"#ffffff33",fontSize:11,marginTop:3,letterSpacing:1}}>{user.username.toUpperCase()} · DEMO ACCOUNT</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#ffffff44",fontSize:24,cursor:"pointer"}}>✕</button>
@@ -2463,11 +2455,11 @@ function BankPanel({ user, onClose, onBalanceChange }) {
         {/* Big balance */}
         <div style={{textAlign:"center",marginBottom:24,padding:"20px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70033",borderRadius:14}}>
           <div style={{color:"#ffffff44",fontSize:11,letterSpacing:3,marginBottom:4}}>AVAILABLE BALANCE</div>
-          <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:42,fontWeight:900,textShadow:"0 0 30px #ffd70055",lineHeight:1}}>${fmt2(user.balance)}</div>
+          <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:42,fontWeight:900,textShadow:"0 0 30px #ffd70055",lineHeight:1}}>${fmt2(user.balance)}</div>
           <div style={{marginTop:8,display:"flex",justifyContent:"center",gap:16,flexWrap:"wrap"}}>
-            <span style={{color:"#39ff1488",fontSize:12}}>▲ ${fmt2(totalDeposited)} deposited</span>
+            <span style={{color:"#97bd8888",fontSize:12}}>▲ ${fmt2(totalDeposited)} deposited</span>
             <span style={{color:"#ff2d5588",fontSize:12}}>▼ ${fmt2(totalWithdrawn)} withdrawn</span>
-            <span style={{color:netPnL>=0?"#39ff14":"#ff2d55",fontSize:12,fontWeight:700}}>{netPnL>=0?"▲":"▼"} ${fmt2(Math.abs(netPnL))} betting P&L</span>
+            <span style={{color:netPnL>=0?"#97bd88":"#ff2d55",fontSize:12,fontWeight:700}}>{netPnL>=0?"▲":"▼"} ${fmt2(Math.abs(netPnL))} betting P&L</span>
           </div>
         </div>
 
@@ -2481,9 +2473,9 @@ function BankPanel({ user, onClose, onBalanceChange }) {
         {/* Flash message */}
         {flash && (
           <div style={{padding:"10px 16px",borderRadius:9,marginBottom:14,textAlign:"center",
-            background:flash.ok?"rgba(57,255,20,0.1)":"rgba(255,45,85,0.1)",
-            border:`1px solid ${flash.ok?"#39ff1444":"#ff2d5544"}`,
-            color:flash.ok?"#39ff14":"#ff2d55",fontWeight:700,fontSize:13,
+            background:flash.ok?"rgba(151,189,136,0.1)":"rgba(255,45,85,0.1)",
+            border:`1px solid ${flash.ok?"#97bd8844":"#ff2d5544"}`,
+            color:flash.ok?"#97bd88":"#ff2d55",fontWeight:700,fontSize:13,
             animation:"slideIn 0.2s ease-out"
           }}>{flash.ok?"✅":"⚠️"} {flash.msg}</div>
         )}
@@ -2493,14 +2485,14 @@ function BankPanel({ user, onClose, onBalanceChange }) {
           <div>
             <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
               {[
-                ["Starting Balance","$"+fmt2(startingBalance),"#00f5ff"],
-                ["Total Deposited","$"+fmt2(totalDeposited),"#39ff14"],
+                ["Starting Balance","$"+fmt2(startingBalance),"#e5b678"],
+                ["Total Deposited","$"+fmt2(totalDeposited),"#97bd88"],
                 ["Total Withdrawn","$"+fmt2(totalWithdrawn),"#ff2d55"],
-                ["Betting P&L",(netPnL>=0?"+":"-")+"$"+fmt2(Math.abs(netPnL)),netPnL>=0?"#39ff14":"#ff2d55"],
+                ["Betting P&L",(netPnL>=0?"+":"-")+"$"+fmt2(Math.abs(netPnL)),netPnL>=0?"#97bd88":"#ff2d55"],
               ].map(([lbl,val,col])=>(
                 <div key={lbl} style={{flex:"1 1 45%",padding:"12px",background:"rgba(255,255,255,0.03)",border:"1px solid #ffffff0d",borderRadius:10,textAlign:"center"}}>
                   <div style={{color:"#ffffff33",fontSize:10,letterSpacing:1,marginBottom:4}}>{lbl}</div>
-                  <div style={{fontFamily:"'Orbitron',monospace",color:col,fontSize:16,fontWeight:700}}>{val}</div>
+                  <div style={{fontFamily:"var(--track-label)",color:col,fontSize:16,fontWeight:700}}>{val}</div>
                 </div>
               ))}
             </div>
@@ -2517,7 +2509,7 @@ function BankPanel({ user, onClose, onBalanceChange }) {
                       <div style={{color:"#ffffff33",fontSize:11}}>{new Date(tx.ts).toLocaleString()}</div>
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:tx.type==="deposit"?"#39ff14":"#ff2d55",fontSize:14,fontWeight:700}}>{tx.type==="deposit"?"+":"-"}${fmt2(tx.amount)}</div>
+                      <div style={{fontFamily:"var(--track-label)",color:tx.type==="deposit"?"#97bd88":"#ff2d55",fontSize:14,fontWeight:700}}>{tx.type==="deposit"?"+":"-"}${fmt2(tx.amount)}</div>
                       <div style={{color:"#ffffff33",fontSize:11}}>bal: ${fmt2(tx.balance)}</div>
                     </div>
                   </div>
@@ -2533,7 +2525,7 @@ function BankPanel({ user, onClose, onBalanceChange }) {
             <div style={{color:"#ffffff44",fontSize:11,letterSpacing:2,marginBottom:12}}>QUICK DEPOSIT</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
               {DEPOSIT_PRESETS.map(amt=>(
-                <button key={amt} onClick={()=>doDeposit(amt)} style={{flex:"1 1 calc(33% - 8px)",padding:"12px 8px",borderRadius:10,border:"1px solid #ffd70033",background:"rgba(255,215,0,0.07)",color:"#ffd700",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,transition:"all 0.15s"}}
+                <button key={amt} onClick={()=>doDeposit(amt)} style={{flex:"1 1 calc(33% - 8px)",padding:"12px 8px",borderRadius:10,border:"1px solid #ffd70033",background:"rgba(255,215,0,0.07)",color:"#ffd700",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,transition:"all 0.15s"}}
                   onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,215,0,0.15)";e.currentTarget.style.borderColor="#ffd70066";}}
                   onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,215,0,0.07)";e.currentTarget.style.borderColor="#ffd70033";}}
                 >+${fmt2(amt)}</button>
@@ -2547,7 +2539,7 @@ function BankPanel({ user, onClose, onBalanceChange }) {
                   style={{width:"100%",padding:"13px 12px 13px 28px",background:"rgba(255,255,255,0.05)",border:"1px solid #ffd70033",borderRadius:10,color:"#fff",fontSize:16,outline:"none"}}
                   onFocus={e=>e.target.style.borderColor="#ffd700"} onBlur={e=>e.target.style.borderColor="#ffd70033"}/>
               </div>
-              <button onClick={()=>doDeposit(amount)} style={{padding:"13px 22px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#ffd700,#ff9500)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2,whiteSpace:"nowrap"}}>DEPOSIT</button>
+              <button onClick={()=>doDeposit(amount)} style={{padding:"13px 22px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#ffd700,#ff9500)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:2,whiteSpace:"nowrap"}}>DEPOSIT</button>
             </div>
             <p style={{color:"#ffffff22",fontSize:11,marginTop:10,textAlign:"center"}}>Demo currency only — no real money involved</p>
           </div>
@@ -2559,7 +2551,7 @@ function BankPanel({ user, onClose, onBalanceChange }) {
             <div style={{color:"#ffffff44",fontSize:11,letterSpacing:2,marginBottom:12}}>QUICK WITHDRAW</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:20}}>
               {WITHDRAW_PRESETS.map(amt=>(
-                <button key={amt} onClick={()=>doWithdraw(amt==="All"?user.balance:amt)} style={{flex:"1 1 calc(33% - 8px)",padding:"12px 8px",borderRadius:10,border:"1px solid #ff2d5533",background:"rgba(255,45,85,0.07)",color:"#ff2d55",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,transition:"all 0.15s"}}
+                <button key={amt} onClick={()=>doWithdraw(amt==="All"?user.balance:amt)} style={{flex:"1 1 calc(33% - 8px)",padding:"12px 8px",borderRadius:10,border:"1px solid #ff2d5533",background:"rgba(255,45,85,0.07)",color:"#ff2d55",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,transition:"all 0.15s"}}
                   onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,45,85,0.15)";e.currentTarget.style.borderColor="#ff2d5566";}}
                   onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,45,85,0.07)";e.currentTarget.style.borderColor="#ff2d5533";}}
                 >{amt==="All"?"ALL":"-$"+fmt2(amt)}</button>
@@ -2573,11 +2565,11 @@ function BankPanel({ user, onClose, onBalanceChange }) {
                   style={{width:"100%",padding:"13px 12px 13px 28px",background:"rgba(255,255,255,0.05)",border:"1px solid #ff2d5533",borderRadius:10,color:"#fff",fontSize:16,outline:"none"}}
                   onFocus={e=>e.target.style.borderColor="#ff2d55"} onBlur={e=>e.target.style.borderColor="#ff2d5533"}/>
               </div>
-              <button onClick={()=>doWithdraw(amount)} style={{padding:"13px 22px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#ff2d55,#ff6b00)",color:"#fff",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2,whiteSpace:"nowrap"}}>WITHDRAW</button>
+              <button onClick={()=>doWithdraw(amount)} style={{padding:"13px 22px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#ff2d55,#ff6b00)",color:"#fff",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:2,whiteSpace:"nowrap"}}>WITHDRAW</button>
             </div>
             <div style={{marginTop:14,padding:"10px 14px",background:"rgba(255,45,85,0.05)",border:"1px solid #ff2d5522",borderRadius:9,display:"flex",justifyContent:"space-between"}}>
               <span style={{color:"#ffffff44",fontSize:12}}>Available to withdraw</span>
-              <span style={{fontFamily:"'Orbitron',monospace",color:"#ff2d55",fontSize:14}}>${fmt2(user.balance)}</span>
+              <span style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:14}}>${fmt2(user.balance)}</span>
             </div>
             <p style={{color:"#ffffff22",fontSize:11,marginTop:10,textAlign:"center"}}>Demo currency only — no real money involved</p>
           </div>
@@ -2676,7 +2668,7 @@ function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onPrivateRaces, on
         <span style={{color:"#ffffff44",fontSize:9,marginLeft:2}}>{open?"▲":"▼"}</span>
       </button>
       {open && (
-        <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,minWidth:160,background:"rgba(8,8,26,0.98)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",zIndex:400,animation:"slideIn 0.12s ease-out"}}>
+        <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,minWidth:160,background:"rgba(20,22,20,0.98)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.6)",zIndex:400,animation:"slideIn 0.12s ease-out"}}>
           {items.map(({icon,label,fn,danger})=>(
             <button key={label} onClick={()=>{ setOpen(false); fn(); }} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid rgba(255,255,255,0.05)",cursor:"pointer",textAlign:"left"}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.07)"}
@@ -2714,6 +2706,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
     ["⬡", "Sign Out",   onLogout,         null],
   ];
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
+  useEffect(()=>{ const sync=()=>setSoundOn(getSoundEnabled()); window.addEventListener("track-sound",sync); return ()=>window.removeEventListener("track-sound",sync); },[]);
   const toggleSound = () => { const v=!soundOn; setSoundOn(v); setSoundEnabled(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); };
   const [musicOn2, setMusicOn2] = useState(getMusicEnabled());
   const toggleMusic2 = () => { const v=!musicOn2; setMusicOn2(v); setMusicEnabled(v); setMusicEnabledGlobal(v); };
@@ -2724,13 +2717,13 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
     return (
       <>
         {/* Mobile bar: logo left, balance + burger right */}
-        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"rgba(8,8,26,0.97)",backdropFilter:"blur(16px)",borderBottom:"1px solid #00f5ff18",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",height:52}}>
-          <button onClick={onLobby} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:14,letterSpacing:2,textShadow:"0 0 12px #00f5ff"}}>🏇 THE TRACK</button>
+        <div className="track-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"rgba(20,22,20,0.97)",backdropFilter:"blur(16px)",borderBottom:"1px solid #e5b67818",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",height:52}}>
+          <button type="button" className="track-nav-brand" onClick={onLobby} aria-label="The Track lobby"><TrackWordmark/></button>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {/* Balance pill */}
             <button onClick={onBank} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",background:"rgba(255,215,0,0.08)",border:"1px solid #ffd70033",borderRadius:20,cursor:"pointer"}}>
               <span style={{fontSize:12}}>🏦</span>
-              <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12}}>${fmt2(user.balance)}</span>
+              <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:12}}>${fmt2(user.balance)}</span>
             </button>
             {/* Sound + Music toggles */}
             <button onClick={toggleSound} style={{width:32,height:32,borderRadius:8,background:soundOn?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:soundOn?1:0.45}}>
@@ -2754,13 +2747,13 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
 
         {/* Dropdown menu */}
         {menuOpen && (
-          <div style={{position:"fixed",top:52,left:0,right:0,zIndex:299,background:"rgba(8,8,26,0.98)",backdropFilter:"blur(20px)",borderBottom:"1px solid #00f5ff18",padding:"8px 0",animation:"slideIn 0.15s ease-out"}}>
+          <div style={{position:"fixed",top:52,left:0,right:0,zIndex:299,background:"rgba(20,22,20,0.98)",backdropFilter:"blur(20px)",borderBottom:"1px solid #e5b67818",padding:"8px 0",animation:"slideIn 0.15s ease-out"}}>
             {/* Profile header */}
             <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid #ffffff08",marginBottom:4}}>
               <span style={{fontSize:22}}>{avatar}</span>
               <div>
                 <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{user.username}</div>
-                <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:11}}>${fmt2(user.balance)}</div>
+                <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:11}}>${fmt2(user.balance)}</div>
               </div>
             </div>
             {navItems.map(([icon,lbl,fn,badge])=>(
@@ -2787,8 +2780,8 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
 
   // ── Desktop / landscape ────────────────────────────────────────────────────
   return (
-    <div style={{position:"fixed",top:0,left:0,right:0,zIndex:200,background:"rgba(8,8,26,0.96)",backdropFilter:"blur(16px)",borderBottom:"1px solid #00f5ff18",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",height:56,flexShrink:0,gap:8}}>
-      <button onClick={onLobby} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:15,letterSpacing:3,textShadow:"0 0 14px #00f5ff",whiteSpace:"nowrap",flexShrink:0}}>🏇 THE TRACK</button>
+    <div className="track-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:200,background:"rgba(20,22,20,0.96)",backdropFilter:"blur(16px)",borderBottom:"1px solid #e5b67818",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",height:56,flexShrink:0,gap:8}}>
+      <button type="button" className="track-nav-brand" onClick={onLobby} aria-label="The Track lobby"><TrackWordmark/></button>
       <div style={{display:"flex",alignItems:"center",gap:4,flex:1,justifyContent:"center"}}>
         {[
           ["🏠","Lobby",onLobby,null],
@@ -2808,7 +2801,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
         {/* Balance — display only */}
         <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70022",borderRadius:8}}>
           <span style={{fontSize:13}}>🏦</span>
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:13}}>${fmt2(user.balance)}</span>
+          <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:13}}>${fmt2(user.balance)}</span>
         </div>
         <UserMenu avatar={avatar} user={user} onProfile={onProfile} onBank={onBank} onHowTo={onHowTo} onPrivateRaces={onPrivateRaces} onLogout={onLogout}/>
         <MuteButton/>
@@ -2818,12 +2811,12 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
 }
 
 // ─── MODAL WRAPPER ────────────────────────────────────────────────────────────
-function Modal({ title, accent="#00f5ff", onClose, children, wide }) {
+function Modal({ title, accent="#e5b678", onClose, children, wide }) {
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(8,8,26,0.95)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.95)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
       <div style={{width:"100%",maxWidth:wide?680:500,background:"rgba(12,12,36,0.98)",border:`1px solid ${accent}33`,borderRadius:16,padding:28,maxHeight:"85vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <h2 style={{fontFamily:"'Orbitron',monospace",color:accent,fontSize:17,letterSpacing:3,textShadow:`0 0 12px ${accent}`}}>{title}</h2>
+          <h2 style={{fontFamily:"var(--track-label)",color:accent,fontSize:17,letterSpacing:3,textShadow:`0 0 12px ${accent}`}}>{title}</h2>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#ffffff44",fontSize:22,cursor:"pointer",lineHeight:1}}>✕</button>
         </div>
         {children}
@@ -2910,11 +2903,11 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
   }, [history]);
 
   return (
-    <Modal title="🎫 BETS" accent="#00f5ff" onClose={onClose} wide>
+    <Modal title="🎫 BETS" accent="#e5b678" onClose={onClose} wide>
       {/* Tabs */}
       <div style={{display:"flex",gap:4,marginBottom:18,borderBottom:"1px solid rgba(255,255,255,0.08)",paddingBottom:12}}>
         {[["active","Active Bets"],["history","History"]].map(([id,lbl])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{padding:"6px 18px",borderRadius:8,border:"none",cursor:"pointer",background:tab===id?"rgba(0,245,255,0.15)":"rgba(255,255,255,0.04)",color:tab===id?"#00f5ff":"#ffffff55",fontFamily:"'Orbitron',monospace",fontSize:11,letterSpacing:1,fontWeight:700,borderBottom:tab===id?"2px solid #00f5ff":"2px solid transparent",transition:"all 0.15s"}}>
+          <button key={id} onClick={()=>setTab(id)} style={{padding:"6px 18px",borderRadius:8,border:"none",cursor:"pointer",background:tab===id?"rgba(229,182,120,0.15)":"rgba(255,255,255,0.04)",color:tab===id?"#e5b678":"#ffffff55",fontFamily:"var(--track-label)",fontSize:11,letterSpacing:1,fontWeight:700,borderBottom:tab===id?"2px solid #e5b678":"2px solid transparent",transition:"all 0.15s"}}>
             {lbl}{id==="active"&&myRaces.length>0?<span style={{marginLeft:6,background:"#ff2d55",color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:9}}>{myRaces.length}</span>:null}
           </button>
         ))}
@@ -2923,7 +2916,7 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
       {/* Balance */}
       <div style={{marginBottom:16,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{color:"#ffffff55",fontSize:13}}>Balance</span>
-        <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:16}}>${fmt2(userBalance)}</span>
+        <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:16}}>${fmt2(userBalance)}</span>
       </div>
 
       {/* ── ACTIVE BETS TAB ── */}
@@ -2941,16 +2934,16 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
                   <div style={{display:"flex",gap:8,alignItems:"center",marginTop:3,flexWrap:"wrap"}}>
                     <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
                     {isConfirmed
-                      ? <span style={{background:"rgba(0,245,255,0.12)",border:"1px solid #00f5ff33",borderRadius:10,padding:"1px 8px",color:"#00f5ff",fontSize:10,fontWeight:700,letterSpacing:1}}>✓ LOCKED IN</span>
+                      ? <span style={{background:"rgba(229,182,120,0.12)",border:"1px solid #e5b67833",borderRadius:10,padding:"1px 8px",color:"#e5b678",fontSize:10,fontWeight:700,letterSpacing:1}}>✓ LOCKED IN</span>
                       : <span style={{background:"rgba(255,215,0,0.1)",border:"1px solid #ffd70033",borderRadius:10,padding:"1px 8px",color:"#ffd700",fontSize:10,fontWeight:700,letterSpacing:1}}>DRAFT</span>
                     }
                   </div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  {st==="betting" && <div style={{color:"#39ff14",fontSize:12,fontFamily:"'Orbitron',monospace"}}>OPEN — {fmtCD(secsToStart)}</div>}
-                  {st==="locked"  && <div style={{color:"#ffd700",fontSize:12,fontFamily:"'Orbitron',monospace"}}>LOCKED 🔒</div>}
-                  {st==="racing"  && <div style={{color:"#ff2d55",fontSize:12,fontFamily:"'Orbitron',monospace",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
-                  {st==="upcoming"&& <div style={{color:"#ffffff55",fontSize:12,fontFamily:"'Orbitron',monospace"}}>{fmtCD(secsToStart)}</div>}
+                  {st==="betting" && <div style={{color:"#97bd88",fontSize:12,fontFamily:"var(--track-label)"}}>OPEN — {fmtCD(secsToStart)}</div>}
+                  {st==="locked"  && <div style={{color:"#ffd700",fontSize:12,fontFamily:"var(--track-label)"}}>LOCKED 🔒</div>}
+                  {st==="racing"  && <div style={{color:"#ff2d55",fontSize:12,fontFamily:"var(--track-label)",animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>}
+                  {st==="upcoming"&& <div style={{color:"#ffffff55",fontSize:12,fontFamily:"var(--track-label)"}}>{fmtCD(secsToStart)}</div>}
                   <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>🕐 {fmtTime(new Date(race.startTime))}</div>
                 </div>
               </div>
@@ -2971,14 +2964,14 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
                           <button onClick={()=>updateBet(race.id,hid,"")} style={{background:"rgba(255,45,85,0.15)",border:"1px solid #ff2d5533",borderRadius:6,color:"#ff2d55",padding:"5px 8px",cursor:"pointer",fontSize:11}}>✕</button>
                         </>
                       ) : (
-                        <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14}}>${fmt2(parseFloat(amt))}</span>
+                        <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:14}}>${fmt2(parseFloat(amt))}</span>
                       )}
                     </div>
                   );
                 })}
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-                <span style={{color:"#ffffff55",fontSize:12}}>Total: <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace"}}>${fmt2(totalBet)}</span></span>
+                <span style={{color:"#ffffff55",fontSize:12}}>Total: <span style={{color:"#ffd700",fontFamily:"var(--track-label)"}}>${fmt2(totalBet)}</span></span>
                 <div style={{display:"flex",gap:8}}>
                   {canEdit && !isConfirmed && <button onClick={()=>removeBet(race.id)} style={{background:"rgba(255,45,85,0.1)",border:"1px solid #ff2d5533",borderRadius:7,color:"#ff2d55",padding:"6px 12px",cursor:"pointer",fontSize:12,letterSpacing:1}}>✕ Remove</button>}
                   <button onClick={()=>{onClose();onGoToRace(race);}} style={{background:`${rt.color}18`,border:`1px solid ${rt.color}44`,borderRadius:7,color:rt.color,padding:"6px 12px",cursor:"pointer",fontSize:12,letterSpacing:1}}>View Race →</button>
@@ -2997,14 +2990,14 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
           const rt = RACE_TYPES[race.raceType] || RACE_TYPES.standard;
           const net = race.totalPayout - race.totalBet;
           return (
-            <div key={i} style={{marginBottom:12,padding:"13px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${race.won?"#39ff1433":"#ff2d5522"}`,borderRadius:12}}>
+            <div key={i} style={{marginBottom:12,padding:"13px 16px",background:"rgba(255,255,255,0.03)",border:`1px solid ${race.won?"#97bd8833":"#ff2d5522"}`,borderRadius:12}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                 <div>
                   <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{rt.icon} {race.raceName||"Race"}</div>
                   <div style={{color:rt.color,fontSize:11,fontWeight:600,marginTop:2}}>{rt.label}</div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontFamily:"'Orbitron',monospace",fontSize:14,fontWeight:900,color:race.won?"#39ff14":"#ff2d55"}}>{race.won?`+$${fmt2(race.totalPayout)}`:"Lost"}</div>
+                  <div style={{fontFamily:"var(--track-label)",fontSize:14,fontWeight:900,color:race.won?"#97bd88":"#ff2d55"}}>{race.won?`+$${fmt2(race.totalPayout)}`:"Lost"}</div>
                   <div style={{color:"#ffffff33",fontSize:10,marginTop:2}}>{race.time ? new Date(race.time).toLocaleDateString()+' '+new Date(race.time).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : ""}</div>
                 </div>
               </div>
@@ -3017,7 +3010,7 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
                       <span style={{color:"#ffffff55",fontSize:11}}>Bet ${fmt2(b.amount)}</span>
                       {b.odds&&<span style={{color:"#ffffff33",fontSize:10}}>{b.odds}x</span>}
                       {b.won
-                        ? <span style={{color:"#39ff14",fontSize:11,fontWeight:700}}>✓ +${fmt2(b.payout)}</span>
+                        ? <span style={{color:"#97bd88",fontSize:11,fontWeight:700}}>✓ +${fmt2(b.payout)}</span>
                         : <span style={{color:"#ff2d5566",fontSize:11}}>✗</span>
                       }
                     </div>
@@ -3027,7 +3020,7 @@ function MyBetsPanel({ username, uid, schedule, auctionSchedule, now, onClose, o
               <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,0.05)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <span style={{color:"#ffffff44",fontSize:11}}>Total bet: <span style={{color:"#ffd700"}}>${fmt2(race.totalBet)}</span></span>
-                  <span style={{color:"#ffffff44",fontSize:11,marginLeft:12}}>Net: <span style={{color:net>=0?"#39ff14":"#ff2d55",fontWeight:700}}>{net>=0?"+":""}${fmt2(net)}</span></span>
+                  <span style={{color:"#ffffff44",fontSize:11,marginLeft:12}}>Net: <span style={{color:net>=0?"#97bd88":"#ff2d55",fontWeight:700}}>{net>=0?"+":""}${fmt2(net)}</span></span>
                 </div>
                 {race.bets[0]?.raceId && (
                   <button onClick={()=>{
@@ -3188,7 +3181,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const myMinBid     = Math.max(AUCTION_MIN_BID, (topBid?.[1]||0)+1);
   const canBid       = inAuction && !iOwn && topBid?.[0]!==user.username && currentSlot < 6;
   const timerPct     = slotTimeLeft / AUCTION_BID_SECS;
-  const timerColor   = slotTimeLeft<=5?"#ff2d55":slotTimeLeft<=10?"#ffd700":"#00f5ff";
+  const timerColor   = slotTimeLeft<=5?"#ff2d55":slotTimeLeft<=10?"#ffd700":"#e5b678";
 
   const doBid = async () => {
     const amt = parseFloat(bidAmount);
@@ -3236,7 +3229,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   // ── Odds/owners reveal (same 30s window as regular races) ───────────────────
   // oddsRevealSecs: 0 when auction ends, grows to PRESENT_SECS as race approaches
   const oddsRevealSecs = Math.min(PRESENT_SECS, Math.max(0, -secsToAuctionEnd));
-  const timerColorOdds = oddsRevealSecs>20?"#ff2d55":oddsRevealSecs>10?"#ffd700":"#00f5ff";
+  const timerColorOdds = oddsRevealSecs>20?"#ff2d55":oddsRevealSecs>10?"#ffd700":"#e5b678";
   const revealCount    = Math.min(6, Math.floor(oddsRevealSecs/5)+1);
 
   // Auto-fire race — only once, guarded by ref
@@ -3266,21 +3259,21 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   },[secsToRaceFire, inOdds, raceStarted]);
 
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",paddingTop:68,paddingBottom:40}}>
+    <div style={{minHeight:"100vh",background:"#141614",paddingTop:68,paddingBottom:40}}>
       <div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13,margin:"12px 0",display:"flex",alignItems:"center",gap:6}}>← Back</button>
 
         {/* Header */}
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:28}}>{rt.icon}</div>
-          <h2 style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:16,letterSpacing:3,marginBottom:2}}>{race.name}</h2>
+          <h2 style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:16,letterSpacing:3,marginBottom:2}}>{race.name}</h2>
           <div style={{color:"#ffd700",fontSize:11,letterSpacing:2,fontWeight:700}}>🔨 AUCTION RACE</div>
         </div>
 
         {/* Tabs */}
         <div style={{display:"flex",gap:8,marginBottom:16}}>
           {["auction","bets"].map(t=>(
-            <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${tab===t?"#ffd70066":"#ffffff15"}`,background:tab===t?"rgba(255,215,0,0.08)":"transparent",color:tab===t?"#ffd700":"#ffffff55",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontSize:10,letterSpacing:0,fontWeight:700}}>
+            <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${tab===t?"#ffd70066":"#ffffff15"}`,background:tab===t?"rgba(255,215,0,0.08)":"transparent",color:tab===t?"#ffd700":"#ffffff55",cursor:"pointer",fontFamily:"var(--track-label)",fontSize:10,letterSpacing:0,fontWeight:700}}>
               {t==="auction"?"🔨 AUCTION":"💰 BETTING"}
             </button>
           ))}
@@ -3298,21 +3291,21 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                   style={{transition:"stroke-dashoffset 1s linear",filter:`drop-shadow(0 0 6px ${timerColorOdds})`}}/>
               </svg>
               <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-                <div style={{fontFamily:"'Orbitron',monospace",color:timerColorOdds,fontSize:32,fontWeight:900,lineHeight:1}}>{Math.max(0,Math.ceil(secsToRaceFire))}</div>
+                <div style={{fontFamily:"var(--track-label)",color:timerColorOdds,fontSize:32,fontWeight:900,lineHeight:1}}>{Math.max(0,Math.ceil(secsToRaceFire))}</div>
                 <div style={{color:"#ffffff44",fontSize:9,letterSpacing:2,marginTop:2}}>SECONDS</div>
               </div>
             </div>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:20,animation:"racingBlink 1s infinite",textAlign:"center"}}>RACE STARTING</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:20,animation:"racingBlink 1s infinite",textAlign:"center"}}>RACE STARTING</div>
             {/* Both pots */}
             <div style={{display:"flex",gap:8,marginBottom:16}}>
               <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70033",borderRadius:10}}>
                 <span style={{color:"#ffffff66",fontSize:10,letterSpacing:1}}>🔨 AUCTION</span>
-                <span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:15,fontWeight:900}}>${fmt2(auctionPot)}</span>
+                <span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:15,fontWeight:900}}>${fmt2(auctionPot)}</span>
               </div>
               {confirmedPot>0&&(
-                <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:10}}>
+                <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(229,182,120,0.06)",border:"1px solid #e5b67833",borderRadius:10}}>
                   <span style={{color:"#ffffff66",fontSize:10,letterSpacing:1}}>💰 BETS</span>
-                  <span style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:15,fontWeight:900}}>${fmt2(confirmedPot)}</span>
+                  <span style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:15,fontWeight:900}}>${fmt2(confirmedPot)}</span>
                 </div>
               )}
             </div>
@@ -3340,13 +3333,13 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                             <div style={{flex:1}}>
                               <div style={{color:h.color,fontWeight:700,fontSize:13}}>{race.horses?.[hi]||h.name}</div>
                               {owner
-                                ? <div style={{color:owner.username===user.username?"#39ff14":"#ffffff66",fontSize:11,marginTop:1}}>🔨 {owner.username} · <span style={{color:"#ffd700"}}>${fmt2(owner.amount)}</span></div>
+                                ? <div style={{color:owner.username===user.username?"#97bd88":"#ffffff66",fontSize:11,marginTop:1}}>🔨 {owner.username} · <span style={{color:"#ffd700"}}>${fmt2(owner.amount)}</span></div>
                                 : <div style={{color:"#ff2d55",fontSize:11,marginTop:1}}>🏚 HOUSE</div>
                               }
                             </div>
                             {odds&&<div style={{textAlign:"right",flexShrink:0}}>
-                              <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:16,fontWeight:900}}>{odds.toFixed(2)}x</div>
-                              <div style={{color:"#00f5ff",fontSize:10,marginTop:1}}>💰${fmt2(betAmt)}</div>
+                              <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:16,fontWeight:900}}>{odds.toFixed(2)}x</div>
+                              <div style={{color:"#e5b678",fontSize:10,marginTop:1}}>💰${fmt2(betAmt)}</div>
                             </div>}
                           </div>
                         );
@@ -3374,11 +3367,11 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                           <div style={{flex:1}}>
                             <div style={{color:h.color,fontWeight:700,fontSize:11}}>{race.horses?.[hi]||h.name}</div>
                             {owner
-                              ? <div style={{color:owner.username===user.username?"#39ff14":"#ffffff44",fontSize:10}}>🔨 {owner.username}</div>
+                              ? <div style={{color:owner.username===user.username?"#97bd88":"#ffffff44",fontSize:10}}>🔨 {owner.username}</div>
                               : <div style={{color:"#ff2d5544",fontSize:10}}>🏚 HOUSE</div>
                             }
                           </div>
-                          {odds&&<span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:12,fontWeight:900}}>{odds.toFixed(2)}x</span>}
+                          {odds&&<span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:12,fontWeight:900}}>{odds.toFixed(2)}x</span>}
                         </div>
                       );
                     })()}
@@ -3395,15 +3388,15 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
             {/* Pot */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70033",borderRadius:10,marginBottom:16}}>
               <span style={{color:"#ffffff66",fontSize:11,letterSpacing:2}}>AUCTION POT</span>
-              <span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:18,fontWeight:900}}>${fmt2(auctionPot)}</span>
+              <span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:18,fontWeight:900}}>${fmt2(auctionPot)}</span>
             </div>
 
             {/* Pre-auction countdown */}
             {preAuction && (
               <div style={{textAlign:"center",padding:"40px 20px"}}>
                 <div style={{fontSize:40,marginBottom:12}}>🔨</div>
-                <div style={{fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:2,color:"#ffffff55",marginBottom:8}}>AUCTION OPENS IN</div>
-                <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:36,fontWeight:900}}>{fmtCD(Math.abs(elapsedSecs))}</div>
+                <div style={{fontFamily:"var(--track-label)",fontSize:12,letterSpacing:2,color:"#ffffff55",marginBottom:8}}>AUCTION OPENS IN</div>
+                <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:36,fontWeight:900}}>{fmtCD(Math.abs(elapsedSecs))}</div>
                 <div style={{color:"#ffffff33",fontSize:11,marginTop:12}}>6 horses · $5 starting bid · 30s each</div>
                 <div style={{marginTop:24}}>
                   <div style={{color:"#ffffff33",fontSize:10,letterSpacing:2,marginBottom:8}}>AUCTION ORDER</div>
@@ -3426,7 +3419,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
             {soldAnim && (
               <div style={{textAlign:"center",padding:"20px",marginBottom:16,background:"rgba(0,0,0,0.7)",borderRadius:16,border:`1px solid ${soldAnim.winner?"#ffd70044":"#ff2d5544"}`,animation:"tieFlash 2.5s ease-out forwards"}}>
                 <div style={{fontSize:44,marginBottom:4}}>{soldAnim.winner?"🔨":"🏚"}</div>
-                <div style={{fontFamily:"'Orbitron',monospace",fontSize:32,fontWeight:900,letterSpacing:4,color:soldAnim.winner?"#ffd700":"#ff2d55",textShadow:soldAnim.winner?"0 0 30px #ffd700":"0 0 20px #ff2d55",marginBottom:8}}>
+                <div style={{fontFamily:"var(--track-label)",fontSize:32,fontWeight:900,letterSpacing:4,color:soldAnim.winner?"#ffd700":"#ff2d55",textShadow:soldAnim.winner?"0 0 30px #ffd700":"0 0 20px #ff2d55",marginBottom:8}}>
                   {soldAnim.winner?"SOLD!":"NO SALE"}
                 </div>
                 {soldAnim.winner?(
@@ -3436,7 +3429,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                       <span style={{color:"#fff",fontSize:14}}>{race.horses?.[soldAnim.hi]||HORSES[soldAnim.hi]?.name}</span>
                     </div>
                     <div style={{color:"#ffffff88",fontSize:13,marginBottom:4}}>🏇 {soldAnim.winner}</div>
-                    <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:24,fontWeight:900}}>${fmt2(soldAnim.winAmt)}</div>
+                    <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:24,fontWeight:900}}>${fmt2(soldAnim.winAmt)}</div>
                   </>
                 ):(
                   <div style={{color:"#ffffff44",fontSize:12}}>Goes to the house if this horse wins</div>
@@ -3453,7 +3446,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                     const hid=race.horseOrder?.[i]??i;
                     const owned=aData.owners?.[hid];
                     return <div key={i} style={{flex:1,height:4,borderRadius:2,background:
-                      i<currentSlot?(owned?"#39ff14":"#ff2d5544"):
+                      i<currentSlot?(owned?"#97bd88":"#ff2d5544"):
                       i===currentSlot?currentHorse.color:"#ffffff11"}}/>;
                   })}
                 </div>
@@ -3470,7 +3463,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                         strokeDashoffset={`${2*Math.PI*18*(1-timerPct)}`}
                         style={{transition:"stroke-dashoffset 0.5s linear",filter:`drop-shadow(0 0 4px ${timerColor})`}}/>
                     </svg>
-                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Orbitron',monospace",color:timerColor,fontSize:12,fontWeight:900}}>{Math.ceil(slotTimeLeft)}</div>
+                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--track-label)",color:timerColor,fontSize:12,fontWeight:900}}>{Math.ceil(slotTimeLeft)}</div>
                   </div>
 
                   <div style={{fontSize:44,marginBottom:8}}>🐴</div>
@@ -3480,15 +3473,15 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                   {topBid?(
                     <>
                       <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>CURRENT BID</div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:28,fontWeight:900,textShadow:"0 0 16px #ffd70066"}}>${fmt2(topBid[1])}</div>
-                      <div style={{color:topBid[0]===user.username?"#39ff14":"#ffffff66",fontSize:12,marginTop:2,marginBottom:12}}>
+                      <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:28,fontWeight:900,textShadow:"0 0 16px #ffd70066"}}>${fmt2(topBid[1])}</div>
+                      <div style={{color:topBid[0]===user.username?"#97bd88":"#ffffff66",fontSize:12,marginTop:2,marginBottom:12}}>
                         {topBid[0]===user.username?"✓ YOU — HIGH BIDDER":topBid[0]}
                       </div>
                     </>
                   ):(
                     <>
                       <div style={{color:"#ffffff33",fontSize:10,letterSpacing:2,marginBottom:2}}>STARTING BID</div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff44",fontSize:28,fontWeight:900,marginBottom:12}}>${fmt2(AUCTION_MIN_BID)}</div>
+                      <div style={{fontFamily:"var(--track-label)",color:"#ffffff44",fontSize:28,fontWeight:900,marginBottom:12}}>${fmt2(AUCTION_MIN_BID)}</div>
                     </>
                   )}
 
@@ -3502,10 +3495,10 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                           onKeyDown={e=>e.key==="Enter"&&doBid()}
                           style={{width:"100%",padding:"10px 10px 10px 24px",background:"rgba(255,255,255,0.07)",border:"1px solid #ffd70033",borderRadius:8,color:"#fff",fontSize:16,outline:"none",boxSizing:"border-box"}}/>
                       </div>
-                      <button onClick={doBid} style={{padding:"10px 18px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#ffd700,#ff6b00)",color:"#000",fontFamily:"'Orbitron',monospace",fontWeight:900,fontSize:13,cursor:"pointer"}}>BID</button>
+                      <button onClick={doBid} style={{padding:"10px 18px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#ffd700,#ff6b00)",color:"#000",fontFamily:"var(--track-label)",fontWeight:900,fontSize:13,cursor:"pointer"}}>BID</button>
                     </div>
                   )}
-                  {iOwn&&<div style={{color:"#39ff14",fontSize:13,fontWeight:700,marginTop:8}}>✓ You own a horse — watching only</div>}
+                  {iOwn&&<div style={{color:"#97bd88",fontSize:13,fontWeight:700,marginTop:8}}>✓ You own a horse — watching only</div>}
                   {!canBid&&!iOwn&&topBid?.[0]===user.username&&<div style={{color:"#ffd700",fontSize:12,marginTop:8}}>You are the high bidder</div>}
                 </div>
 
@@ -3515,8 +3508,8 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                     <div style={{color:"#ffffff33",fontSize:10,letterSpacing:2,marginBottom:8}}>ALL BIDS</div>
                     {bidEntries.map(([uname,amt],i)=>(
                       <div key={uname} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<bidEntries.length-1?"1px solid #ffffff08":"none"}}>
-                        <span style={{color:uname===user.username?"#39ff14":"#ffffff88",fontSize:13}}>{i===0?"👑 ":""}{uname}</span>
-                        <span style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:13}}>${fmt2(amt)}</span>
+                        <span style={{color:uname===user.username?"#97bd88":"#ffffff88",fontSize:13}}>{i===0?"👑 ":""}{uname}</span>
+                        <span style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:13}}>${fmt2(amt)}</span>
                       </div>
                     ))}
                   </div>
@@ -3539,17 +3532,17 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
               <div style={{marginBottom:16}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
                   <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>BETS CLOSE IN</span>
-                  <span style={{fontFamily:"'Orbitron',monospace",color:betsCloseIn<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:betsCloseIn<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(betsCloseIn)}</span>
+                  <span style={{fontFamily:"var(--track-label)",color:betsCloseIn<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:betsCloseIn<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(betsCloseIn)}</span>
                 </div>
                 <div style={{height:7,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:4,width:`${bettingPct}%`,background:betsCloseIn<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#00f5ff,#39ff14)",boxShadow:`0 0 8px ${betsCloseIn<120?"#ff2d55":"#00f5ff"}`,transition:"width 1s linear"}}/>
+                  <div style={{height:"100%",borderRadius:4,width:`${bettingPct}%`,background:betsCloseIn<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#e5b678,#97bd88)",boxShadow:`0 0 8px ${betsCloseIn<120?"#ff2d55":"#e5b678"}`,transition:"width 1s linear"}}/>
                 </div>
               </div>
 
               {/* Total bet */}
               <div style={{textAlign:"center",marginBottom:14,padding:"10px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10}}>
                 <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>TOTAL BET </span>
-                <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:20}}>${fmt2(totalBetAmt)}</span>
+                <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:20}}>${fmt2(totalBetAmt)}</span>
               </div>
 
               {/* Horse cards */}
@@ -3581,10 +3574,10 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
               {overBalance && <p style={{color:"#ff2d55",marginBottom:8,fontSize:13,textAlign:"center"}}>⚠ Exceeds available balance (${fmt2(user.balance)})</p>}
               {betsConfirmed ? (
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(0,245,255,0.07)",border:"1px solid #00f5ff44",borderRadius:10}}>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(229,182,120,0.07)",border:"1px solid #e5b67844",borderRadius:10}}>
                     <span style={{fontSize:18}}>✅</span>
                     <div style={{textAlign:"left"}}>
-                      <div style={{color:"#00f5ff",fontWeight:700,fontSize:13}}>Bets Confirmed!</div>
+                      <div style={{color:"#e5b678",fontWeight:700,fontSize:13}}>Bets Confirmed!</div>
                       <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>${fmt2(totalBetAmt)} reserved</div>
                     </div>
                   </div>
@@ -3592,7 +3585,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
                 </div>
               ) : (
                 <button onClick={confirmBets} disabled={overBalance||totalBetAmt===0}
-                  style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:overBalance||totalBetAmt===0?"rgba(255,255,255,0.06)":"linear-gradient(135deg,#00f5ff,#39ff14)",color:overBalance||totalBetAmt===0?"#ffffff33":"#08081a",cursor:overBalance||totalBetAmt===0?"not-allowed":"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:1}}>
+                  style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:overBalance||totalBetAmt===0?"rgba(255,255,255,0.06)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBetAmt===0?"#ffffff33":"#141614",cursor:overBalance||totalBetAmt===0?"not-allowed":"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:1}}>
                   🔒 CONFIRM BETS
                 </button>
               )}
@@ -3609,11 +3602,11 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
   const withStatus = schedule.map(r=>({...r, _st:raceStatus(r,now)})).filter(r=>r._st!=="finished");
 
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",paddingTop:72,paddingBottom:40}}>
+    <div style={{minHeight:"100vh",background:"#141614",paddingTop:72,paddingBottom:40}}>
       <div style={{maxWidth:700,margin:"0 auto",padding:"16px"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:36,marginBottom:6}}>🔨</div>
-          <h2 style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:20,letterSpacing:3,marginBottom:4}}>AUCTION RACES</h2>
+          <h2 style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:20,letterSpacing:3,marginBottom:4}}>AUCTION RACES</h2>
           <div style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>BID ON HORSES — WIN THE POT</div>
         </div>
         {withStatus.map(race=>{
@@ -3653,32 +3646,32 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
                   )}
                   <span style={{color:"#ffffff33"}}>·</span>
                   <span style={{color:"#ffffff44",fontSize:11}}>{ownedCount}/6 sold</span>
-{(sharedPot[race.id]?.totalPot||0)>0&&<><span style={{color:"#ffffff33"}}>·</span><span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span></>}
+{(sharedPot[race.id]?.totalPot||0)>0&&<><span style={{color:"#ffffff33"}}>·</span><span style={{background:"rgba(151,189,136,0.08)",border:"1px solid #97bd8833",borderRadius:10,padding:"1px 8px",color:"#97bd88",fontSize:11,fontFamily:"var(--track-label)"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span></>}
                 </div>
               </div>
               <div style={{textAlign:"right",flexShrink:0,display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
                 {isRacing ? (
-                  <div style={{color:"#ff2d5588",fontSize:11,fontWeight:700,fontFamily:"'Orbitron',monospace"}}>RACING</div>
+                  <div style={{color:"#ff2d5588",fontSize:11,fontWeight:700,fontFamily:"var(--track-label)"}}>RACING</div>
                 ) : isAuctionLive ? (
                   <>
                     <div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:14,fontWeight:900,lineHeight:1,animation:"racingBlink 0.8s infinite"}}>🔨 LIVE</div>
+                      <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:14,fontWeight:900,lineHeight:1,animation:"racingBlink 0.8s infinite"}}>🔨 LIVE</div>
                       <div style={{color:"#ffd70066",fontSize:10,letterSpacing:1,marginTop:2}}>AUCTION</div>
                     </div>
                     <div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
-                      <div style={{color:"#39ff1466",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
+                      <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
+                      <div style={{color:"#97bd8866",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
                     </div>
                   </>
                 ) : (
                   <>
                     <div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:auctionSecs<120?"#ffd700":"#ffffff55",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(auctionSecs)}</div>
+                      <div style={{fontFamily:"var(--track-label)",color:auctionSecs<120?"#ffd700":"#ffffff55",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(auctionSecs)}</div>
                       <div style={{color:auctionSecs<120?"#ffd70066":"#ffffff22",fontSize:10,letterSpacing:1,marginTop:2}}>🔨 AUCTION OPENS</div>
                     </div>
                     <div>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
-                      <div style={{color:"#39ff1466",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
+                      <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
+                      <div style={{color:"#97bd8866",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
                     </div>
                   </>
                 )}
@@ -3694,25 +3687,33 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
 function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sharedPot={} }) {
   const withStatus = useMemo(()=>schedule.map(r=>({...r,_st:raceStatus(r,now)})).filter(r=>r._st!=="finished"),[schedule,now]);
   const sections=[
-    {title:"🔴 LIVE NOW",   filter:r=>r._st==="racing"||r._st==="locked", accent:"#ff2d55"},
-    {title:"🟢 BETTING OPEN",filter:r=>r._st==="betting",                  accent:"#39ff14"},
-    {title:"⏳ UP NEXT",    filter:r=>r._st==="upcoming"&&r.startTime-now<60*60*1000, accent:"#ffd700"},
-    {title:"📅 SCHEDULE",   filter:r=>r._st==="upcoming"&&r.startTime-now>=60*60*1000,accent:"#00f5ff"},
+    {title:"Live now",   filter:r=>r._st==="racing"||r._st==="locked", accent:"#ff2d55"},
+    {title:"Betting open",filter:r=>r._st==="betting",                  accent:"#97bd88"},
+    {title:"Up next",    filter:r=>r._st==="upcoming"&&r.startTime-now<60*60*1000, accent:"#ffd700"},
+    {title:"Schedule",   filter:r=>r._st==="upcoming"&&r.startTime-now>=60*60*1000,accent:"#e5b678"},
   ];
 
+  const featured = withStatus.find(r=>r._st==="racing") || withStatus.find(r=>r._st==="locked") || withStatus[0];
+
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",paddingTop:72,paddingBottom:60}}>
-      <div style={{maxWidth:880,margin:"0 auto",padding:"20px 16px 0"}}>
-        <div style={{textAlign:"center",marginBottom:28}}>
-          <h1 style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:26,letterSpacing:5,textShadow:"0 0 24px #00f5ff"}}>RACE LOBBY</h1>
-          <p style={{color:"#ffffff33",fontSize:13,marginTop:4}}>Betting opens up to 3 hours early — pick your race and place your bets.</p>
+    <main className="track-lobby">
+      <header className="track-lobby-hero">
+        <div>
+          <p className="track-kicker">Race card</p>
+          <h1>The Race Lobby</h1>
+          <p>View the field, check post times, and watch the race from trackside.</p>
+          {featured && <button type="button" className="track-primary" onClick={()=>onEnterRace(featured)}>
+            {featured._st==="racing"?"Watch live":"View next race"}
+          </button>}
         </div>
+      </header>
+      <div className="track-race-card">
         {sections.map(sec=>{
           const races=withStatus.filter(sec.filter);
           if(!races.length) return null;
           return (
-            <div key={sec.title} style={{marginBottom:32}}>
-              <h2 style={{color:sec.accent,fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:3,marginBottom:10,textShadow:`0 0 8px ${sec.accent}`}}>{sec.title}</h2>
+            <section key={sec.title} className="track-card-section">
+              <h2>{sec.title}</h2>
               <div style={{display:"flex",flexDirection:"column",gap:7}}>
                 {races.map(race=>{
                   const rt=RACE_TYPES[race.type];
@@ -3724,10 +3725,7 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
                   const myAmt=confirmedBetData?confirmedBetData.pot:draftBet?Object.values(userBets[race.id]).reduce((s,v)=>s+(parseFloat(v)||0),0):0;
                   const betIsConfirmed=!!confirmedBetData;
                   return (
-                    <div key={race.id} onClick={()=>onEnterRace(race)} style={{display:"flex",alignItems:"center",gap:14,padding:"13px 18px",background:"rgba(255,255,255,0.03)",borderRadius:12,cursor:"pointer",border:`1px solid ${hasBet?rt.color+"66":st==="racing"||st==="locked"?"#ff2d5522":st==="betting"?"#39ff1422":rt.color+"18"}`,boxShadow:hasBet?`0 0 16px ${rt.color}18`:"none",transition:"all 0.15s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
-                      onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}
-                    >
+                    <button type="button" className="track-race-row" key={race.id} onClick={()=>onEnterRace(race)}>
                       <div style={{width:44,height:44,borderRadius:10,background:`${rt.color}15`,border:`2px solid ${rt.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,position:"relative"}}>
                         {rt.icon}
                         {race.condition&&race.condition!=="sunny"&&(
@@ -3745,9 +3743,9 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
                               {TRACK_CONDITIONS[race.condition].icon} {TRACK_CONDITIONS[race.condition].label}
                             </span>
                           )}
-                          {hasBet&&<span style={{background:betIsConfirmed?"rgba(0,245,255,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#00f5ff33":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#00f5ff":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
+                          {hasBet&&<span style={{background:betIsConfirmed?"rgba(229,182,120,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#e5b67833":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#e5b678":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
                           {friendRaces[race.id]>0&&<span style={{background:"rgba(191,95,255,0.12)",border:"1px solid #bf5fff33",borderRadius:10,padding:"1px 8px",color:"#bf5fff",fontSize:11}}>👥 {friendRaces[race.id]}</span>}
-{(sharedPot[race.id]?.totalPot||0)>0&&<span style={{background:"rgba(57,255,20,0.08)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 8px",color:"#39ff14",fontSize:11,fontFamily:"'Orbitron',monospace"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span>}
+{(sharedPot[race.id]?.totalPot||0)>0&&<span style={{background:"rgba(151,189,136,0.08)",border:"1px solid #97bd8833",borderRadius:10,padding:"1px 8px",color:"#97bd88",fontSize:11,fontFamily:"var(--track-label)"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span>}
                         </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0,minWidth:100}}>
@@ -3756,32 +3754,32 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
                         )}
                         {st==="locked"&&(
                           <div>
-                            <div style={{fontFamily:"'Orbitron',monospace",color:"#ff2d55",fontSize:16,fontWeight:900,textShadow:"0 0 12px #ff2d55",lineHeight:1}}>{secs}s</div>
+                            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:16,fontWeight:900,textShadow:"0 0 12px #ff2d55",lineHeight:1}}>{secs}s</div>
                             <div style={{color:"#ff2d5577",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
                           </div>
                         )}
                         {st==="betting"&&(
                           <div>
-                            <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:15,fontWeight:700,lineHeight:1}}>{fmtCD(secs-BET_CLOSE_SECS)}</div>
-                            <div style={{color:"#39ff1466",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
+                            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:15,fontWeight:700,lineHeight:1}}>{fmtCD(secs-BET_CLOSE_SECS)}</div>
+                            <div style={{color:"#97bd8866",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
                           </div>
                         )}
                         {st==="upcoming"&&(
                           <div>
-                            <div style={{fontFamily:"'Orbitron',monospace",color:secs<600?"#ffd700":"#ffffff44",fontSize:13,lineHeight:1}}>{fmtCD(secs)}</div>
+                            <div style={{fontFamily:"var(--track-label)",color:secs<600?"#ffd700":"#ffffff44",fontSize:13,lineHeight:1}}>{fmtCD(secs)}</div>
                             <div style={{color:"#ffffff22",fontSize:10,letterSpacing:1,marginTop:2}}>TO POST</div>
                           </div>
                         )}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -3968,14 +3966,14 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
     // Bugle is fired via useEffect below — not inline
 
-    const timerColor = countdown<=10?"#ff2d55":countdown<=20?"#ffd700":"#00f5ff";
+    const timerColor = countdown<=10?"#ff2d55":countdown<=20?"#ffd700":"#e5b678";
 
     return (
-      <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 40px",overflowY:"auto"}}>
+      <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 40px",overflowY:"auto"}}>
         {/* Race header */}
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:32,marginBottom:4}}>{rt.icon}</div>
-          <h2 style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:18,letterSpacing:3,marginBottom:2}}>{race.name}</h2>
+          <h2 style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:18,letterSpacing:3,marginBottom:2}}>{race.name}</h2>
           <span style={{color:rt.color,fontSize:11,fontWeight:700,letterSpacing:2}}>{rt.label.toUpperCase()}</span>
         </div>
 
@@ -3991,19 +3989,19 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
             />
           </svg>
           <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-            <div style={{fontFamily:"'Orbitron',monospace",color:timerColor,fontSize:38,fontWeight:900,lineHeight:1,textShadow:`0 0 20px ${timerColor}77`,transition:"color 0.5s"}}>{countdown}</div>
+            <div style={{fontFamily:"var(--track-label)",color:timerColor,fontSize:38,fontWeight:900,lineHeight:1,textShadow:`0 0 20px ${timerColor}77`,transition:"color 0.5s"}}>{countdown}</div>
             <div style={{color:"#ffffff44",fontSize:9,letterSpacing:2,marginTop:2}}>SECONDS</div>
           </div>
         </div>
 
-        <div style={{fontFamily:"'Orbitron',monospace",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:12,animation:"racingBlink 1s infinite"}}>
+        <div style={{fontFamily:"var(--track-label)",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:12,animation:"racingBlink 1s infinite"}}>
           {countdown<=0?"LOADING RACE…":"BETS CLOSED — RACE STARTING"}
         </div>
 
         {/* Live pot display */}
         <div style={{marginBottom:20,padding:"10px 28px",background:"rgba(255,215,0,0.07)",border:"1px solid #ffd70033",borderRadius:12,textAlign:"center"}}>
           <div style={{color:"#ffffff44",fontSize:10,letterSpacing:3,marginBottom:3}}>🌐 LIVE POT</div>
-          <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:28,fontWeight:900,textShadow:"0 0 20px #ffd70066"}}>${fmt2(spTotal||0)}</div>
+          <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:28,fontWeight:900,textShadow:"0 0 20px #ffd70066"}}>${fmt2(spTotal||0)}</div>
         </div>
 
         {/* Odds reveal — stage card swipes in from right at fixed height, hangs, then list grows below */}
@@ -4032,8 +4030,8 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
                       <div style={{color:"#ffffff33",fontSize:11,marginTop:1}}>{i===0?"FAVOURITE":i===HORSES.length-1?"LONG SHOT":""}</div>
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontFamily:"'Orbitron',monospace",color:odds?"#ffd700":"#ffffff33",fontSize:18,fontWeight:900,textShadow:odds?"0 0 10px #ffd70066":"none"}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
-                      {myBet>0&&<div style={{color:"#00f5ff",fontSize:11,marginTop:1}}>your bet: ${fmt2(parseFloat(myBet))}</div>}
+                      <div style={{fontFamily:"var(--track-label)",color:odds?"#ffd700":"#ffffff33",fontSize:18,fontWeight:900,textShadow:odds?"0 0 10px #ffd70066":"none"}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
+                      {myBet>0&&<div style={{color:"#e5b678",fontSize:11,marginTop:1}}>your bet: ${fmt2(parseFloat(myBet))}</div>}
                     </div>
                   </div>
                 </div>
@@ -4057,8 +4055,8 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
                   <div style={{flex:1}}>
                     <div style={{color:h.color,fontWeight:700,fontSize:12}}>{rank} {horseName(race,h.id)}</div>
                   </div>
-                  <div style={{fontFamily:"'Orbitron',monospace",color:odds?"#ffd700":"#ffffff33",fontSize:15,fontWeight:900}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
-                  {myBet>0&&<div style={{color:"#00f5ff",fontSize:10}}>💰${fmt2(parseFloat(myBet))}</div>}
+                  <div style={{fontFamily:"var(--track-label)",color:odds?"#ffd700":"#ffffff33",fontSize:15,fontWeight:900}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
+                  {myBet>0&&<div style={{color:"#e5b678",fontSize:10}}>💰${fmt2(parseFloat(myBet))}</div>}
                 </div>
               </div>
             );
@@ -4067,9 +4065,9 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
         {/* User bets summary */}
         {Object.keys(displayBets).length>0&&(
-          <div style={{width:"100%",maxWidth:480,marginTop:16,padding:"12px 16px",background:"rgba(0,245,255,0.05)",border:"1px solid #00f5ff22",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{color:"#00f5ff",fontSize:12,fontWeight:600}}>✓ Your total bet</span>
-            <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:15}}>${fmt2(Object.values(displayBets).reduce((s,v)=>s+(parseFloat(v)||0),0))}</span>
+          <div style={{width:"100%",maxWidth:480,marginTop:16,padding:"12px 16px",background:"rgba(229,182,120,0.05)",border:"1px solid #e5b67822",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{color:"#e5b678",fontSize:12,fontWeight:600}}>✓ Your total bet</span>
+            <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:15}}>${fmt2(Object.values(displayBets).reduce((s,v)=>s+(parseFloat(v)||0),0))}</span>
           </div>
         )}
 
@@ -4081,7 +4079,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
   // ── BETTING OPEN or TOO EARLY ──────────────────────────────────────────────
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",paddingTop:72,paddingBottom:40}}>
+    <div style={{minHeight:"100vh",background:"#141614",paddingTop:72,paddingBottom:40}}>
       <div style={{maxWidth:700,margin:"0 auto",padding:"16px 16px 0"}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13,marginBottom:14,display:"flex",alignItems:"center",gap:6}}>← Back to Lobby</button>
 
@@ -4090,7 +4088,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
           <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
             <div style={{fontSize:38}}>{rt.icon}</div>
             <div style={{flex:1}}>
-              <h1 style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:20,letterSpacing:2}}>{race.name}</h1>
+              <h1 style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:20,letterSpacing:2}}>{race.name}</h1>
               <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
                 <span style={{color:rt.color,fontWeight:700,fontSize:13}}>{rt.label}</span>
                 <span style={{color:"#ffffff33"}}>·</span>
@@ -4099,9 +4097,9 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
                 <span style={{color:"#ffffff44",fontSize:13}}>{rt.dice} dice per roll</span>
               </div>
             </div>
-            {canBet&&!confirmed&&<div style={{background:"rgba(57,255,20,0.15)",border:"1px solid #39ff1444",color:"#39ff14",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>BETTING OPEN</div>}
-            {confirmed&&<div style={{background:"rgba(0,245,255,0.15)",border:"1px solid #00f5ff44",color:"#00f5ff",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>✓ BETS CONFIRMED</div>}
-            {st==="upcoming"&&<div style={{color:"#ffffff44",fontFamily:"'Orbitron',monospace",fontSize:13}}>{fmtCD(liveSecs)}</div>}
+            {canBet&&!confirmed&&<div style={{background:"rgba(151,189,136,0.15)",border:"1px solid #97bd8844",color:"#97bd88",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>BETTING OPEN</div>}
+            {confirmed&&<div style={{background:"rgba(229,182,120,0.15)",border:"1px solid #e5b67844",color:"#e5b678",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>✓ BETS CONFIRMED</div>}
+            {st==="upcoming"&&<div style={{color:"#ffffff44",fontFamily:"var(--track-label)",fontSize:13}}>{fmtCD(liveSecs)}</div>}
           </div>
           <p style={{color:"#ffffff55",fontSize:13,marginTop:12,lineHeight:1.6}}>{rt.desc}</p>
         </div>
@@ -4109,8 +4107,8 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
         {/* Too early — betting not open yet */}
         {st==="upcoming"&&(
           <div style={{textAlign:"center",padding:"32px 20px",background:"rgba(255,255,255,0.02)",borderRadius:12,marginBottom:20}}>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:16,marginBottom:8}}>BETTING OPENS IN</div>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:44,textShadow:"0 0 20px #ffd700"}}>{fmtCD(liveSecs - BET_OPEN_HOURS*3600)}</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:16,marginBottom:8}}>BETTING OPENS IN</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:44,textShadow:"0 0 20px #ffd700"}}>{fmtCD(liveSecs - BET_OPEN_HOURS*3600)}</div>
             <p style={{color:"#ffffff33",marginTop:12,fontSize:12}}>Opens {BET_OPEN_HOURS}h before post · Closes 30s before start</p>
           </div>
         )}
@@ -4120,20 +4118,20 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
           <div style={{marginBottom:16}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
               <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>BETTING CLOSES IN</span>
-              <span style={{fontFamily:"'Orbitron',monospace",color:bettingSecsLeft<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:bettingSecsLeft<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(bettingSecsLeft)}</span>
+              <span style={{fontFamily:"var(--track-label)",color:bettingSecsLeft<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:bettingSecsLeft<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(bettingSecsLeft)}</span>
             </div>
             <div style={{height:7,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:bettingSecsLeft<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#00f5ff,#39ff14)",boxShadow:`0 0 8px ${bettingSecsLeft<120?"#ff2d55":"#00f5ff"}`,transition:"width 1s linear"}}/>
+              <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:bettingSecsLeft<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#e5b678,#97bd88)",boxShadow:`0 0 8px ${bettingSecsLeft<120?"#ff2d55":"#e5b678"}`,transition:"width 1s linear"}}/>
             </div>
           </div>
         )}
 
         {/* Confirmed banner */}
         {confirmed&&canBet&&(
-          <div style={{background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff33",borderRadius:10,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{background:"rgba(229,182,120,0.06)",border:"1px solid #e5b67833",borderRadius:10,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:20}}>✅</span>
             <div>
-              <div style={{color:"#00f5ff",fontWeight:700,fontSize:14}}>Bets Confirmed!</div>
+              <div style={{color:"#e5b678",fontWeight:700,fontSize:14}}>Bets Confirmed!</div>
               <div style={{color:"#ffffff44",fontSize:12,marginTop:2}}>Your bets are locked in. Race fires at post time. Sit tight!</div>
             </div>
           </div>
@@ -4145,12 +4143,12 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
             <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
               <div style={{textAlign:"left"}}>
                 <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>YOUR BET</div>
-                <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:18}}>${fmt2(totalBet)}</div>
+                <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:18}}>${fmt2(totalBet)}</div>
               </div>
               <div style={{width:1,height:32,background:"rgba(255,255,255,0.08)"}}/>
               <div style={{textAlign:"right"}}>
                 <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>🌐 LIVE POT</div>
-                <div style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:18,textShadow:"0 0 10px #00f5ff66"}}>${fmt2(sharedPot?.totalPot||0)}</div>
+                <div style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:18,textShadow:"0 0 10px #e5b67866"}}>${fmt2(sharedPot?.totalPot||0)}</div>
               </div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
@@ -4183,25 +4181,25 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
               {confirmed ? (
                 <div>
                   {/* Confirmed state — show green banner + Edit button */}
-                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(0,245,255,0.07)",border:"1px solid #00f5ff44",borderRadius:10,marginBottom:12}}>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(229,182,120,0.07)",border:"1px solid #e5b67844",borderRadius:10,marginBottom:12}}>
                     <span style={{fontSize:18}}>✅</span>
                     <div style={{textAlign:"left"}}>
-                      <div style={{color:"#00f5ff",fontWeight:700,fontSize:13}}>Bets Confirmed — ${fmt2(totalBet)} locked</div>
+                      <div style={{color:"#e5b678",fontWeight:700,fontSize:13}}>Bets Confirmed — ${fmt2(totalBet)} locked</div>
                       <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>Race fires at post time. You can still edit until bets close.</div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-                    <button onClick={handleEditBets} style={{padding:"11px 26px",borderRadius:10,border:"1px solid #ffd70044",background:"rgba(255,215,0,0.08)",color:"#ffd700",cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12,letterSpacing:2}}>
+                    <button onClick={handleEditBets} style={{padding:"11px 26px",borderRadius:10,border:"1px solid #ffd70044",background:"rgba(255,215,0,0.08)",color:"#ffd700",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:2}}>
                       ✏️ EDIT BETS
                     </button>
-                    <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"11px 26px",borderRadius:10,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#00f5ff,#39ff14)",color:overBalance||totalBet<=0?"#ffffff33":"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:12,letterSpacing:2,boxShadow:overBalance||totalBet<=0?"none":"0 0 20px #00f5ff55"}}>
+                    <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"11px 26px",borderRadius:10,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBet<=0?"#ffffff33":"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:2,boxShadow:overBalance||totalBet<=0?"none":"0 0 20px #e5b67855"}}>
                       🔒 UPDATE BETS
                     </button>
                   </div>
                 </div>
               ) : (
                 <div>
-                  <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"14px 44px",borderRadius:12,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#00f5ff,#39ff14)",color:overBalance||totalBet<=0?"#ffffff33":"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:3,boxShadow:overBalance||totalBet<=0?"none":"0 0 28px #00f5ff66"}}>
+                  <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"14px 44px",borderRadius:12,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBet<=0?"#ffffff33":"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:3,boxShadow:overBalance||totalBet<=0?"none":"0 0 28px #e5b67866"}}>
                     🔒 CONFIRM BETS
                   </button>
                   <p style={{color:"#ffffff22",fontSize:11,marginTop:8}}>Race fires at post time · Available: ${fmt2(availableBalance)}</p>
@@ -4223,21 +4221,21 @@ function OddsRevealScreen({ race, bets, totalPot, odds }) {
   const rt=RACE_TYPES[race.type];
   useEffect(()=>{const t=setInterval(()=>setCount(c=>Math.max(0,c-1)),1000);return()=>clearInterval(t);},[]);
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px"}}>
+    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px"}}>
       <div style={{fontSize:44,marginBottom:10}}>{rt.icon}</div>
-      <h1 style={{fontFamily:"'Orbitron',monospace",color:"#ffd700",fontSize:22,letterSpacing:4,textShadow:"0 0 20px #ffd700",marginBottom:4}}>{race.name}</h1>
+      <h1 style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:22,letterSpacing:4,textShadow:"0 0 20px #ffd700",marginBottom:4}}>{race.name}</h1>
       <p style={{color:rt.color,letterSpacing:2,marginBottom:6,fontSize:13,fontWeight:700}}>{rt.label.toUpperCase()}</p>
-      <p style={{color:"#ffffff44",marginBottom:28,letterSpacing:2,fontFamily:"'Orbitron',monospace",fontSize:16}}>RACE STARTS IN {count}…</p>
+      <p style={{color:"#ffffff44",marginBottom:28,letterSpacing:2,fontFamily:"var(--track-label)",fontSize:16}}>RACE STARTS IN {count}…</p>
       <div style={{width:"100%",maxWidth:460}}>
         <div style={{background:"rgba(255,215,0,0.06)",border:"1px solid #ffd70033",borderRadius:10,padding:"12px 18px",marginBottom:16,textAlign:"center"}}>
           <span style={{color:"#ffffff55",fontSize:12,letterSpacing:2}}>🌐 LIVE POT </span>
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:26,textShadow:"0 0 16px #ffd70066"}}>${fmt2(sharedPot?.totalPot||totalPot)}</span>
+          <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:26,textShadow:"0 0 16px #ffd70066"}}>${fmt2(sharedPot?.totalPot||totalPot)}</span>
         </div>
         {HORSES.map(h=>(
           <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:6,background:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${h.color}33`}}>
             <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:`${h.color}15`,border:`1.5px solid ${h.color}`}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
             <span style={{flex:1,color:h.color,fontWeight:700,fontSize:14}}><HorseName race={race} horseId={h.id}/> <span style={{color:"#ffffff33",fontSize:10,fontWeight:400}}>({getCoatName(horseLottieCoat(race,h.id))})</span></span>
-            <span style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:16}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
+            <span style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:16}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
             {bets[h.id]>0&&<span style={{color:"#ffd70088",fontSize:12}}>your: ${bets[h.id]}</span>}
           </div>
         ))}
@@ -4293,18 +4291,18 @@ function DiceDisplay({ diceResult, rolling, raceType, race, mudDie=null, fogDie=
               bgColor   = `${magicHorseColor}18`;
               label     = <span style={{color:magicHorseColor,fontSize:11,fontWeight:700}}><span style={{filter:horseCoat(race,magicHorseIdx)}}>🐴</span> {horseName(race,magicHorseIdx).split(" ")[0]}</span>;
             } else {
-              borderCol = "#00f5ff";
-              bgColor   = "rgba(0,245,255,0.08)";
-              label     = <span style={{color:"#00f5ff",fontSize:11,fontWeight:700}}>+{dv} spaces</span>;
+              borderCol = "#e5b678";
+              bgColor   = "rgba(229,182,120,0.08)";
+              label     = <span style={{color:"#e5b678",fontSize:11,fontWeight:700}}>+{dv} spaces</span>;
             }
           } else {
             const horseIdx   = dv > 0 ? Math.min(dv-1, 5) : 0;
             const horseColor = HORSES[horseIdx].color;
             const isWild     = di === dice.length-1 && wildMove;
-            borderCol = isWild ? "#39ff14" : horseColor;
-            bgColor   = isWild ? "rgba(57,255,20,0.1)" : "rgba(255,255,255,0.06)";
+            borderCol = isWild ? "#97bd88" : horseColor;
+            bgColor   = isWild ? "rgba(151,189,136,0.1)" : "rgba(255,255,255,0.06)";
             label     = isWild
-              ? <span style={{color:"#39ff14",fontSize:10,letterSpacing:1,fontWeight:700}}>✨ WILD</span>
+              ? <span style={{color:"#97bd88",fontSize:10,letterSpacing:1,fontWeight:700}}>✨ WILD</span>
               : <span style={{color:horseColor,fontSize:11,fontWeight:700}}>{horseName(race,horseIdx).split(" ")[0]}</span>;
           }
           return (
@@ -4333,9 +4331,9 @@ function DiceDisplay({ diceResult, rolling, raceType, race, mudDie=null, fogDie=
             <span style={{color:"#ffffff66",fontSize:12}}>+{m.steps}</span>
           </div>
         ))}
-        {!isMagic&&isDoubles&&raceType==="hurdle"&&<div style={{padding:"5px 14px",background:"rgba(57,255,20,0.15)",border:"1px solid #39ff1466",borderRadius:20,color:"#39ff14",fontSize:13,fontWeight:700,animation:"winPulse 0.6s ease-in-out 3"}}>🌟 DOUBLES — JUMP THE HURDLE!</div>}
+        {!isMagic&&isDoubles&&raceType==="hurdle"&&<div style={{padding:"5px 14px",background:"rgba(151,189,136,0.15)",border:"1px solid #97bd8866",borderRadius:20,color:"#97bd88",fontSize:13,fontWeight:700,animation:"winPulse 0.6s ease-in-out 3"}}>🌟 DOUBLES — JUMP THE HURDLE!</div>}
         {!isMagic&&isDoubles&&raceType!=="hurdle"&&<div style={{padding:"5px 12px",background:"rgba(255,215,0,0.12)",border:"1px solid #ffd70044",borderRadius:20,color:"#ffd700",fontSize:12,fontWeight:700}}>⚡ DOUBLES</div>}
-        {!isMagic&&wildMove&&<div style={{padding:"5px 12px",background:"rgba(57,255,20,0.12)",border:"1px solid #39ff1444",borderRadius:20,color:"#39ff14",fontSize:12,fontWeight:700}}>✨ WILD +{wildMove.steps}</div>}
+        {!isMagic&&wildMove&&<div style={{padding:"5px 12px",background:"rgba(151,189,136,0.12)",border:"1px solid #97bd8844",borderRadius:20,color:"#97bd88",fontSize:12,fontWeight:700}}>✨ WILD +{wildMove.steps}</div>}
       </div>
 
     </div>
@@ -4351,7 +4349,7 @@ function DiceOverlay({ diceResult, rolling, raceType, race, mudDie, fogDie }) {
 
   return (
     <div style={{
-      background:"rgba(6,6,20,0.90)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)",
+      background:"rgba(17,19,16,0.90)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)",
       border:"1px solid rgba(255,255,255,0.10)", borderRadius:18,
       padding:"10px 18px",
       boxShadow:"0 8px 40px rgba(0,0,0,0.7)",
@@ -4372,7 +4370,7 @@ function DiceOverlay({ diceResult, rolling, raceType, race, mudDie, fogDie }) {
             col = HORSES[fhi].color;
             content=<span style={{fontSize:20,animation:"fogDrift 0.8s ease-in-out"}}>☁️</span>;
           } else if(isMagic){
-            col = di===0 ? HORSES[magicHorseIdx].color : "#00f5ff";
+            col = di===0 ? HORSES[magicHorseIdx].color : "#e5b678";
             content = DICE_FACE(dv);
           } else {
             col = HORSES[Math.min(dv-1,5)].color;
@@ -4401,7 +4399,7 @@ function DiceOverlay({ diceResult, rolling, raceType, race, mudDie, fogDie }) {
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{filter:horseCoat(race,magicHorseIdx),fontSize:14}}>🐴</span>
             <span style={{color:HORSES[magicHorseIdx].color,fontWeight:700,fontSize:12}}>{horseName(race,magicHorseIdx).split(" ")[0]}</span>
-            <span style={{color:"#00f5ff",fontSize:11}}>+{dice[1]}</span>
+            <span style={{color:"#e5b678",fontSize:11}}>+{dice[1]}</span>
           </div>
         )}
         {!isMagic && moves.filter(m=>m.steps>0).map((m,i)=>(
@@ -5170,7 +5168,7 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
           <div style={{
             position:"absolute",bottom:52,right:0,
             width:280,height:"30vh",minHeight:180,maxHeight:320,
-            background:"rgba(6,6,20,0.95)",
+            background:"rgba(17,19,16,0.95)",
             backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",
             border:"1px solid rgba(255,255,255,0.1)",
             borderRadius:16,
@@ -5180,7 +5178,7 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
           }}>
             {/* Header */}
             <div style={{padding:"8px 12px",borderBottom:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <span style={{fontFamily:"'Orbitron',monospace",fontSize:10,letterSpacing:2,color:"#00f5ff88"}}>RACE CHAT</span>
+              <span style={{fontFamily:"var(--track-label)",fontSize:10,letterSpacing:2,color:"#e5b67888"}}>RACE CHAT</span>
               <button onClick={()=>setOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:"#ffffff33",fontSize:14,padding:"0 2px",lineHeight:1}}>✕</button>
             </div>
 
@@ -5198,9 +5196,9 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
                     </div>
                     <div style={{
                       maxWidth:"85%",padding:"5px 10px",borderRadius:isMe?"12px 12px 3px 12px":"12px 12px 12px 3px",
-                      background:isMe?"rgba(0,245,255,0.15)":"rgba(255,255,255,0.07)",
-                      border:isMe?"1px solid rgba(0,245,255,0.25)":"1px solid rgba(255,255,255,0.08)",
-                      color:isMe?"#00f5ff":"#ffffffcc",fontSize:12,lineHeight:1.4,wordBreak:"break-word",
+                      background:isMe?"rgba(229,182,120,0.15)":"rgba(255,255,255,0.07)",
+                      border:isMe?"1px solid rgba(229,182,120,0.25)":"1px solid rgba(255,255,255,0.08)",
+                      color:isMe?"#e5b678":"#ffffffcc",fontSize:12,lineHeight:1.4,wordBreak:"break-word",
                     }}>{m.text}</div>
                   </div>
                 );
@@ -5227,8 +5225,8 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
               <button
                 onClick={send}
                 style={{
-                  background:"rgba(0,245,255,0.15)",border:"1px solid rgba(0,245,255,0.3)",
-                  borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#00f5ff",
+                  background:"rgba(229,182,120,0.15)",border:"1px solid rgba(229,182,120,0.3)",
+                  borderRadius:8,padding:"6px 10px",cursor:"pointer",color:"#e5b678",
                   fontSize:13,fontWeight:700,flexShrink:0,
                 }}
               >↑</button>
@@ -5241,8 +5239,8 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
           onClick={()=>setOpen(o=>!o)}
           style={{
             width:44,height:44,borderRadius:"50%",
-            background:open?"rgba(0,245,255,0.2)":"rgba(255,255,255,0.08)",
-            border:open?"1px solid rgba(0,245,255,0.5)":"1px solid rgba(255,255,255,0.15)",
+            background:open?"rgba(229,182,120,0.2)":"rgba(255,255,255,0.08)",
+            border:open?"1px solid rgba(229,182,120,0.5)":"1px solid rgba(255,255,255,0.15)",
             cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
             fontSize:18,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",
             transition:"all 0.2s",position:"relative",
@@ -5255,7 +5253,7 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
               width:16,height:16,borderRadius:"50%",
               background:"#ff2d55",border:"2px solid #06060f",
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:8,fontWeight:700,color:"#fff",fontFamily:"'Orbitron',monospace",
+              fontSize:8,fontWeight:700,color:"#fff",fontFamily:"var(--track-label)",
             }}>{unread>9?"9+":unread}</div>
           )}
         </button>
@@ -5265,7 +5263,57 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
 }
 
 // ─── RACE SCREEN ──────────────────────────────────────────────────────────────
-function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, auctionOwners, replayRolls=null, replayWinner=null, replaySpeed=1, replaySpeedRef=null, isReplay=false }) {
+function RaceScreen(props) {
+  if (props.race.type !== "standard") return <LegacyRaceScreen {...props}/>;
+  return <StandardRaceScreen key={props.race.id} {...props}/>;
+}
+
+function StandardRaceScreen({ race, user, auctionOwners, onRaceEnd, isReplay, replayRolls, replayWinner, replaySpeedRef,
+  chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, ...legacyProps }) {
+  const [saved,setSaved] = useState(null);
+  const [invalid,setInvalid] = useState(false);
+  const [soundOn,setSoundOn] = useState(getSoundEnabled);
+  const names = HORSES.map((_, id) => horseName(race,id));
+  const startTime = isReplay ? 0 : race.startTime + (race.isAuction ? 30000 : 0);
+  const history = useMemo(() => isReplay ? {rolls:replayRolls,winner:replayWinner} : saved,[isReplay,replayRolls,replayWinner,saved]);
+
+  useEffect(() => {
+    if (isReplay) return;
+    let active = true;
+    const localHistory = () => simulateRaceWithHistory(race.type,race.condition || "sunny",race.seed);
+    const read = () => race._privateCode ? Promise.resolve(localHistory()) :
+      getDoc(doc(db,"raceRolls",race.id)).then(snapshot => snapshot.exists() ? snapshot.data() : localHistory(),localHistory);
+    read().then(result => {
+      if (!active) return;
+      if (buildPlayback(result,ROLL_INTERVAL,TRACK_SPACES,TIEBREAK_SPACES,broadcastVoice)) setSaved(result);
+      else setInvalid(true);
+    });
+    return () => { active=false; };
+  },[isReplay,race.id,race.type,race.condition,race.seed,race._privateCode]);
+
+  useEffect(() => {
+    if (!isReplay) {
+      stopLobbyMusic(350);
+      stopBgMusic(350);
+    }
+    const sync = () => setSoundOn(getSoundEnabled());
+    window.addEventListener("track-sound",sync);
+    window.addEventListener("storage",sync);
+    return () => { window.removeEventListener("track-sound",sync); window.removeEventListener("storage",sync); };
+  },[isReplay]);
+
+  const chatProps = { raceId:race.id,user,msgs:chatMsgs,setMsgs:setChatMsgs,open:chatOpen,setOpen:setChatOpen,unread:chatUnread,setUnread:setChatUnread };
+  if (invalid || (isReplay && history && !buildPlayback(history,ROLL_INTERVAL,TRACK_SPACES,TIEBREAK_SPACES,broadcastVoice))) return <LegacyRaceScreen {...legacyProps} {...{race,user,auctionOwners,onRaceEnd,isReplay,replayRolls,replayWinner,replaySpeedRef,chatMsgs,setChatMsgs,chatOpen,setChatOpen,chatUnread,setChatUnread}}/>;
+  return <>
+    <Broadcast {...{race,history,names,startTime,soundOn}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
+      tieSpaces={TIEBREAK_SPACES} clock={gameNow} replay={isReplay} speedRef={replaySpeedRef}
+      onFinish={onRaceEnd} onSound={setCommentaryEnabled} getAudioContext={getAudioCtx}
+      effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners}/>
+    {user && !isReplay && <RaceChat {...chatProps}/>}
+  </>;
+}
+
+function LegacyRaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, auctionOwners, replayRolls=null, replayWinner=null, replaySpeed=1, replaySpeedRef=null, isReplay=false }) {
   const rt = RACE_TYPES[race.type];
   const [gateBurst, setGateBurst] = useState(false);
   const [showTie, setShowTie] = useState(false);
@@ -5892,17 +5940,17 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
   const cond = TRACK_CONDITIONS[race.condition||"sunny"];
 
   return (
-    <div style={{height:"100vh",background:"#08081a",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+    <div style={{height:"100vh",background:"#141614",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
       {winner!==null&&<Confetti/>}
 
       {/* TIE dramatic overlay */}
       {showTie&&(
         <div style={{position:"fixed",inset:0,zIndex:100,pointerEvents:"none",display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.55)",animation:"tieFlash 2.2s ease-out forwards"}}>
           <div style={{textAlign:"center",animation:"tieShake 0.5s ease-in-out 0.1s"}}>
-            <div style={{fontFamily:"'Orbitron',monospace",fontSize:52,fontWeight:900,letterSpacing:6,
+            <div style={{fontFamily:"var(--track-label)",fontSize:52,fontWeight:900,letterSpacing:6,
               color:"#ffd700",textShadow:"0 0 40px #ffd700, 0 0 80px #ffd70088, 0 0 120px #ff6b0044",
               lineHeight:1}}>TIE!</div>
-            <div style={{fontFamily:"'Orbitron',monospace",fontSize:14,letterSpacing:4,color:"#ffffff99",marginTop:12}}>
+            <div style={{fontFamily:"var(--track-label)",fontSize:14,letterSpacing:4,color:"#ffffff99",marginTop:12}}>
               TIEBREAKER RACE
             </div>
             <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:16}}>
@@ -5958,12 +6006,12 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       <div style={{background:"rgba(10,10,28,0.9)",borderBottom:"1px solid #ffffff0d",padding:isLandscape?"4px 14px":"6px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,flexShrink:0,minHeight:isLandscape?topBarH:undefined}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:20}}>{rt.icon}</span>
-          <span style={{color:"#ffffff88",fontFamily:"'Orbitron',monospace",fontSize:isMobile?11:14,letterSpacing:1}}>{race.name}</span>
+          <span style={{color:"#ffffff88",fontFamily:"var(--track-label)",fontSize:isMobile?11:14,letterSpacing:1}}>{race.name}</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
-          {phase==="tiebreak" && <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:12,letterSpacing:1,animation:"racingBlink 0.6s infinite"}}>🔥 TIE-BREAKER!</span>}
+          {phase==="tiebreak" && <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:12,letterSpacing:1,animation:"racingBlink 0.6s infinite"}}>🔥 TIE-BREAKER!</span>}
           {race.condition&&race.condition!=="sunny"&&<span style={{background:`${cond.color}22`,border:`1px solid ${cond.color}55`,borderRadius:20,padding:"2px 10px",color:cond.color,fontSize:11,fontWeight:700,letterSpacing:1}}>{cond.icon} {cond.label.toUpperCase()}</span>}
-          <span style={{color:totalPot>0?"#ffd700":"#ffffff44",fontFamily:"'Orbitron',monospace",fontSize:isMobile?13:17,textShadow:totalPot>0?"0 0 12px #ffd70066":"none"}}>🌐 POT ${fmt2(totalPot)}</span>
+          <span style={{color:totalPot>0?"#ffd700":"#ffffff44",fontFamily:"var(--track-label)",fontSize:isMobile?13:17,textShadow:totalPot>0?"0 0 12px #ffd70066":"none"}}>🌐 POT ${fmt2(totalPot)}</span>
         </div>
       </div>
 
@@ -6009,7 +6057,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
                     {horseName(race,h.id).split(" ")[0]}
                   </span>
                   {auctionOwners?.[hi] && <span style={{fontSize:subLabelSize,color:"#ffd70099",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🔨{auctionOwners[hi].username}</span>}
-                  <span style={{fontSize:Math.max(8,Math.round(8*cellScale)),color:isJumping?"#39ff14":isSkip?"#ff6b00":returning?"#bf5fff":isActive&&!winner?"#00f5ff33":"transparent"}}>
+                  <span style={{fontSize:Math.max(8,Math.round(8*cellScale)),color:isJumping?"#97bd88":isSkip?"#ff6b00":returning?"#bf5fff":isActive&&!winner?"#e5b67833":"transparent"}}>
                     {isJumping?"🌟":isSkip?"🚧":returning?"◀":""}
                   </span>
                 </div>
@@ -6082,8 +6130,8 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
             {/* Dice overlay — fixed on top of track, no layout space */}
             <div style={{position:"fixed",top:64,left:0,right:0,display:"flex",justifyContent:"center",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.3s ease-out"}}>
               {winner!==null?(
-                <div style={{background:"rgba(6,6,20,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"8px 24px",textAlign:"center",boxShadow:`0 0 28px ${HORSES[winner].color}44`,alignSelf:"center"}}>
-                  <div style={{fontFamily:"'Orbitron',monospace",color:HORSES[winner].color,fontSize:15,letterSpacing:3,textShadow:`0 0 14px ${HORSES[winner].color}`}}>🏆 {horseName(race,winner).split(" ")[0].toUpperCase()} WINS!</div>
+                <div style={{background:"rgba(17,19,16,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"8px 24px",textAlign:"center",boxShadow:`0 0 28px ${HORSES[winner].color}44`,alignSelf:"center"}}>
+                  <div style={{fontFamily:"var(--track-label)",color:HORSES[winner].color,fontSize:15,letterSpacing:3,textShadow:`0 0 14px ${HORSES[winner].color}`}}>🏆 {horseName(race,winner).split(" ")[0].toUpperCase()} WINS!</div>
                 </div>
               ):diceResult&&(
                 <DiceOverlay diceResult={diceResult} rolling={rolling} raceType={race.type} race={race} mudDie={mudDie} fogDie={fogDie}/>
@@ -6212,8 +6260,8 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
       {isLandscape && (
         <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:40,pointerEvents:"none",opacity:overlayVisible?1:0,transition:"opacity 0.3s ease-out"}}>
           {winner!==null?(
-            <div style={{background:"rgba(6,6,20,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"10px 28px",textAlign:"center",boxShadow:`0 0 32px ${HORSES[winner].color}44`}}>
-              <div style={{fontFamily:"'Orbitron',monospace",color:HORSES[winner].color,fontSize:16,letterSpacing:3,textShadow:`0 0 16px ${HORSES[winner].color}`}}>
+            <div style={{background:"rgba(17,19,16,0.92)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${HORSES[winner].color}55`,borderRadius:16,padding:"10px 28px",textAlign:"center",boxShadow:`0 0 32px ${HORSES[winner].color}44`}}>
+              <div style={{fontFamily:"var(--track-label)",color:HORSES[winner].color,fontSize:16,letterSpacing:3,textShadow:`0 0 16px ${HORSES[winner].color}`}}>
                 🏆 {horseName(race,winner).toUpperCase()} WINS!
               </div>
             </div>
@@ -6235,7 +6283,7 @@ function RaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, setChatMs
 // ─── PRIVATE RACE PAYOUT SCREEN ──────────────────────────────────────────────
 function PrivatePayoutScreen({ race, winner, user, onLobby }) {
   const pr = getPrivateRaces()[race?._privateCode];
-  if(!pr) return <div style={{color:"#fff",padding:40,textAlign:"center"}}>Race data not found.<br/><button onClick={onLobby} style={{marginTop:20,padding:"10px 20px",background:"#00f5ff",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"'Orbitron',monospace",fontWeight:700}}>LOBBY</button></div>;
+  if(!pr) return <div style={{color:"#fff",padding:40,textAlign:"center"}}>Race data not found.<br/><button onClick={onLobby} style={{marginTop:20,padding:"10px 20px",background:"#e5b678",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700}}>LOBBY</button></div>;
 
   const rt       = RACE_TYPES[pr.raceType]||RACE_TYPES.standard;
   const winnerH  = HORSES[winner];
@@ -6246,7 +6294,7 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
   const myResult = results[user?.username]||{};
 
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 60px",overflowY:"auto"}}>
+    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 60px",overflowY:"auto"}}>
       <Confetti/>
       {/* Race label */}
       <div style={{color:"#ffffff33",fontSize:11,letterSpacing:3,marginBottom:8}}>{rt.icon} {pr.name.toUpperCase()} · PRIVATE RACE</div>
@@ -6254,24 +6302,24 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
       {/* Winner banner */}
       <div style={{textAlign:"center",marginBottom:28,padding:"24px 40px",borderRadius:18,background:`${winnerH.color}0c`,border:`2px solid ${winnerH.color}55`,boxShadow:`0 0 60px ${winnerH.color}33`,width:"100%",maxWidth:480}}>
         <div style={{fontSize:52,marginBottom:6}}>🏆</div>
-        <div style={{fontFamily:"'Orbitron',monospace",color:winnerH.color,fontSize:26,letterSpacing:3,textShadow:`0 0 24px ${winnerH.color}`}}>{wName}</div>
+        <div style={{fontFamily:"var(--track-label)",color:winnerH.color,fontSize:26,letterSpacing:3,textShadow:`0 0 24px ${winnerH.color}`}}>{wName}</div>
         <div style={{color:"#ffffff33",letterSpacing:3,marginTop:4,fontSize:11}}>WINS THE RACE</div>
-        <div style={{marginTop:10,color:"#ffffff44",fontSize:12}}>Total pool: <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace"}}>${fmt2(totalPool)}</span></div>
+        <div style={{marginTop:10,color:"#ffffff44",fontSize:12}}>Total pool: <span style={{color:"#ffd700",fontFamily:"var(--track-label)"}}>${fmt2(totalPool)}</span></div>
       </div>
 
       {/* My result */}
       <div style={{width:"100%",maxWidth:480,marginBottom:20,padding:"18px",borderRadius:14,textAlign:"center",
-        background:myResult.payout>0?"rgba(57,255,20,0.07)":"rgba(255,45,85,0.07)",
-        border:`1px solid ${myResult.payout>0?"#39ff1433":"#ff2d5533"}`}}>
+        background:myResult.payout>0?"rgba(151,189,136,0.07)":"rgba(255,45,85,0.07)",
+        border:`1px solid ${myResult.payout>0?"#97bd8833":"#ff2d5533"}`}}>
         {myResult.payout>0?(
           <>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:22,textShadow:"0 0 20px #39ff14"}}>YOU WON!</div>
-            <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:28,marginTop:6}}>+${fmt2(myResult.payout)}</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:22,textShadow:"0 0 20px #97bd88"}}>YOU WON!</div>
+            <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:28,marginTop:6}}>+${fmt2(myResult.payout)}</div>
             <div style={{color:"#ffffff44",marginTop:4,fontSize:13}}>from ${fmt2(myResult.pot||0)} wagered</div>
           </>
         ):(
           <>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#ff2d55",fontSize:18}}>{Object.keys(myResult.bets||{}).length===0?"NO BETS PLACED":"BETTER LUCK NEXT RACE"}</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:18}}>{Object.keys(myResult.bets||{}).length===0?"NO BETS PLACED":"BETTER LUCK NEXT RACE"}</div>
             {myResult.pot>0&&<div style={{color:"#ffffff33",marginTop:6,fontSize:13}}>${fmt2(myResult.pot)} wagered · no return</div>}
           </>
         )}
@@ -6286,11 +6334,11 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
           const won  = mdata.payout>0;
           return (
             <div key={uname} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",marginBottom:6,
-              background: isMe?"rgba(0,245,255,0.06)":won?"rgba(57,255,20,0.04)":"rgba(255,255,255,0.02)",
-              border:`1px solid ${isMe?"#00f5ff33":won?"#39ff1422":"#ffffff0d"}`,borderRadius:11}}>
+              background: isMe?"rgba(229,182,120,0.06)":won?"rgba(151,189,136,0.04)":"rgba(255,255,255,0.02)",
+              border:`1px solid ${isMe?"#e5b67833":won?"#97bd8822":"#ffffff0d"}`,borderRadius:11}}>
               <div style={{width:28,height:28,borderRadius:8,background:"rgba(255,255,255,0.05)",border:"1px solid #ffffff18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{prof.avatar||"🏇"}</div>
               <div style={{flex:1}}>
-                <div style={{color:isMe?"#00f5ff":"#fff",fontWeight:700,fontSize:13}}>{uname}{isMe?" (you)":""}{uname===pr.hostUsername?" ★":""}</div>
+                <div style={{color:isMe?"#e5b678":"#fff",fontWeight:700,fontSize:13}}>{uname}{isMe?" (you)":""}{uname===pr.hostUsername?" ★":""}</div>
                 <div style={{color:"#ffffff44",fontSize:11,marginTop:1}}>
                   Wagered: <span style={{color:"#ffd700"}}>${fmt2(mdata.pot||0)}</span>
                   {Object.entries(mdata.bets||{}).length>0&&(
@@ -6300,7 +6348,7 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
                 {won?(
-                  <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:15,fontWeight:700}}>+${fmt2(mdata.payout)}</div>
+                  <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:15,fontWeight:700}}>+${fmt2(mdata.payout)}</div>
                 ):(
                   <div style={{color:"#ff2d5566",fontSize:13}}>—</div>
                 )}
@@ -6311,7 +6359,7 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
         })}
       </div>
 
-      <button onClick={onLobby} style={{padding:"14px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#00f5ff,#0080ff)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:14,letterSpacing:3,boxShadow:"0 0 24px #00f5ff44"}}>
+      <button onClick={onLobby} style={{padding:"14px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e5b678,#a27342)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:14,letterSpacing:3,boxShadow:"0 0 24px #e5b67844"}}>
         BACK TO LOBBY
       </button>
     </div>
@@ -6320,7 +6368,7 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
 
 // ─── CONFETTI PIECES (winner screen) ─────────────────────────────────────────
 function ConfettiPieces({ color }) {
-  const colors = [color,'#ffd700','#ff2d55','#00f5ff','#39ff14','#bf5fff','#ff6b00','#ffffff'];
+  const colors = [color,'#ffd700','#ff2d55','#e5b678','#97bd88','#bf5fff','#ff6b00','#ffffff'];
   const pieces = useMemo(()=>Array.from({length:70},(_,i)=>({
     id:i,
     col: colors[i % colors.length],
@@ -6415,7 +6463,7 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
   `;
 
   return (
-    <div style={{minHeight:"100vh",background:"#08081a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px",overflowY:"auto",position:"relative",overflow:"hidden"}}>
+    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px",overflowY:"auto",position:"relative",overflow:"hidden"}}>
       <style>{winCSS}</style>
 
       {/* Spotlight */}
@@ -6449,7 +6497,7 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
         {/* Sash */}
         <div style={{position:"absolute",top:"44%",left:"50%",transform:"translateX(-50%) rotate(-15deg)",
           background:"linear-gradient(135deg,#ffd700,#ff8c00,#ffd700)",
-          color:"#08081a",fontSize:12,fontWeight:900,letterSpacing:3,padding:"5px 24px",
+          color:"#141614",fontSize:12,fontWeight:900,letterSpacing:3,padding:"5px 24px",
           whiteSpace:"nowrap",opacity:0,clipPath:"inset(0 100% 0 0)",
           animation:"pw_sash 0.45s ease-out 2.1s forwards",
           boxShadow:"0 2px 20px #ffd70066",borderTop:"1px solid rgba(255,255,255,0.4)",zIndex:5}}>
@@ -6468,25 +6516,25 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
 
       {/* Winner name */}
       <div style={{color:"#ffffff33",fontSize:10,letterSpacing:5,marginTop:20,opacity:0,animation:"pw_fadeUp 0.5s ease-out 2.5s forwards"}}>RACE WINNER</div>
-      <div style={{fontFamily:"'Orbitron',monospace",fontSize:26,fontWeight:900,letterSpacing:3,
+      <div style={{fontFamily:"var(--track-label)",fontSize:26,fontWeight:900,letterSpacing:3,
         color:horse.color,textShadow:`0 0 30px ${horse.color}, 0 0 60px ${horse.color}66`,
         textAlign:"center",opacity:0,animation:"pw_nameReveal 0.6s cubic-bezier(0.22,1,0.36,1) 2.7s forwards",marginTop:6}}>{wName}</div>
       <div style={{color:"#ffffff33",letterSpacing:5,fontSize:10,marginTop:8,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.0s forwards"}}>WINS THE RACE</div>
-      <div style={{width:"100%",maxWidth:440,marginTop:20,marginBottom:20,padding:"18px",borderRadius:14,textAlign:"center",background:payout>0?"rgba(57,255,20,0.07)":"rgba(255,45,85,0.07)",border:`1px solid ${payout>0?"#39ff1433":"#ff2d5533"}`,opacity:0,animation:"pw_fadeUp 0.5s ease-out 3.2s forwards"}}>
+      <div style={{width:"100%",maxWidth:440,marginTop:20,marginBottom:20,padding:"18px",borderRadius:14,textAlign:"center",background:payout>0?"rgba(151,189,136,0.07)":"rgba(255,45,85,0.07)",border:`1px solid ${payout>0?"#97bd8833":"#ff2d5533"}`,opacity:0,animation:"pw_fadeUp 0.5s ease-out 3.2s forwards"}}>
         {payout>0?(
           <>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#39ff14",fontSize:24,textShadow:"0 0 20px #39ff14"}}>YOU WON!</div>
-            <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:22,marginTop:6}}>+${fmt2(payout)}</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:24,textShadow:"0 0 20px #97bd88"}}>YOU WON!</div>
+            <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:22,marginTop:6}}>+${fmt2(payout)}</div>
             <div style={{color:"#ffffff44",marginTop:4,fontSize:13}}>at {(odds[winner]||1).toFixed(2)}x · bet ${userBetAmt}</div>
           </>
         ):(
           <>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#ff2d55",fontSize:20}}>BETTER LUCK NEXT RACE</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:20}}>BETTER LUCK NEXT RACE</div>
             <div style={{color:"#ffffff33",marginTop:6,fontSize:13}}>{Object.keys(bets).length===0?"No bets placed.":"Your horses didn't finish first."}</div>
           </>
         )}
       </div>
-      <div style={{color:"#ffffff44",marginBottom:6,fontSize:13,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.4s forwards"}}>Balance: <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace"}}>${fmt2(userBalance)}</span></div>
+      <div style={{color:"#ffffff44",marginBottom:6,fontSize:13,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.4s forwards"}}>Balance: <span style={{color:"#ffd700",fontFamily:"var(--track-label)"}}>${fmt2(userBalance)}</span></div>
       <div style={{width:"100%",maxWidth:440,marginBottom:24}}>
         <div style={{color:"#ffffff22",fontSize:11,letterSpacing:2,marginBottom:8,textAlign:"center"}}>FINAL ODDS</div>
         {HORSES.map(h=>(
@@ -6494,13 +6542,13 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
             <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:`${h.color}15`,border:`1.5px solid ${h.color}`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
             <HorseName race={race} horseId={h.id} style={{flex:1,color:h.id===winner?h.color:"#ffffff66",fontWeight:700,fontSize:13}}/>
             {h.id===winner&&<span style={{color:"#ffd700",fontSize:10,letterSpacing:1}}>WINNER</span>}
-            <span style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:12}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
+            <span style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:12}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
             {bets[h.id]>0&&<span style={{color:"#ffd70055",fontSize:11}}>${bets[h.id]}</span>}
           </div>
         ))}
       </div>
       <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.5s forwards"}}>
-        <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#00f5ff,#39ff14)",color:"#08081a",fontFamily:"'Orbitron',monospace",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #00f5ff66"}}>🏠 BACK TO LOBBY</button>
+        <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e5b678,#97bd88)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #e5b67866"}}>🏠 BACK TO LOBBY</button>
       </div>
     </div>
   );
@@ -6534,14 +6582,14 @@ function ProvablyFairBadge({ race, expanded=false }) {
   if(!seedHash) return null;
 
   return (
-    <div style={{margin:"12px 0",borderRadius:10,border:"1px solid rgba(0,245,255,0.2)",background:"rgba(0,245,255,0.04)",overflow:"hidden"}}>
+    <div style={{margin:"12px 0",borderRadius:10,border:"1px solid rgba(229,182,120,0.2)",background:"rgba(229,182,120,0.04)",overflow:"hidden"}}>
       <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:"none",border:"none",cursor:"pointer"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:14}}>🔐</span>
-          <span style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:10,letterSpacing:2,fontWeight:700}}>PROVABLY FAIR</span>
-          {isRevealed && <span style={{background:"rgba(57,255,20,0.15)",border:"1px solid #39ff1433",borderRadius:10,padding:"1px 7px",color:"#39ff14",fontSize:9,fontWeight:700,letterSpacing:1}}>REVEALED</span>}
+          <span style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:10,letterSpacing:2,fontWeight:700}}>PROVABLY FAIR</span>
+          {isRevealed && <span style={{background:"rgba(151,189,136,0.15)",border:"1px solid #97bd8833",borderRadius:10,padding:"1px 7px",color:"#97bd88",fontSize:9,fontWeight:700,letterSpacing:1}}>REVEALED</span>}
         </div>
-        <span style={{color:"#00f5ff66",fontSize:11}}>{open?"▲":"▼"}</span>
+        <span style={{color:"#e5b67866",fontSize:11}}>{open?"▲":"▼"}</span>
       </button>
 
       {open && (
@@ -6553,7 +6601,7 @@ function ProvablyFairBadge({ race, expanded=false }) {
           {/* Seed Hash — always visible */}
           <div style={{marginBottom:10}}>
             <div style={{color:"#ffffff33",fontSize:9,letterSpacing:2,marginBottom:4}}>SEED HASH (SHA-256) — published before betting</div>
-            <div style={{background:"rgba(0,0,0,0.3)",borderRadius:6,padding:"8px 10px",fontFamily:"monospace",fontSize:10,color:"#00f5ff",wordBreak:"break-all",letterSpacing:0.5}}>
+            <div style={{background:"rgba(0,0,0,0.3)",borderRadius:6,padding:"8px 10px",fontFamily:"monospace",fontSize:10,color:"#e5b678",wordBreak:"break-all",letterSpacing:0.5}}>
               {seedHash}
             </div>
           </div>
@@ -6562,7 +6610,7 @@ function ProvablyFairBadge({ race, expanded=false }) {
           {isRevealed ? (
             <div style={{marginBottom:12}}>
               <div style={{color:"#ffffff33",fontSize:9,letterSpacing:2,marginBottom:4}}>REVEALED SEED — published after race finished</div>
-              <div style={{background:"rgba(0,0,0,0.3)",borderRadius:6,padding:"8px 10px",fontFamily:"monospace",fontSize:10,color:"#39ff14",wordBreak:"break-all",letterSpacing:0.5}}>
+              <div style={{background:"rgba(0,0,0,0.3)",borderRadius:6,padding:"8px 10px",fontFamily:"monospace",fontSize:10,color:"#97bd88",wordBreak:"break-all",letterSpacing:0.5}}>
                 {revealedSeed}
               </div>
             </div>
@@ -6583,11 +6631,11 @@ function ProvablyFairBadge({ race, expanded=false }) {
                   placeholder="Paste seed to verify..."
                   style={{flex:1,padding:"6px 10px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,color:"#fff",fontSize:11,fontFamily:"monospace",outline:"none"}}
                 />
-                <button onClick={verify} style={{padding:"6px 14px",background:"rgba(0,245,255,0.1)",border:"1px solid #00f5ff33",borderRadius:6,color:"#00f5ff",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
+                <button onClick={verify} style={{padding:"6px 14px",background:"rgba(229,182,120,0.1)",border:"1px solid #e5b67833",borderRadius:6,color:"#e5b678",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>
                   Verify ✓
                 </button>
               </div>
-              {verifyResult === true  && <div style={{color:"#39ff14",fontSize:12,fontWeight:700}}>✓ Verified — this race was provably fair</div>}
+              {verifyResult === true  && <div style={{color:"#97bd88",fontSize:12,fontWeight:700}}>✓ Verified — this race was provably fair</div>}
               {verifyResult === false && <div style={{color:"#ff2d55",fontSize:12,fontWeight:700}}>✗ Hash mismatch — seed does not match</div>}
             </div>
           )}
@@ -6625,23 +6673,23 @@ function RaceReplayScreen({ race, onClose }) {
   const rt = RACE_TYPES[race.type]||RACE_TYPES.standard;
 
   return (
-    <div style={{position:"fixed",inset:0,zIndex:600,background:"#08081a",display:"flex",flexDirection:"column"}}>
+    <div style={{position:"fixed",inset:0,zIndex:600,background:"#141614",display:"flex",flexDirection:"column"}}>
       {/* Replay header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(8,8,26,0.98)",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0,zIndex:10}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(20,22,20,0.98)",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0,zIndex:10}}>
         <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
           <span style={{fontSize:18}}>{rt.icon}</span>
           <div style={{minWidth:0}}>
             <div style={{color:"#fff",fontWeight:700,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:180}}>{race.name}</div>
-            <div style={{color:"#bf5fff",fontSize:9,letterSpacing:2,fontFamily:"'Orbitron',monospace"}}>📼 REPLAY</div>
+            <div style={{color:"#bf5fff",fontSize:9,letterSpacing:2,fontFamily:"var(--track-label)"}}>📼 REPLAY</div>
           </div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
           {!finished && rolls && (
-            <button onClick={toggleSpeed} style={{padding:"5px 12px",background:speed===2?"rgba(255,215,0,0.15)":"rgba(255,255,255,0.07)",border:`1px solid ${speed===2?"#ffd70044":"rgba(255,255,255,0.12)"}`,borderRadius:8,color:speed===2?"#ffd700":"#ffffff88",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"'Orbitron',monospace",letterSpacing:1}}>
+            <button onClick={toggleSpeed} style={{padding:"5px 12px",background:speed===2?"rgba(255,215,0,0.15)":"rgba(255,255,255,0.07)",border:`1px solid ${speed===2?"#ffd70044":"rgba(255,255,255,0.12)"}`,borderRadius:8,color:speed===2?"#ffd700":"#ffffff88",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"var(--track-label)",letterSpacing:1}}>
               {speed===1?"1×":"2× ⚡"}
             </button>
           )}
-          {finished && <span style={{color:"#39ff14",fontFamily:"'Orbitron',monospace",fontSize:10,letterSpacing:2}}>✓ FINISHED</span>}
+          {finished && <span style={{color:"#97bd88",fontFamily:"var(--track-label)",fontSize:10,letterSpacing:2}}>✓ FINISHED</span>}
           {!rolls && <span style={{color:"#ffffff33",fontSize:12}}>Loading...</span>}
           <button onClick={onClose} style={{width:32,height:32,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#ffffff66",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
@@ -6649,7 +6697,7 @@ function RaceReplayScreen({ race, onClose }) {
 
       {/* Embed RaceScreen in replay mode */}
       {rolls && (
-        <div style={{flex:1,overflow:"hidden",marginTop:0}}>
+        <div style={{flex:1,overflowY:"auto",marginTop:0}}>
           <RaceScreen
             race={{...race, startTime: Date.now() + 1200, nowMs: Date.now()}}
             bets={{}} totalPot={0}
@@ -6682,7 +6730,7 @@ function HowItWorksPanel({ onClose }) {
     <div style={{marginBottom:24,background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:"16px 18px"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
         <span style={{fontSize:22}}>{icon}</span>
-        <span style={{fontFamily:"'Orbitron',monospace",color:"#fff",fontSize:14,letterSpacing:2,fontWeight:700}}>{title}</span>
+        <span style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:14,letterSpacing:2,fontWeight:700}}>{title}</span>
       </div>
       {children}
     </div>
@@ -6718,15 +6766,15 @@ function HowItWorksPanel({ onClose }) {
                   onChange={e=>setBets(b=>({...b,[h.id]:Math.max(0,parseInt(e.target.value)||0)}))}
                   style={{width:60,padding:"3px 6px",background:"rgba(255,255,255,0.07)",border:`1px solid ${h.color}44`,borderRadius:6,color:"#fff",fontSize:13,outline:"none",textAlign:"right"}}/>
               </div>
-              <span style={{fontFamily:"'Orbitron',monospace",color:myBet>0?"#ffd700":"#ffffff22",fontSize:14,fontWeight:900,minWidth:48,textAlign:"right"}}>{myBet>0?`${odds}x`:"—"}</span>
+              <span style={{fontFamily:"var(--track-label)",color:myBet>0?"#ffd700":"#ffffff22",fontSize:14,fontWeight:900,minWidth:48,textAlign:"right"}}>{myBet>0?`${odds}x`:"—"}</span>
             </div>
           );
         })}
         <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",marginTop:8,paddingTop:8,display:"flex",justifyContent:"space-between"}}>
           <span style={{color:"#ffffff44",fontSize:12}}>Total pot</span>
-          <span style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14,fontWeight:900}}>${total}</span>
+          <span style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:14,fontWeight:900}}>${total}</span>
         </div>
-        <div style={{color:"#ffffff33",fontSize:11,marginTop:8}}>If you bet $100 on War Horse and win → ${(total/(bets[0]||1)).toFixed(2)} × $100 = <span style={{color:"#39ff14",fontWeight:700}}>${((total/(bets[0]||1))*100).toFixed(2)}</span></div>
+        <div style={{color:"#ffffff33",fontSize:11,marginTop:8}}>If you bet $100 on War Horse and win → ${(total/(bets[0]||1)).toFixed(2)} × $100 = <span style={{color:"#97bd88",fontWeight:700}}>${((total/(bets[0]||1))*100).toFixed(2)}</span></div>
       </div>
     );
   };
@@ -6736,7 +6784,7 @@ function HowItWorksPanel({ onClose }) {
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
         <span style={{fontSize:24}}>{icon}</span>
         <div>
-          <div style={{color,fontFamily:"'Orbitron',monospace",fontSize:13,fontWeight:700,letterSpacing:1}}>{name}</div>
+          <div style={{color,fontFamily:"var(--track-label)",fontSize:13,fontWeight:700,letterSpacing:1}}>{name}</div>
           <div style={{color:`${color}88`,fontSize:11,marginTop:1}}>{tag}</div>
         </div>
       </div>
@@ -6749,7 +6797,7 @@ function HowItWorksPanel({ onClose }) {
     <div style={{marginBottom:12,display:"flex",gap:12,background:`${color}08`,border:`1px solid ${color}22`,borderRadius:12,padding:"12px 14px"}}>
       <span style={{fontSize:28,flexShrink:0}}>{icon}</span>
       <div>
-        <div style={{color,fontFamily:"'Orbitron',monospace",fontSize:12,fontWeight:700,letterSpacing:1,marginBottom:4}}>{name}</div>
+        <div style={{color,fontFamily:"var(--track-label)",fontSize:12,fontWeight:700,letterSpacing:1,marginBottom:4}}>{name}</div>
         <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.5,marginBottom:4}}>{effect}</div>
         <div style={{color:"#ffffff44",fontSize:11,fontStyle:"italic"}}>💡 {tip}</div>
       </div>
@@ -6775,11 +6823,11 @@ function HowItWorksPanel({ onClose }) {
         </Section>
         <Section icon="📊" title="ODDS & PAYOUTS">
           <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.6,marginBottom:10}}>
-            Odds are <span style={{color:"#00f5ff",fontWeight:700}}>pari-mutuel</span> — the more money bet on a horse, the lower the payout. The pot is shared proportionally among winning bettors.
+            Odds are <span style={{color:"#e5b678",fontWeight:700}}>pari-mutuel</span> — the more money bet on a horse, the lower the payout. The pot is shared proportionally among winning bettors.
           </div>
-          <div style={{background:"rgba(0,245,255,0.06)",border:"1px solid #00f5ff22",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
-            <div style={{color:"#00f5ff",fontFamily:"'Orbitron',monospace",fontSize:11,letterSpacing:2,marginBottom:4}}>THE FORMULA</div>
-            <div style={{color:"#ffd700",fontFamily:"'Orbitron',monospace",fontSize:14}}>Odds = Total Pot ÷ Amount Bet on Winner</div>
+          <div style={{background:"rgba(229,182,120,0.06)",border:"1px solid #e5b67822",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
+            <div style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:11,letterSpacing:2,marginBottom:4}}>THE FORMULA</div>
+            <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:14}}>Odds = Total Pot ÷ Amount Bet on Winner</div>
             <div style={{color:"#ffffff44",fontSize:12,marginTop:4}}>Payout = Your Bet × Odds</div>
           </div>
           <OddsExample/>
@@ -6789,7 +6837,7 @@ function HowItWorksPanel({ onClose }) {
 
     if(tab === "racetypes") return (
       <div>
-        <RaceTypeCard icon="🎲" name="STANDARD" color="#00f5ff" tag="2 dice · classic"
+        <RaceTypeCard icon="🎲" name="STANDARD" color="#e5b678" tag="2 dice · classic"
           desc="Two dice are rolled each turn. Each die moves the matching horse one space. Doubles moves that horse two spaces."
           mechanics="Dice 1–6 = Horses 1–6. Roll a 3 and a 5 → Horse 3 and Horse 5 each move 1 space. Roll double 4s → Horse 4 moves 2 spaces."/>
         <RaceTypeCard icon="🎯" name="TRIPLE DICE" color="#a78bfa" tag="3 dice · more action"
@@ -6801,7 +6849,7 @@ function HowItWorksPanel({ onClose }) {
         <RaceTypeCard icon="↩️" name="DOWN & BACK" color="#ff6b6b" tag="2 dice · two legs"
           desc="Horses race to the far end, then turn around and race back. First to return to start wins. Strategy shifts at the halfway point."
           mechanics="Horses advance to space 20, then reverse direction. Once a horse turns, it heads back toward 0. First to reach 0 on the return wins."/>
-        <RaceTypeCard icon="🚧" name="HURDLES" color="#39ff14" tag="2 dice · obstacles"
+        <RaceTypeCard icon="🚧" name="HURDLES" color="#97bd88" tag="2 dice · obstacles"
           desc="A hurdle sits at space 10. Horses must clear it with doubles — otherwise they stop in front and wait. A well-timed doubles roll can leap over the field."
           mechanics="Any horse reaching the hurdle stops unless doubles were rolled. On doubles, the horse clears the hurdle and lands 2 ahead. Horses pile up, then burst through."/>
       </div>
@@ -6838,7 +6886,7 @@ function HowItWorksPanel({ onClose }) {
         </Section>
         <Section icon="💵" title="AUCTION BETTING">
           <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.6,marginBottom:10}}>
-            Owning a horse doesn't automatically mean you win money. You still need to <span style={{color:"#00f5ff",fontWeight:700}}>place a bet</span> on it (or any horse) in the bets tab during the auction.
+            Owning a horse doesn't automatically mean you win money. You still need to <span style={{color:"#e5b678",fontWeight:700}}>place a bet</span> on it (or any horse) in the bets tab during the auction.
           </div>
           <Row label="Ownership" value="Bragging rights + name on the track"/>
           <Row label="Winning bid cost" value="Deducted from your balance when you win the auction"/>
@@ -6865,8 +6913,8 @@ function HowItWorksPanel({ onClose }) {
               ["Auction early","First horses auctioned often go cheap — later horses get more competition."],
               ["Weather changes odds","Rain and fog shake up favourites. Reconsider your picks when conditions are rough."],
             ].map(([title,desc])=>(
-              <div key={title} style={{background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px",borderLeft:"3px solid #00f5ff44"}}>
-                <div style={{color:"#00f5ff",fontWeight:700,fontSize:13,marginBottom:3}}>{title}</div>
+              <div key={title} style={{background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"10px 14px",borderLeft:"3px solid #e5b67844"}}>
+                <div style={{color:"#e5b678",fontWeight:700,fontSize:13,marginBottom:3}}>{title}</div>
                 <div style={{color:"#ffffff66",fontSize:12,lineHeight:1.5}}>{desc}</div>
               </div>
             ))}
@@ -6878,11 +6926,11 @@ function HowItWorksPanel({ onClose }) {
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 12px 12px",overflowY:"auto"}}>
-      <div style={{width:"100%",maxWidth:560,background:"#0d0d1f",border:"1px solid rgba(0,245,255,0.15)",borderRadius:20,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,0.8)"}}>
+      <div style={{width:"100%",maxWidth:560,background:"#0d0d1f",border:"1px solid rgba(229,182,120,0.15)",borderRadius:20,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,0.8)"}}>
         {/* Header */}
         <div style={{padding:"20px 20px 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontFamily:"'Orbitron',monospace",color:"#00f5ff",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #00f5ff66"}}>HOW IT WORKS</div>
+            <div style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:18,letterSpacing:3,textShadow:"0 0 16px #e5b67866"}}>HOW IT WORKS</div>
             <div style={{color:"#ffffff33",fontSize:12,marginTop:2,letterSpacing:1}}>The Track — Player Guide</div>
           </div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,color:"#ffffff66",cursor:"pointer",width:32,height:32,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
@@ -6893,10 +6941,10 @@ function HowItWorksPanel({ onClose }) {
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
               flexShrink:0,padding:"7px 14px",borderRadius:8,border:"none",cursor:"pointer",
-              background:tab===t.id?"rgba(0,245,255,0.15)":"rgba(255,255,255,0.04)",
-              color:tab===t.id?"#00f5ff":"#ffffff55",
-              fontFamily:"'Orbitron',monospace",fontSize:10,letterSpacing:1,fontWeight:700,
-              borderBottom:tab===t.id?"2px solid #00f5ff":"2px solid transparent",
+              background:tab===t.id?"rgba(229,182,120,0.15)":"rgba(255,255,255,0.04)",
+              color:tab===t.id?"#e5b678":"#ffffff55",
+              fontFamily:"var(--track-label)",fontSize:10,letterSpacing:1,fontWeight:700,
+              borderBottom:tab===t.id?"2px solid #e5b678":"2px solid transparent",
               transition:"all 0.15s",
             }}>
               {t.icon} {t.label}
@@ -7589,7 +7637,7 @@ function App() {
     : null;
 
   return (
-    <div style={{minHeight:"100vh",background:"#08081a"}}>
+    <div className="track-app">
       <OutlineFilters/>
       <style>{GS}</style>
       <NavBar user={user} onLobby={goLobby} onMyBets={()=>{refreshPending();setShowMyBets(true);}} onProfile={()=>setShowProfile(true)} onPrivateRaces={()=>setShowPrivate(true)} onAuctions={()=>{setSelectedAuctionRace(null);setShowAuction(true);}} onBank={()=>setShowBank(true)} onHowTo={()=>setShowHowTo(true)} onLogout={handleLogout} pendingCount={pendingCount}/>
@@ -7608,13 +7656,13 @@ function App() {
         />
       )}
       {showAuction && !selectedAuctionRace && (
-        <div style={{position:"fixed",inset:0,zIndex:50,background:"#08081a",overflowY:"auto"}}>
+        <div style={{position:"fixed",inset:0,zIndex:50,background:"#141614",overflowY:"auto"}}>
           <AuctionLobbyScreen schedule={auctionSchedule} now={now} onEnterRace={race=>{setSelectedAuctionRace(race);}} sharedPot={sharedPot}/>
           <button onClick={()=>setShowAuction(false)} style={{position:"fixed",top:16,left:16,zIndex:60,background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13}}>← Close</button>
         </div>
       )}
       {showAuction && selectedAuctionRace && screen!=="race" && (
-        <div style={{position:"fixed",inset:0,zIndex:50,background:"#08081a",overflowY:"auto"}}>
+        <div style={{position:"fixed",inset:0,zIndex:50,background:"#141614",overflowY:"auto"}}>
           <AuctionRaceScreen
             race={auctionSchedule.find(r=>r.id===selectedAuctionRace.id)||selectedAuctionRace}
             user={user} now={now}
@@ -7636,7 +7684,7 @@ function App() {
       )}
       {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets} friendRaces={friendRaces} sharedPot={sharedPot}/>}
       {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} sharedPot={sharedPot[liveSelectedRace?.id]||null} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
-      {screen==="race"   && liveSelectedRace && <RaceScreen race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={sharedPot[liveSelectedRace?.id]?.totalPot||totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
+      {screen==="race"   && liveSelectedRace && <RaceScreen key={liveSelectedRace.id} race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={sharedPot[liveSelectedRace?.id]?.totalPot||totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
       {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onPlayAgain={()=>handleEnterRace(liveSelectedRace)} onLobby={goLobby}/>}
       {screen==="private-payout"  && liveSelectedRace && winner!==null && <PrivatePayoutScreen race={liveSelectedRace} winner={winner} user={user} onLobby={goLobby}/>}
     </div>

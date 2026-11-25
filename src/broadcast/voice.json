@@ -1,0 +1,252 @@
+{
+  "11": {
+    "text": "Double ones!",
+    "offset": 0,
+    "duration": 0.761678
+  },
+  "12": {
+    "text": "One and two this time.",
+    "offset": 0.761678,
+    "duration": 1.140476
+  },
+  "13": {
+    "text": "That's a one and a three.",
+    "offset": 1.902154,
+    "duration": 1.744286
+  },
+  "14": {
+    "text": "One and four this time.",
+    "offset": 3.64644,
+    "duration": 1.00424
+  },
+  "15": {
+    "text": "That's a one and a five.",
+    "offset": 4.65068,
+    "duration": 1.258662
+  },
+  "16": {
+    "text": "One and six this time.",
+    "offset": 5.909342,
+    "duration": 1.287234
+  },
+  "21": {
+    "text": "We've got the two and the one.",
+    "offset": 7.196576,
+    "duration": 1.4022
+  },
+  "22": {
+    "text": "Double twos!",
+    "offset": 8.598776,
+    "duration": 0.7361
+  },
+  "23": {
+    "text": "We've got the two and the three.",
+    "offset": 9.334875,
+    "duration": 1.445805
+  },
+  "24": {
+    "text": "Two and four on the dice.",
+    "offset": 10.78068,
+    "duration": 1.053311
+  },
+  "25": {
+    "text": "We've got the two and the five.",
+    "offset": 11.833991,
+    "duration": 1.535578
+  },
+  "26": {
+    "text": "Two and six on the dice.",
+    "offset": 13.369569,
+    "duration": 1.945986
+  },
+  "31": {
+    "text": "Three and one this time.",
+    "offset": 25.028639,
+    "duration": 1.160635
+  },
+  "32": {
+    "text": "That's a three and a two.",
+    "offset": 26.189274,
+    "duration": 1.808231
+  },
+  "33": {
+    "text": "Double threes!",
+    "offset": 27.997506,
+    "duration": 0.996327
+  },
+  "34": {
+    "text": "That's a three and a four.",
+    "offset": 28.993832,
+    "duration": 1.424739
+  },
+  "35": {
+    "text": "Three and five this time.",
+    "offset": 30.418571,
+    "duration": 1.403175
+  },
+  "36": {
+    "text": "That's a three and a six.",
+    "offset": 31.821746,
+    "duration": 1.533197
+  },
+  "41": {
+    "text": "Four and one on the dice.",
+    "offset": 33.354943,
+    "duration": 1.348118
+  },
+  "42": {
+    "text": "We've got the four and the two.",
+    "offset": 34.703061,
+    "duration": 1.291315
+  },
+  "43": {
+    "text": "Four and three on the dice.",
+    "offset": 35.994376,
+    "duration": 1.545215
+  },
+  "44": {
+    "text": "Double fours!",
+    "offset": 37.539592,
+    "duration": 0.77517
+  },
+  "45": {
+    "text": "Four and five on the dice.",
+    "offset": 38.314762,
+    "duration": 2.011837
+  },
+  "46": {
+    "text": "We've got the four and the six.",
+    "offset": 40.326599,
+    "duration": 2.125669
+  },
+  "51": {
+    "text": "That's a five and a one.",
+    "offset": 48.590567,
+    "duration": 1.775397
+  },
+  "52": {
+    "text": "Five and two this time.",
+    "offset": 50.365964,
+    "duration": 1.752109
+  },
+  "53": {
+    "text": "That's a five and a three.",
+    "offset": 52.118073,
+    "duration": 1.523016
+  },
+  "54": {
+    "text": "Five and four this time.",
+    "offset": 53.641088,
+    "duration": 1.098503
+  },
+  "55": {
+    "text": "Double fives!",
+    "offset": 54.739592,
+    "duration": 0.715329
+  },
+  "56": {
+    "text": "Five and six this time.",
+    "offset": 55.454921,
+    "duration": 1.347256
+  },
+  "61": {
+    "text": "We've got the six and the one.",
+    "offset": 56.802177,
+    "duration": 1.220499
+  },
+  "62": {
+    "text": "Six and two on the dice.",
+    "offset": 58.022676,
+    "duration": 1.38449
+  },
+  "63": {
+    "text": "We've got the six and the three.",
+    "offset": 59.407166,
+    "duration": 1.610204
+  },
+  "64": {
+    "text": "Six and four on the dice.",
+    "offset": 61.01737,
+    "duration": 1.384444
+  },
+  "65": {
+    "text": "We've got the six and the five.",
+    "offset": 62.401814,
+    "duration": 1.90195
+  },
+  "66": {
+    "text": "Double sixes!",
+    "offset": 64.303764,
+    "duration": 1.09195
+  },
+  "open": {
+    "text": "And they're off!",
+    "offset": 15.315556,
+    "duration": 0.868617
+  },
+  "tiebreak": {
+    "text": "They're level at the wire. We'll go to a tiebreak.",
+    "offset": 16.184172,
+    "duration": 3.223401
+  },
+  "win1": {
+    "text": "Number one gets there!",
+    "offset": 19.407574,
+    "duration": 1.431202
+  },
+  "lead1": {
+    "text": "Number one takes the lead.",
+    "offset": 20.838776,
+    "duration": 1.314218
+  },
+  "win2": {
+    "text": "Number two gets there!",
+    "offset": 22.152993,
+    "duration": 1.365125
+  },
+  "lead2": {
+    "text": "Number two takes the lead.",
+    "offset": 23.518118,
+    "duration": 1.510522
+  },
+  "win3": {
+    "text": "Number three gets there!",
+    "offset": 42.452268,
+    "duration": 1.577324
+  },
+  "lead3": {
+    "text": "Number three takes the lead.",
+    "offset": 44.029592,
+    "duration": 1.437392
+  },
+  "win4": {
+    "text": "Number four gets there!",
+    "offset": 45.466984,
+    "duration": 1.211383
+  },
+  "lead4": {
+    "text": "Number four takes the lead.",
+    "offset": 46.678367,
+    "duration": 1.9122
+  },
+  "win5": {
+    "text": "Number five gets there!",
+    "offset": 65.395714,
+    "duration": 1.256485
+  },
+  "lead5": {
+    "text": "Number five takes the lead.",
+    "offset": 66.6522,
+    "duration": 1.328118
+  },
+  "win6": {
+    "text": "Number six gets there!",
+    "offset": 67.980317,
+    "duration": 1.324331
+  },
+  "lead6": {
+    "text": "Number six takes the lead.",
+    "offset": 69.304649,
+    "duration": 1.508957
+  }
+}
