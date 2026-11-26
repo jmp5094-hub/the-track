@@ -32,12 +32,26 @@ export async function createTrackView(container) {
   const observer = new ResizeObserver(resize);
   observer.observe(container);
   resize();
-  function draw(frame) {
+  const target = new THREE.Vector3();
+  const from = new THREE.Vector3();
+  const aim = new THREE.Vector3();
+  let lastTime;
+  let lastSteady;
+  function draw(frame, steady = false) {
     if (container.dataset.contextLost) return;
-    const shot = shotAt(frame,camera.aspect,reduced.matches);
-    camera.position.set(...shot.from);
-    camera.lookAt(...shot.at);
-    camera.fov = shot.fov;
+    const locked = steady || reduced.matches;
+    const shot = shotAt(frame,camera.aspect,locked);
+    const elapsed = frame.time;
+    const reset = lastTime === undefined || elapsed < lastTime || elapsed-lastTime > .75 || locked !== lastSteady;
+    const weight = reset || locked ? 1 : 1 - Math.exp(-Math.max(.016,elapsed-lastTime)*7);
+    lastTime = elapsed;
+    lastSteady = locked;
+    from.set(...shot.from);
+    aim.set(...shot.at);
+    camera.position.lerp(from,weight);
+    target.lerp(aim,weight);
+    camera.lookAt(target);
+    camera.fov += (shot.fov-camera.fov)*weight;
     camera.updateProjectionMatrix();
     arena.pose({...frame,time:frame.sceneTime},true,reduced.matches);
     renderer.render(scene,camera);

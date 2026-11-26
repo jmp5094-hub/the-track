@@ -1,4 +1,4 @@
-import { clamp, lane, smooth, SILKS, GO, LEADER_START, COURSE_MIN, COURSE_MAX, TRACK_FINISH } from './playback.mjs';
+import { clamp, lane, smooth, SILKS, GO, LEADER_START, COURSE_MIN, COURSE_MAX, TRACK_FINISH, SPACE, BOARD_SPACES } from './playback.mjs';
 
 export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, horseRig }) {
   const V = (x, y, z) => new T.Vector3(x, y, z);
@@ -86,6 +86,14 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
     const placard = shape(scene,geo.plane,simple('#ffffff',{map:paint('THE TRACK','#242524','#d6b782',400,84)}),x,1.45,-8.97,4.5,.94,1);
     placard.rotation.z = 0;
   }
+  const gridPaint = simple('#dec5a1', { transparent:true, opacity:.46 });
+  for (let n=1;n<=BOARD_SPACES;n++) {
+    const x = TRACK_FINISH - n*SPACE;
+    block(scene,gridPaint,x,.016,0,.047,.016,12.7);
+    const marker = shape(scene,geo.plane,simple('#ffffff',{map:paint(String(n),'#292624','#f4dfad',96,84),side:T.DoubleSide}),x,.56,-6.88,.44,.42,1);
+    marker.rotation.x = -.28;
+  }
+  for (let i=0;i<=6;i++) block(scene,gridPaint,TRACK_FINISH-BOARD_SPACES*SPACE/2,.012,(i-3)*1.56,BOARD_SPACES*SPACE,.012,.027);
   for (let row=0;row<3;row++) for(let j=0;j<20;j++) {
     block(scene,(j+row)%2?dark:cream,TRACK_FINISH + (row-1)*.19,.025,(j-9.5)*.715,.191,.028,.715);
   }
@@ -100,7 +108,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const steel=standard('#394b49',{roughness:.55,metalness:.41});
   const gatePaint=standard('#53635a',{roughness:.62,metalness:.27});
   const gateTrim=standard('#c3bfaf',{roughness:.63});
-  const doorX=LEADER_START+1.60;
+  const doorX=LEADER_START+1.67;
   const gates=[];
   block(scene,steel,doorX-.96,2.60,0,2.44,.18,9.76);
   block(scene,gatePaint,doorX-.88,2.70,0,2.14,.11,9.44);

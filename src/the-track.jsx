@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Broadcast } from "./broadcast/Broadcast";
-import { buildPlayback } from "./broadcast/playback.mjs";
+import { Exhibition } from "./broadcast/Exhibition";
+import { buildPlayback, SILKS } from "./broadcast/playback.mjs";
 import broadcastVoice from "./broadcast/voice.json";
 import "./track-theme.css";
 import LottieHorse, { OutlineFilters, getCoatIndex, getCoatName } from "./LottieHorse";
@@ -1432,6 +1433,8 @@ function Confetti() {
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
+const exhibitionUrl = import.meta.env.BASE_URL+"?demo=1";
+
 function TrackWordmark() {
   return <span className="track-wordmark"><span className="track-mark" aria-hidden="true"><i/><i/><i/></span>The Track</span>;
 }
@@ -1486,7 +1489,8 @@ function AuthScreen({ onLogin }) {
         <div className="track-auth-title">
           <p className="track-kicker">Virtual horse racing</p>
           <h1>Every roll changes the race.</h1>
-          <p>Pick your horse, watch the dice settle, and follow the field to the wire.</p>
+          <p>Follow your horse from the first roll to the wire.</p>
+          <a className="track-primary track-demo-link" href={exhibitionUrl}>Watch a demo race</a>
         </div>
         <p className="track-image-credit">Racehorse model by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · Recolored</p>
       </div>
@@ -3684,95 +3688,65 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
   );
 }
 
-function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sharedPot={} }) {
-  const withStatus = useMemo(()=>schedule.map(r=>({...r,_st:raceStatus(r,now)})).filter(r=>r._st!=="finished"),[schedule,now]);
+function LobbyScreen({ schedule, now, onEnterRace, onReplay, userBets, friendRaces={}, sharedPot={} }) {
+  const records = useMemo(() => schedule.map(race=>({...race,state:raceStatus(race,now)})),[schedule,now]);
   const sections=[
-    {title:"Live now",   filter:r=>r._st==="racing"||r._st==="locked", accent:"#ff2d55"},
-    {title:"Betting open",filter:r=>r._st==="betting",                  accent:"#97bd88"},
-    {title:"Up next",    filter:r=>r._st==="upcoming"&&r.startTime-now<60*60*1000, accent:"#ffd700"},
-    {title:"Schedule",   filter:r=>r._st==="upcoming"&&r.startTime-now>=60*60*1000,accent:"#e5b678"},
+    {title:"Live at the track", state:"racing"},
+    {title:"Bets closed", state:"locked"},
+    {title:"Betting open", state:"betting"},
+    {title:"Upcoming", state:"upcoming"},
+    {title:"Recent finishes", state:"finished"},
   ];
-
-  const featured = withStatus.find(r=>r._st==="racing") || withStatus.find(r=>r._st==="locked") || withStatus[0];
-
+  const featured=sections.slice(0,-1).map(section=>records.find(race=>race.state===section.state)).find(Boolean);
+  const confirmed=getConfirmed();
+  function statusText(race) {
+    const seconds=Math.max(0,Math.ceil((race.startTime-now)/1000));
+    if(race.state==="racing") return "Live now";
+    if(race.state==="locked") return "Post in "+fmtCD(seconds);
+    if(race.state==="betting") return "Bets close in "+fmtCD(Math.max(0,seconds-BET_CLOSE_SECS));
+    if(race.state==="finished") return "Replay";
+    return "Post "+fmtTime(new Date(race.startTime));
+  }
   return (
     <main className="track-lobby">
       <header className="track-lobby-hero">
-        <div>
-          <p className="track-kicker">Race card</p>
-          <h1>The Race Lobby</h1>
-          <p>View the field, check post times, and watch the race from trackside.</p>
-          {featured && <button type="button" className="track-primary" onClick={()=>onEnterRace(featured)}>
-            {featured._st==="racing"?"Watch live":"View next race"}
-          </button>}
+        <div className="track-lobby-intro">
+          <h1>Race Lobby</h1>
+          {featured && <div className="track-featured">
+            <span className={"track-race-state is-"+featured.state}>{statusText(featured)}</span>
+            <h2>{featured.name}</h2>
+            <p>{RACE_TYPES[featured.type].label}{featured.condition&&featured.condition!=="sunny" ? " · "+TRACK_CONDITIONS[featured.condition].label : ""}</p>
+            <button type="button" className="track-primary" onClick={()=>onEnterRace(featured)}>
+              {featured.state==="racing" ? "Watch live" : featured.state==="locked" ? "See the odds" : "View race card"}
+            </button>
+          </div>}
+          <a className="track-quiet-link" href={exhibitionUrl}>Watch a demo race</a>
         </div>
       </header>
       <div className="track-race-card">
-        {sections.map(sec=>{
-          const races=withStatus.filter(sec.filter);
+        {sections.map(section=>{
+          const matches=records.filter(race=>race.state===section.state);
+          const races=section.state==="finished" ? matches.slice(-5).reverse() : matches;
           if(!races.length) return null;
           return (
-            <section key={sec.title} className="track-card-section">
-              <h2>{sec.title}</h2>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            <section key={section.state} className="track-card-section">
+              <h2>{section.title}</h2>
+              <div className="track-race-grid">
                 {races.map(race=>{
-                  const rt=RACE_TYPES[race.type];
-                  const st=race._st;
-                  const secs=Math.floor((race.startTime-now)/1000);
-                  const draftBet=userBets[race.id]&&Object.keys(userBets[race.id]).length>0;
-                  const confirmedBetData=getConfirmed()[race.id];
-                  const hasBet=draftBet||!!confirmedBetData;
-                  const myAmt=confirmedBetData?confirmedBetData.pot:draftBet?Object.values(userBets[race.id]).reduce((s,v)=>s+(parseFloat(v)||0),0):0;
-                  const betIsConfirmed=!!confirmedBetData;
-                  return (
-                    <button type="button" className="track-race-row" key={race.id} onClick={()=>onEnterRace(race)}>
-                      <div style={{width:44,height:44,borderRadius:10,background:`${rt.color}15`,border:`2px solid ${rt.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,position:"relative"}}>
-                        {rt.icon}
-                        {race.condition&&race.condition!=="sunny"&&(
-                          <span style={{position:"absolute",bottom:-6,right:-6,fontSize:14,filter:"drop-shadow(0 0 3px rgba(0,0,0,0.8))"}}>
-                            {TRACK_CONDITIONS[race.condition].icon}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{color:"#fff",fontWeight:700,fontSize:15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{race.name}</div>
-                        <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap",alignItems:"center"}}>
-                          <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
-                          {race.condition&&race.condition!=="sunny"&&(
-                            <span style={{color:TRACK_CONDITIONS[race.condition].color,fontSize:11,fontWeight:600,background:`${TRACK_CONDITIONS[race.condition].color}18`,border:`1px solid ${TRACK_CONDITIONS[race.condition].color}44`,borderRadius:10,padding:"1px 7px"}}>
-                              {TRACK_CONDITIONS[race.condition].icon} {TRACK_CONDITIONS[race.condition].label}
-                            </span>
-                          )}
-                          {hasBet&&<span style={{background:betIsConfirmed?"rgba(229,182,120,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#e5b67833":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#e5b678":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
-                          {friendRaces[race.id]>0&&<span style={{background:"rgba(191,95,255,0.12)",border:"1px solid #bf5fff33",borderRadius:10,padding:"1px 8px",color:"#bf5fff",fontSize:11}}>👥 {friendRaces[race.id]}</span>}
-{(sharedPot[race.id]?.totalPot||0)>0&&<span style={{background:"rgba(151,189,136,0.08)",border:"1px solid #97bd8833",borderRadius:10,padding:"1px 8px",color:"#97bd88",fontSize:11,fontFamily:"var(--track-label)"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span>}
-                        </div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0,minWidth:100}}>
-                        {st==="racing"&&(
-                          <div style={{background:"#ff2d55",color:"#fff",padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:1,animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>
-                        )}
-                        {st==="locked"&&(
-                          <div>
-                            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:16,fontWeight:900,textShadow:"0 0 12px #ff2d55",lineHeight:1}}>{secs}s</div>
-                            <div style={{color:"#ff2d5577",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
-                          </div>
-                        )}
-                        {st==="betting"&&(
-                          <div>
-                            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:15,fontWeight:700,lineHeight:1}}>{fmtCD(secs-BET_CLOSE_SECS)}</div>
-                            <div style={{color:"#97bd8866",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
-                          </div>
-                        )}
-                        {st==="upcoming"&&(
-                          <div>
-                            <div style={{fontFamily:"var(--track-label)",color:secs<600?"#ffd700":"#ffffff44",fontSize:13,lineHeight:1}}>{fmtCD(secs)}</div>
-                            <div style={{color:"#ffffff22",fontSize:10,letterSpacing:1,marginTop:2}}>TO POST</div>
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  );
+                  const type=RACE_TYPES[race.type];
+                  const ticket=confirmed[race.id] || userBets[race.id];
+                  const pot=sharedPot[race.id]?.totalPot || 0;
+                  return <button type="button" key={race.id} className="track-race-row" onClick={()=>race.state==="finished" ? onReplay(race) : onEnterRace(race)}>
+                    <span className="track-race-icon" aria-hidden="true">{type.icon}</span>
+                    <span className="track-race-copy">
+                      <strong title={race.name}>{race.name}</strong>
+                      <small>{type.label}{race.condition&&race.condition!=="sunny" ? " · "+TRACK_CONDITIONS[race.condition].label : ""}</small>
+                      {ticket?.pot>0 && <small className="track-race-ticket">Ticket ${fmt2(ticket.pot)}</small>}
+                      {pot>0 && <small>Pool ${fmt2(pot)}</small>}
+                      {friendRaces[race.id]>0 && <small>{friendRaces[race.id]} friends</small>}
+                    </span>
+                    <span className={"track-race-state is-"+race.state}>{statusText(race)}</span>
+                  </button>;
                 })}
               </div>
             </section>
@@ -3812,7 +3786,6 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
   const isRacing         = st === "racing" || (!devForceStart && liveSecs <= 0);
   const betsAlreadyIn    = confirmedBets && Object.keys(confirmedBets).length > 0;
   const bettingSecsLeft  = Math.max(0, liveSecs - BET_CLOSE_SECS);
-  const pct              = Math.min(100, Math.max(0, (1 - bettingSecsLeft/(BET_OPEN_HOURS*3600))*100));
 
   // Load from confirmed store first, fall back to draft
   const getConfirmedForRace = () => getConfirmed()[race.id];
@@ -3824,6 +3797,10 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
   });
   // confirmed = bets have been submitted at least once (but can still be edited)
   const [confirmed, setConfirmed] = useState(!!confirmedStore || betsAlreadyIn);
+  const [editing, setEditing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const confirming = useRef(false);
   // previouslyConfirmedPot tracks what was already deducted from balance for this race
   const [prevPot, setPrevPot] = useState(confirmedStore?.pot || (betsAlreadyIn ? confirmedPot : 0));
 
@@ -3845,26 +3822,31 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     if(confirmed) setConfirmed(false);
   };
 
-  const handleConfirm=()=>{
-    if(overBalance||totalBet<=0||!canBet) return;
-    // Calculate the delta vs what was previously reserved
-    const delta = totalBet - prevPot;
-    // Only adjust balance by the difference (can be negative = refund)
-    onConfirmBets(localBets, totalBet, prevPot);
-    setConfirmed(true);
-    setPrevPot(totalBet);
-    // Write to confirmed store
-    const c=getConfirmed();
-    c[race.id]={ bets:localBets, pot:totalBet, raceId:race.id };
-    saveConfirmed(c);
-    // Clear draft
-    const p=getPending(); delete p[race.id]; savePending(p);
+  const handleConfirm=async()=>{
+    if(overBalance||totalBet<=0||!canBet||confirming.current) return;
+    confirming.current=true;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      await onConfirmBets(localBets,totalBet,prevPot);
+      const saved=getConfirmed();
+      saved[race.id]={bets:localBets,pot:totalBet,raceId:race.id};
+      saveConfirmed(saved);
+      const pending=getPending();
+      delete pending[race.id];
+      savePending(pending);
+      setPrevPot(totalBet);
+      setConfirmed(true);
+      setEditing(false);
+    } catch {
+      setSubmitError("The ticket could not be confirmed. Check Active Bets before retrying.");
+    } finally {
+      confirming.current=false;
+      setSubmitting(false);
+    }
   };
 
-  const handleEditBets=()=>{
-    // Revert to editable mode — bets still saved in confirmed store
-    setConfirmed(false);
-  };
+  const handleEditBets=()=>setEditing(true);
 
   // 🛠 DEV: local countdown when force-started (real race is far away)
   const [devCountdown, setDevCountdown] = useState(BET_CLOSE_SECS);
@@ -4079,139 +4061,55 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
   // ── BETTING OPEN or TOO EARLY ──────────────────────────────────────────────
   return (
-    <div style={{minHeight:"100vh",background:"#141614",paddingTop:72,paddingBottom:40}}>
-      <div style={{maxWidth:700,margin:"0 auto",padding:"16px 16px 0"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13,marginBottom:14,display:"flex",alignItems:"center",gap:6}}>← Back to Lobby</button>
-
-        {/* Race header */}
-        <div style={{padding:"18px 22px",background:`${rt.color}0a`,border:`1px solid ${rt.color}44`,borderRadius:14,marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <div style={{fontSize:38}}>{rt.icon}</div>
-            <div style={{flex:1}}>
-              <h1 style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:20,letterSpacing:2}}>{race.name}</h1>
-              <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{color:rt.color,fontWeight:700,fontSize:13}}>{rt.label}</span>
-                <span style={{color:"#ffffff33"}}>·</span>
-                <span style={{color:"#ffffff55",fontSize:13}}>🕐 {fmtTime(new Date(race.startTime))}</span>
-                <span style={{color:"#ffffff33"}}>·</span>
-                <span style={{color:"#ffffff44",fontSize:13}}>{rt.dice} dice per roll</span>
-              </div>
-            </div>
-            {canBet&&!confirmed&&<div style={{background:"rgba(151,189,136,0.15)",border:"1px solid #97bd8844",color:"#97bd88",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>BETTING OPEN</div>}
-            {confirmed&&<div style={{background:"rgba(229,182,120,0.15)",border:"1px solid #e5b67844",color:"#e5b678",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>✓ BETS CONFIRMED</div>}
-            {st==="upcoming"&&<div style={{color:"#ffffff44",fontFamily:"var(--track-label)",fontSize:13}}>{fmtCD(liveSecs)}</div>}
-          </div>
-          <p style={{color:"#ffffff55",fontSize:13,marginTop:12,lineHeight:1.6}}>{rt.desc}</p>
+    <main className="track-detail">
+      <button type="button" className="track-secondary" onClick={onBack}>Race Lobby</button>
+      <header className="track-detail-header">
+        <div>
+          <p className="track-kicker">{rt.label} · {fmtTime(new Date(race.startTime))}{race.condition&&race.condition!=="sunny" ? " · "+TRACK_CONDITIONS[race.condition].label : ""}</p>
+          <h1>{race.name}</h1>
+          <p>{rt.desc}</p>
         </div>
-
-        {/* Too early — betting not open yet */}
-        {st==="upcoming"&&(
-          <div style={{textAlign:"center",padding:"32px 20px",background:"rgba(255,255,255,0.02)",borderRadius:12,marginBottom:20}}>
-            <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:16,marginBottom:8}}>BETTING OPENS IN</div>
-            <div style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:44,textShadow:"0 0 20px #ffd700"}}>{fmtCD(liveSecs - BET_OPEN_HOURS*3600)}</div>
-            <p style={{color:"#ffffff33",marginTop:12,fontSize:12}}>Opens {BET_OPEN_HOURS}h before post · Closes 30s before start</p>
+        <div className="track-detail-clock">
+          <span>{canBet ? "Bets close in" : "Betting opens in"}</span>
+          <strong>{fmtCD(canBet ? bettingSecsLeft : Math.max(0,liveSecs-BET_OPEN_HOURS*3600))}</strong>
+          {canBet && <small>Odds revealed at close</small>}
+        </div>
+      </header>
+      {canBet && <div className="track-ticket-layout">
+        <section className="track-entry-list" aria-labelledby="track-entry-heading">
+          <header><h2 id="track-entry-heading">The field</h2><span>Pool ${fmt2(sharedPot?.totalPot || 0)}</span></header>
+          {HORSES.map(h=>{
+            const value=localBets[h.id] || "";
+            const name=horseName(race,h.id);
+            return <div key={h.id} className={"track-entry"+(value ? " is-selected" : "")}>
+              <b className="track-entry-number" style={{"--runner":SILKS[h.id]}}>{h.id+1}</b>
+              <strong title={name}>{name}</strong>
+              <label><span className="tv-visually-hidden">Demo wager on #{h.id+1} {name}</span><span aria-hidden="true">$</span>
+                <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0"
+                  value={value} disabled={submitting || (confirmed&&!editing)} onChange={event=>saveBet(h.id,event.target.value)}/>
+              </label>
+              <button type="button" className="track-secondary" disabled={submitting || (confirmed&&!editing)}
+                aria-label={(value ? "Clear stake for " : "Set $50 on ")+name} onClick={()=>saveBet(h.id,value?"":"50")}>{value ? "Clear" : "$50"}</button>
+            </div>;
+          })}
+        </section>
+        <section className="track-ticket" aria-labelledby="track-ticket-heading">
+          <header><h2 id="track-ticket-heading">Your ticket</h2>{confirmed && !editing && <span className="track-race-state is-betting">Confirmed</span>}</header>
+          <div className="track-ticket-picks">
+            {totalBet>0 ? HORSES.filter(h=>localBets[h.id]>0).map(h=><p key={h.id}><span>#{h.id+1} {horseName(race,h.id)}</span><strong>${fmt2(localBets[h.id])}</strong></p>) : <p>Select a horse and enter a demo wager.</p>}
           </div>
-        )}
-
-        {/* Betting open — timer bar */}
-        {canBet&&(
-          <div style={{marginBottom:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>BETTING CLOSES IN</span>
-              <span style={{fontFamily:"var(--track-label)",color:bettingSecsLeft<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:bettingSecsLeft<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(bettingSecsLeft)}</span>
-            </div>
-            <div style={{height:7,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:bettingSecsLeft<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#e5b678,#97bd88)",boxShadow:`0 0 8px ${bettingSecsLeft<120?"#ff2d55":"#e5b678"}`,transition:"width 1s linear"}}/>
-            </div>
-          </div>
-        )}
-
-        {/* Confirmed banner */}
-        {confirmed&&canBet&&(
-          <div style={{background:"rgba(229,182,120,0.06)",border:"1px solid #e5b67833",borderRadius:10,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:20}}>✅</span>
-            <div>
-              <div style={{color:"#e5b678",fontWeight:700,fontSize:14}}>Bets Confirmed!</div>
-              <div style={{color:"#ffffff44",fontSize:12,marginTop:2}}>Your bets are locked in. Race fires at post time. Sit tight!</div>
-            </div>
-          </div>
-        )}
-
-        {/* Horse bet cards */}
-        {canBet&&(
-          <>
-            <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-              <div style={{textAlign:"left"}}>
-                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>YOUR BET</div>
-                <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:18}}>${fmt2(totalBet)}</div>
-              </div>
-              <div style={{width:1,height:32,background:"rgba(255,255,255,0.08)"}}/>
-              <div style={{textAlign:"right"}}>
-                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>🌐 LIVE POT</div>
-                <div style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:18,textShadow:"0 0 10px #e5b67866"}}>${fmt2(sharedPot?.totalPot||0)}</div>
-              </div>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
-              {HORSES.map(h=>{
-                const betVal=localBets[h.id]||"";
-                const betNum=parseFloat(betVal)||0;
-                return (
-                  <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",borderRadius:12,border:`1px solid ${betNum>0?h.color+"55":"rgba(255,255,255,0.06)"}`,boxShadow:betNum>0?`0 0 16px ${h.color}14`:"none",transition:"all 0.2s"}}>
-                    <div style={{width:38,height:38,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,background:`${h.color}15`,border:`2px solid ${h.color}`,boxShadow:`0 0 8px ${h.color}44`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-                    <div style={{flex:1}}><div style={{color:h.color,fontWeight:700,fontSize:14,letterSpacing:1}}>{horseName(race, h.id)}</div></div>
-                    {/* Always editable while betting window is open */}
-                    <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                      <div style={{position:"relative"}}>
-                        <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#ffd70066",fontSize:13,pointerEvents:"none"}}>$</span>
-                        <input type="number" min="0" placeholder="0" value={betVal}
-                          onChange={e=>saveBet(h.id,e.target.value)}
-                          style={{width:86,padding:"7px 7px 7px 20px",background:"rgba(255,255,255,0.06)",border:`1px solid ${betNum>0?h.color+"55":"#ffffff15"}`,borderRadius:7,color:"#fff",fontSize:16,outline:"none"}}/>
-                      </div>
-                      <button onClick={()=>saveBet(h.id,betVal?"":"50")} style={{padding:"7px 11px",borderRadius:7,border:`1px solid ${h.color}44`,background:betNum>0?`${h.color}18`:"transparent",color:betNum>0?h.color:"#ffffff33",cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>{betNum>0?"✓":"+"}</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-
-            {/* Always show action area while betting is open */}
-            <div style={{textAlign:"center"}}>
-              {overBalance&&<p style={{color:"#ff2d55",marginBottom:8,fontSize:13}}>⚠ Exceeds available balance (${fmt2(availableBalance)})</p>}
-              {confirmed ? (
-                <div>
-                  {/* Confirmed state — show green banner + Edit button */}
-                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(229,182,120,0.07)",border:"1px solid #e5b67844",borderRadius:10,marginBottom:12}}>
-                    <span style={{fontSize:18}}>✅</span>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{color:"#e5b678",fontWeight:700,fontSize:13}}>Bets Confirmed — ${fmt2(totalBet)} locked</div>
-                      <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>Race fires at post time. You can still edit until bets close.</div>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-                    <button onClick={handleEditBets} style={{padding:"11px 26px",borderRadius:10,border:"1px solid #ffd70044",background:"rgba(255,215,0,0.08)",color:"#ffd700",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:2}}>
-                      ✏️ EDIT BETS
-                    </button>
-                    <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"11px 26px",borderRadius:10,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBet<=0?"#ffffff33":"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:2,boxShadow:overBalance||totalBet<=0?"none":"0 0 20px #e5b67855"}}>
-                      🔒 UPDATE BETS
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"14px 44px",borderRadius:12,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBet<=0?"#ffffff33":"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:3,boxShadow:overBalance||totalBet<=0?"none":"0 0 28px #e5b67866"}}>
-                    🔒 CONFIRM BETS
-                  </button>
-                  <p style={{color:"#ffffff22",fontSize:11,marginTop:8}}>Race fires at post time · Available: ${fmt2(availableBalance)}</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-
-    </div>
+          <p className="track-ticket-total"><span>Total wager</span><strong>${fmt2(totalBet)}</strong></p>
+          <p className="track-ticket-meta">Available ${fmt2(availableBalance)} in demo currency</p>
+          {overBalance && <p className="track-ticket-error" role="alert">This ticket exceeds your available balance.</p>}
+          {submitError && <p className="track-ticket-error" role="alert">{submitError}</p>}
+          {confirmed&&!editing ?
+            <button type="button" className="track-secondary" onClick={handleEditBets}>Edit ticket</button> :
+            <button type="button" className="track-primary" onClick={handleConfirm} disabled={overBalance||totalBet<=0||submitting}>
+              {submitting ? "Saving ticket…" : prevPot>0 ? "Update ticket" : "Confirm ticket"}
+            </button>}
+        </section>
+      </div>}
+    </main>
   );
 }
 
@@ -5263,6 +5161,8 @@ function RaceChat({ raceId, user, msgs, setMsgs, open, setOpen, unread, setUnrea
 }
 
 // ─── RACE SCREEN ──────────────────────────────────────────────────────────────
+const broadcastEffects={gate:sfx.gunshot,spin:sfx.diceRoll,land:sfx.diceSettle,move:sfx.horseMove,wire:sfx.finishLine};
+
 function RaceScreen(props) {
   if (props.race.type !== "standard") return <LegacyRaceScreen {...props}/>;
   return <StandardRaceScreen key={props.race.id} {...props}/>;
@@ -5308,7 +5208,7 @@ function StandardRaceScreen({ race, user, auctionOwners, onRaceEnd, isReplay, re
     <Broadcast {...{race,history,names,startTime,soundOn}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
       tieSpaces={TIEBREAK_SPACES} clock={gameNow} replay={isReplay} speedRef={replaySpeedRef}
       onFinish={onRaceEnd} onSound={setCommentaryEnabled} getAudioContext={getAudioCtx}
-      effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners}/>
+      effects={broadcastEffects} owners={auctionOwners} backed={Object.keys(legacyProps.bets || {}).filter(id=>legacyProps.bets[id]>0).map(Number)}/>
     {user && !isReplay && <RaceChat {...chatProps}/>}
   </>;
 }
@@ -5938,6 +5838,11 @@ function LegacyRaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, set
   };
 
   const cond = TRACK_CONDITIONS[race.condition||"sunny"];
+  const runners = phase==="tiebreak" && tieHorses?.length ? tieHorses : HORSES.map(h=>h.id);
+  const remaining = id => Math.max(0,phase==="tiebreak" ? TIEBREAK_SPACES-positions[id] :
+    isDownBack ? (legDone[id] ? positions[id] : 2*TRACK_SPACES-positions[id]) : TRACK_SPACES-positions[id]);
+  const front=Math.min(...runners.map(remaining));
+  const leaders=runners.filter(id=>remaining(id)===front);
 
   return (
     <div style={{height:"100vh",background:"#141614",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
@@ -6013,6 +5918,11 @@ function LegacyRaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, set
           {race.condition&&race.condition!=="sunny"&&<span style={{background:`${cond.color}22`,border:`1px solid ${cond.color}55`,borderRadius:20,padding:"2px 10px",color:cond.color,fontSize:11,fontWeight:700,letterSpacing:1}}>{cond.icon} {cond.label.toUpperCase()}</span>}
           <span style={{color:totalPot>0?"#ffd700":"#ffffff44",fontFamily:"var(--track-label)",fontSize:isMobile?13:17,textShadow:totalPot>0?"0 0 12px #ffd70066":"none"}}>🌐 POT ${fmt2(totalPot)}</span>
         </div>
+      </div>
+
+      <div className="track-legacy-order" aria-label="Live race distances">
+        <strong>{leaders.length>1 ? "Tied" : "Leading"} {leaders.map(id=>"#"+(id+1)).join(", ")} · {front} {front===1 ? "space" : "spaces"} left</strong>
+        {runners.map(id=><span key={id} title={horseName(race,id)} className={betOnHorses.has(id) ? "is-backed" : undefined}>#{id+1} · {remaining(id)}{isDownBack && phase!=="tiebreak" ? (legDone[id] ? " Home" : " Out") : ""}</span>)}
       </div>
 
       {/* ── LANDSCAPE: horizontal rows ── */}
@@ -6396,165 +6306,57 @@ function ConfettiPieces({ color }) {
 }
 
 // ─── PAYOUT SCREEN ────────────────────────────────────────────────────────────
-function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayAgain, onLobby }) {
-  const horse=HORSES[winner], rt=RACE_TYPES[race.type];
-  const wName = horseName(race, winner);
-  const coat  = horseCoat(race, winner);
-  const userBetAmt=bets[winner]||0;
-  const payout=userBetAmt>0&&odds[winner]?userBetAmt*odds[winner]:0;
+function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onReplay, onLobby, onNextLive }) {
+  const name=horseName(race,winner);
+  const wager=Number(bets[winner] || 0);
+  const payout=wager>0 && odds[winner] ? wager*odds[winner] : 0;
+  const hasTicket=Object.values(bets).some(amount=>Number(amount)>0);
+  const [finish,setFinish]=useState(null);
+  useEffect(()=>{
+    let mounted=true;
+    const fallback=()=>race.seed==null ? null : simulateRaceWithHistory(race.type,race.condition || "sunny",race.seed);
+    getDoc(doc(db,"raceRolls",race.id)).then(snapshot=>snapshot.exists() ? snapshot.data() : fallback(),fallback).then(history=>{
+      const last=history?.rolls?.at(-1);
+      if(mounted && history?.winner===winner && last?.dice) setFinish({number:history.rolls.length,dice:last.dice,tiebreak:last.phase==="tiebreak"});
+    }).catch(()=>{});
+    return ()=>{mounted=false;};
+  },[race.id,race.type,race.condition,race.seed,winner]);
 
-  // ── Cinematic winner CSS ─────────────────────────────────────────────────────
-  const winCSS = `
-    @keyframes pw_gallopIn {
-      0%   { transform: scaleX(-1) translateX(700px); }
-      65%  { transform: scaleX(-1) translateX(-22px); }
-      82%  { transform: scaleX(-1) translateX(10px); }
-      100% { transform: scaleX(-1) translateX(0); }
-    }
-    @keyframes pw_bounce {
-      0%,100% { transform: scaleX(-1) translateY(0); }
-      50%     { transform: scaleX(-1) translateY(-9px); }
-    }
-    @keyframes pw_glow {
-      0%,100% { filter: ${coat} drop-shadow(0 0 10px ${horse.color}88); }
-      50%     { filter: ${coat} drop-shadow(0 0 32px ${horse.color}) drop-shadow(0 0 60px ${horse.color}66); }
-    }
-    @keyframes pw_crownDrop {
-      0%   { transform: translateX(-50%) translateY(-90px); opacity:0; }
-      100% { transform: translateX(-50%) translateY(-8px);  opacity:1; }
-    }
-    @keyframes pw_crownGlow {
-      0%,100% { filter: drop-shadow(0 0 14px #ffd700) drop-shadow(0 0 36px #ffd70077); }
-      50%     { filter: drop-shadow(0 0 28px #ffd700) drop-shadow(0 0 60px #ffd700aa); }
-    }
-    @keyframes pw_sash {
-      0%   { opacity:1; clip-path: inset(0 100% 0 0); }
-      100% { opacity:1; clip-path: inset(0 0% 0 0); }
-    }
-    @keyframes pw_ringBurst {
-      0%   { transform: translate(-50%,-50%) scale(0.2); opacity:0.9; }
-      100% { transform: translate(-50%,-50%) scale(4);   opacity:0; }
-    }
-    @keyframes pw_starBurst {
-      0%   { opacity:1; transform: translate(-50%,-50%) rotate(var(--a)) translateY(0); }
-      60%  { opacity:1; transform: translate(-50%,-50%) rotate(var(--a)) translateY(var(--d)); }
-      100% { opacity:0; transform: translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--d) * 1.4)); }
-    }
-    @keyframes pw_dust {
-      0%   { opacity:0.7; transform: scale(0.4); }
-      100% { opacity:0;   transform: scale(2.4) translateX(28px); }
-    }
-    @keyframes pw_nameReveal {
-      0%   { opacity:0; transform: scale(0.82) translateY(10px); letter-spacing:10px; }
-      100% { opacity:1; transform: scale(1)    translateY(0);    letter-spacing:3px; }
-    }
-    @keyframes pw_fadeUp {
-      from { opacity:0; transform: translateY(10px); }
-      to   { opacity:1; transform: translateY(0); }
-    }
-    @keyframes pw_spot {
-      0%,100% { opacity:0.5; } 50% { opacity:1; }
-    }
-    @keyframes pw_confetti {
-      0%   { opacity:1; transform: translateY(0)    rotate(0deg)   translateX(0); }
-      50%  { opacity:1; transform: translateY(42vh) rotate(420deg) translateX(var(--dx)); }
-      100% { opacity:0; transform: translateY(100vh) rotate(840deg) translateX(calc(var(--dx)*1.6)); }
-    }
-  `;
-
-  return (
-    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px",overflowY:"auto",position:"relative",overflow:"hidden"}}>
-      <style>{winCSS}</style>
-
-      {/* Spotlight */}
-      <div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:480,height:"100vh",background:`radial-gradient(ellipse 55% 100% at 50% 0%, ${horse.color}18 0%, transparent 65%)`,pointerEvents:"none",animation:"pw_spot 2s ease-in-out infinite"}}/>
-
-      {/* Confetti */}
-      <ConfettiPieces color={horse.color}/>
-
-      <div style={{color:"#ffffff33",fontSize:11,letterSpacing:3,marginBottom:16,animation:"pw_fadeUp 0.5s ease-out 0.1s both"}}>{rt.icon} {race.name.toUpperCase()}</div>
-
-      {/* ── Horse cinematic ── */}
-      <div style={{position:"relative",marginBottom:0,height:130,width:260,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-
-        {/* Burst rings on skid stop */}
-        {[horse.color,"#ff8c00","#ffffff44"].map((col,i)=>(
-          <div key={i} style={{position:"absolute",top:"50%",left:"50%",width:90,height:90,border:`2px solid ${col}`,borderRadius:"50%",animation:`pw_ringBurst 0.65s ease-out ${0.74+i*0.1}s both`}}/>
-        ))}
-
-        {/* Star burst */}
-        {["⭐","✨","⭐","✨","⭐","✨","⭐"].map((s,i)=>(
-          <div key={i} style={{position:"absolute",top:"50%",left:"50%",fontSize:18,opacity:0,
-            ["--a"]: `${i*51}deg`, ["--d"]: `-${82+i%2*14}px`,
-            animation:`pw_starBurst 0.75s ease-out ${1.65+i*0.04}s both`}}>{s}</div>
-        ))}
-
-        {/* Crown */}
-        <div style={{position:"absolute",top:0,left:"50%",fontSize:48,opacity:0,
-          animation:`pw_crownDrop 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.6s forwards, pw_crownGlow 1.2s ease-in-out 2.1s infinite`,
-          filter:"drop-shadow(0 0 16px #ffd700) drop-shadow(0 0 40px #ffd70077)",zIndex:10}}>👑</div>
-
-        {/* Sash */}
-        <div style={{position:"absolute",top:"44%",left:"50%",transform:"translateX(-50%) rotate(-15deg)",
-          background:"linear-gradient(135deg,#ffd700,#ff8c00,#ffd700)",
-          color:"#141614",fontSize:12,fontWeight:900,letterSpacing:3,padding:"5px 24px",
-          whiteSpace:"nowrap",opacity:0,clipPath:"inset(0 100% 0 0)",
-          animation:"pw_sash 0.45s ease-out 2.1s forwards",
-          boxShadow:"0 2px 20px #ffd70066",borderTop:"1px solid rgba(255,255,255,0.4)",zIndex:5}}>
-          🏆 &nbsp;WINNER&nbsp; 🏆
+  return <main className="track-detail track-results">
+    <header className="track-detail-header">
+      <div>
+        <p className="track-kicker">Official result · {race.name}</p>
+        <h1>#{winner+1} {name} wins</h1>
+        {finish && <p>{finish.tiebreak ? "Tiebreak · " : ""}Decisive roll {finish.number} · {finish.dice.join(" + ")}</p>}
+      </div>
+      <b className="track-result-number" style={{"--runner":SILKS[winner]}}>{winner+1}</b>
+    </header>
+    <div className="track-ticket-layout">
+      <section className="track-entry-list">
+        <header><h2>Final odds</h2><span>Pool ${fmt2(totalPot || 0)}</span></header>
+        {HORSES.map(h=><div key={h.id} className={"track-entry track-result-entry"+(h.id===winner ? " is-selected" : "")}>
+          <b className="track-entry-number" style={{"--runner":SILKS[h.id]}}>{h.id+1}</b>
+          <strong title={horseName(race,h.id)}>{horseName(race,h.id)}</strong>
+          <span>{h.id===winner ? "Winner" : Number(bets[h.id])>0 ? "Your ticket" : ""}</span>
+          <strong>{odds[h.id] ? odds[h.id].toFixed(2)+"×" : "—"}</strong>
+        </div>)}
+      </section>
+      <section className="track-ticket">
+        <header><h2>{hasTicket ? "Your ticket" : "Spectator"}</h2></header>
+        <div className="track-ticket-picks">
+          {hasTicket ? HORSES.filter(h=>Number(bets[h.id])>0).map(h=><p key={h.id}><span>#{h.id+1} {horseName(race,h.id)}</span><strong>${fmt2(bets[h.id])}</strong></p>) : <p>No ticket placed.</p>}
         </div>
-
-        {/* Horse */}
-        <div style={{fontSize:100,lineHeight:1,
-          filter:coat,
-          animation:`pw_gallopIn 0.7s cubic-bezier(0.22,1,0.36,1) 0.1s forwards, pw_bounce 0.22s ease-in-out 0.82s 4, pw_glow 1.5s ease-in-out 2.0s infinite`}}>🐴</div>
-
-        {/* Dust puff */}
-        <div style={{position:"absolute",right:10,bottom:0,fontSize:36,opacity:0,
-          animation:"pw_dust 0.65s ease-out 0.76s forwards"}}>💨</div>
-      </div>
-
-      {/* Winner name */}
-      <div style={{color:"#ffffff33",fontSize:10,letterSpacing:5,marginTop:20,opacity:0,animation:"pw_fadeUp 0.5s ease-out 2.5s forwards"}}>RACE WINNER</div>
-      <div style={{fontFamily:"var(--track-label)",fontSize:26,fontWeight:900,letterSpacing:3,
-        color:horse.color,textShadow:`0 0 30px ${horse.color}, 0 0 60px ${horse.color}66`,
-        textAlign:"center",opacity:0,animation:"pw_nameReveal 0.6s cubic-bezier(0.22,1,0.36,1) 2.7s forwards",marginTop:6}}>{wName}</div>
-      <div style={{color:"#ffffff33",letterSpacing:5,fontSize:10,marginTop:8,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.0s forwards"}}>WINS THE RACE</div>
-      <div style={{width:"100%",maxWidth:440,marginTop:20,marginBottom:20,padding:"18px",borderRadius:14,textAlign:"center",background:payout>0?"rgba(151,189,136,0.07)":"rgba(255,45,85,0.07)",border:`1px solid ${payout>0?"#97bd8833":"#ff2d5533"}`,opacity:0,animation:"pw_fadeUp 0.5s ease-out 3.2s forwards"}}>
-        {payout>0?(
-          <>
-            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:24,textShadow:"0 0 20px #97bd88"}}>YOU WON!</div>
-            <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:22,marginTop:6}}>+${fmt2(payout)}</div>
-            <div style={{color:"#ffffff44",marginTop:4,fontSize:13}}>at {(odds[winner]||1).toFixed(2)}x · bet ${userBetAmt}</div>
-          </>
-        ):(
-          <>
-            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:20}}>BETTER LUCK NEXT RACE</div>
-            <div style={{color:"#ffffff33",marginTop:6,fontSize:13}}>{Object.keys(bets).length===0?"No bets placed.":"Your horses didn't finish first."}</div>
-          </>
-        )}
-      </div>
-      <div style={{color:"#ffffff44",marginBottom:6,fontSize:13,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.4s forwards"}}>Balance: <span style={{color:"#ffd700",fontFamily:"var(--track-label)"}}>${fmt2(userBalance)}</span></div>
-      <div style={{width:"100%",maxWidth:440,marginBottom:24}}>
-        <div style={{color:"#ffffff22",fontSize:11,letterSpacing:2,marginBottom:8,textAlign:"center"}}>FINAL ODDS</div>
-        {HORSES.map(h=>(
-          <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",marginBottom:4,borderRadius:9,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.id===winner?h.color+"44":"rgba(255,255,255,0.06)"}`}}>
-            <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:`${h.color}15`,border:`1.5px solid ${h.color}`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-            <HorseName race={race} horseId={h.id} style={{flex:1,color:h.id===winner?h.color:"#ffffff66",fontWeight:700,fontSize:13}}/>
-            {h.id===winner&&<span style={{color:"#ffd700",fontSize:10,letterSpacing:1}}>WINNER</span>}
-            <span style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:12}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
-            {bets[h.id]>0&&<span style={{color:"#ffd70055",fontSize:11}}>${bets[h.id]}</span>}
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.5s forwards"}}>
-        <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e5b678,#97bd88)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #e5b67866"}}>🏠 BACK TO LOBBY</button>
-      </div>
+        {hasTicket && <p className="track-ticket-total"><span>{payout>0 ? "Payout" : "No payout"}</span><strong>${fmt2(payout)}</strong></p>}
+        <p className="track-ticket-meta">Demo balance ${fmt2(userBalance)}</p>
+        <div className="track-result-actions">
+          <button type="button" className="track-primary" onClick={onReplay}>Watch replay</button>
+          {onNextLive && <button type="button" className="track-secondary" onClick={onNextLive}>Watch next live race</button>}
+          <button type="button" className="track-secondary" onClick={onLobby}>Race Lobby</button>
+        </div>
+      </section>
     </div>
-  );
+  </main>;
 }
-
-
 
 // ─── PROVABLY FAIR ────────────────────────────────────────────────────────────
 function ProvablyFairBadge({ race, expanded=false }) {
@@ -7130,6 +6932,7 @@ function simulateRaceWithHistory(raceType, condition, seed) {
 }
 
 function App() {
+  const [replayRace,setReplayRace]=useState(null);
   // Prevent iOS auto-zoom on input focus by ensuring viewport doesn't scale
   useEffect(()=>{
     let meta = document.querySelector("meta[name=viewport]");
@@ -7636,6 +7439,8 @@ function App() {
     ? (schedule.find(r=>r.id===selectedRace.id) || selectedRace)
     : null;
 
+  const nextLiveRace=schedule.find(race=>race.id!==liveSelectedRace?.id && raceStatus(race,now)==="racing");
+
   return (
     <div className="track-app">
       <OutlineFilters/>
@@ -7682,13 +7487,19 @@ function App() {
           />
         </div>
       )}
-      {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets} friendRaces={friendRaces} sharedPot={sharedPot}/>}
+      {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} onReplay={setReplayRace} userBets={userBets} friendRaces={friendRaces} sharedPot={sharedPot}/>}
       {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} sharedPot={sharedPot[liveSelectedRace?.id]||null} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
       {screen==="race"   && liveSelectedRace && <RaceScreen key={liveSelectedRace.id} race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={sharedPot[liveSelectedRace?.id]?.totalPot||totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
-      {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onPlayAgain={()=>handleEnterRace(liveSelectedRace)} onLobby={goLobby}/>}
+      {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onReplay={()=>setReplayRace(liveSelectedRace)} onLobby={goLobby} onNextLive={nextLiveRace ? ()=>handleEnterRace(nextLiveRace) : null}/>}
+      {replayRace && <RaceReplayScreen race={replayRace} onClose={()=>setReplayRace(null)}/>}
       {screen==="private-payout"  && liveSelectedRace && winner!==null && <PrivatePayoutScreen race={liveSelectedRace} winner={winner} user={user} onLobby={goLobby}/>}
     </div>
   );
 }
 
-export default App;
+export default function Track() {
+  if(new URLSearchParams(window.location.search).get("demo")==="1") {
+    return <Exhibition getAudioContext={getAudioCtx} effects={broadcastEffects} getSoundEnabled={getSoundEnabled} onSound={setCommentaryEnabled}/>;
+  }
+  return <App/>;
+}
