@@ -63,7 +63,7 @@ export function Broadcast({ race, history, interval, spaces, tieSpaces, names, c
   const audio = useRef({});
   const settings = useRef();
   const complete = useRef(false);
-  settings.current = {onFinish,soundOn,clock,effects,viewMode};
+  settings.current = {onFinish,soundOn,clock,effects,viewMode,preferred,backed};
 
   function stopVoice() {
     const active = audio.current.source;
@@ -117,7 +117,7 @@ export function Broadcast({ race, history, interval, spaces, tieSpaces, names, c
     let replayTime = 0;
     let nextDraw = 0;
     const draw = timestamp => {
-      const {clock,soundOn,onFinish,effects,viewMode} = settings.current;
+      const {clock,soundOn,onFinish,effects,viewMode,preferred,backed} = settings.current;
       const speed = replay ? speedRef?.current || 1 : 1;
       if (replay && lastTimestamp !== undefined) replayTime += (timestamp-lastTimestamp)/1000 * speed;
       lastTimestamp = timestamp;
@@ -178,7 +178,10 @@ export function Broadcast({ race, history, interval, spaces, tieSpaces, names, c
       }
       // Cap rendering on high-refresh monitors without changing the race clock.
       if (timestamp >= nextDraw) {
-        if (viewMode !== 'board') view.current?.draw(frame,viewMode === 'steady');
+        if (viewMode !== 'board') {
+          const followed=frame.active.includes(preferred) ? preferred : frame.active.find(id=>backed.includes(id));
+          view.current?.draw({...frame,followed},viewMode === 'steady');
+        }
         nextDraw=timestamp+25;
       }
       if (elapsed >= playback.end+playback.endHold) {

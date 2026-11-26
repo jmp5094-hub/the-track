@@ -174,6 +174,8 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   }
 
   const horses = Array.from({length:6},(_,id)=>runner(id));
+  const marker = shape(scene,new T.RingGeometry(.84,1.03,42),simple('#ffe4af',{side:T.DoubleSide,transparent:true,opacity:.88}),0,.034,0,1.45,1,1);
+  marker.rotation.x = -Math.PI/2;
   const maxDust = 150;
   const dustPositions = new Float32Array(maxDust*3);
   const dustGeo = new T.BufferGeometry();dustGeo.setAttribute('position',new T.BufferAttribute(dustPositions,3).setUsage(T.DynamicDrawUsage));
@@ -192,6 +194,8 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
       animal.jockey.rotation.z = reduced ? 0 : .027*tuck - .10*energy;
       animal.rig.sample(elapsed,frame.progress[i],animal.jockey,frame.launched);
     });
+    marker.visible = frame.active.includes(frame.followed);
+    if (marker.visible) marker.position.set(frame.world[frame.followed]-.14,.034,lane(frame.followed));
     dust.visible = live && frame.launched && !reduced && !frame.done;
     if(dust.visible) for(let i=0;i<maxDust;i++) {
       const id = frame.active[i%frame.active.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];

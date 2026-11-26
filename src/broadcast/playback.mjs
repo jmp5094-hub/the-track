@@ -124,11 +124,11 @@ export function shotAt(frame, aspect, steady) {
   const center = last + spread*.54;
   const gate = frame.shot === 'gate' && !steady;
   const lead = frame.shot === 'lead' && !steady;
-  const margin = spread*(wide ? .35 : .52);
+  const margin = spread*(wide ? .35 : .50);
   return {
-    from:[center+(gate ? 8 : lead ? 6 : 4.2), (wide ? 10 : 12)+margin*.55,
-      (wide ? 16 : 20)+margin],
+    from:[center+(gate ? 8 : lead ? 6 : 4.2), (wide ? 9 : 9.8)+margin*.56,
+      (wide ? 14 : 14.5)+margin],
     at:[center+(gate ? .5 : 1.1),.65,0],
-    fov:wide ? 43 : 47,
+    fov:wide ? 43 : 46,
   };
 }

@@ -114,7 +114,7 @@ export async function downloadFinishClip(horse) {
     });
     const render=seconds=>{
       const frame=playback.sample(seconds);
-      view?.draw(frame);
+      view?.draw({...frame,followed:horse});
       paint(ctx,frame,horse,mount.querySelector('canvas'));
     };
     render(start);
