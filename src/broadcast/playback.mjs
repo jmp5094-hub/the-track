@@ -1,118 +1,132 @@
-export const SILKS = ['#ae4d3e', '#e9dfc8', '#e5aa55', '#53846d', '#88789d', '#6290ad'];
-export const PIPS = [[], [4], [0,8], [0,4,8], [0,2,6,8], [0,2,4,6,8], [0,2,3,5,6,8]];
-export const TRACK_FINISH = 75;
-export const LEADER_START = -172;
-export const COURSE_MIN = LEADER_START - 42;
-export const COURSE_MAX = TRACK_FINISH + 44;
+// Presentation consumes settled engine history. It never rolls dice or changes results.
+export const SILKS = ['#00f5ff','#ff2d55','#ffd700','#97bd88','#bf5fff','#ff8c00'];
+export const PIPS = [[],[4],[0,8],[0,4,8],[0,2,6,8],[0,2,4,6,8],[0,2,3,5,6,8]];
+export const SPACE = 6;
+export const NOSE = 1.56;
+export const TRACK_FINISH = 72;
+export const LEADER_START = -NOSE;
+export const COURSE_MIN = -12;
+export const COURSE_MAX = 88;
 export const GO = .6;
-const NOSE = 1.56;
-const SPACE = 1.85;
-const FIRST_ROLL = 1.3;
+export const FIRST_ROLL = 1.3;
 export const LAND = .64;
-export const VOICE = LAND + .12;
-const MOVE = 1.38;
-const MOVE_END = 2.52;
+export const VOICE = .76;
+export const MOVE = 1.38;
+export const MOVE_END = 2.52;
 const SEATS = [0,1,2,3,4,5];
 const GATE = [0,0,0,0,0,0];
-
-export const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
-export const mix = (a,b,p) => a+(b-a)*p;
-export const smooth = p => p*p*(3-2*p);
-export const lane = horse => (horse-2.5)*1.56;
-
-function leaderOf(positions, active) {
-  const best = Math.max(...active.map(id => positions[id]));
-  const leaders = active.filter(id => positions[id] === best);
-  return leaders.length === 1 ? leaders[0] : null;
+export const clamp=(n,lo=0,hi=1)=>Math.max(lo,Math.min(hi,n));
+export const mix=(a,b,p)=>a+(b-a)*p;
+export const smooth=p=>p*p*(3-2*p);
+export const lane=horse=>(horse-2.5)*1.56;
+export function leadersOf(positions,active=SEATS){
+  const best=Math.max(...active.map(id=>positions[id]));
+  return active.filter(id=>positions[id]===best);
 }
-
-export function buildPlayback(history, rollInterval, raceSpaces, tieSpaces, voice) {
-  const cycle = rollInterval / 1000;
-  const rolls = history?.rolls;
-  const winner = history?.winner;
-  if (!Array.isArray(rolls) || !rolls.length || !SEATS.includes(winner)) return null;
-  if (!rolls.every(roll => Array.isArray(roll.dice) && roll.dice.length === 2 &&
-      roll.dice.every(die => Number.isInteger(die) && die >= 1 && die <= 6) &&
-      Array.isArray(roll.positions) && roll.positions.length === 6 && roll.positions.every(Number.isFinite))) return null;
-
-  const tieStart = rolls.findIndex(roll => roll.phase === 'tiebreak');
-  const mainCount = tieStart < 0 ? rolls.length : tieStart;
-  const end = FIRST_ROLL + rolls.length * cycle;
-  const tied = rolls[tieStart - 1]?.positions;
-  const tieActive = tied ? SEATS.filter(id => tied[id] >= raceSpaces) : SEATS;
-  const call = (key, time) => ({key, time, ...voice[key]});
-  const cues = [call('open', GO+.04)];
-  let previous = GATE;
-  let priorLeader = null;
-  rolls.forEach((roll,index) => {
-    const start = FIRST_ROLL + index * cycle;
-    const inTie = tieStart >= 0 && index >= tieStart;
-    const active = inTie && tieActive.length ? tieActive : SEATS;
-    const primary = call(roll.dice.join(''), start + VOICE);
-    cues.push(primary);
-    const lead = leaderOf(roll.positions, active);
-    if (index === tieStart - 1) {
-      const tie = call('tiebreak', start + Math.max(MOVE_END, VOICE + (primary.duration || 0) + .08));
-      // The tie announcement can continue over the start of the first tiebreak roll.
-      if (tie.time + tie.duration < start + cycle + VOICE - .06) cues.push(tie);
-    } else if (lead !== null && lead !== priorLeader && index > 0 && index < rolls.length-1 && index !== tieStart &&
-               roll.positions[lead] > previous[lead]) {
-      const reaction = call('lead'+(lead+1), start + Math.max(1.75, VOICE + (primary.duration || 0) + .10));
-      if (reaction.time + reaction.duration < start + cycle - .09) cues.push(reaction);
+export function worldAt(position,goal=12){
+  return TRACK_FINISH-goal*SPACE+position*SPACE-NOSE;
+}
+export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}){
+  const rolls=history?.rolls, winner=history?.winner, cycle=rollInterval/1000;
+  if(!Array.isArray(rolls)||!rolls.length||!SEATS.includes(winner)||cycle<MOVE_END)return null;
+  if(!rolls.every(r=>Array.isArray(r.dice)&&r.dice.length===2&&r.dice.every(d=>Number.isInteger(d)&&d>=1&&d<=6)&&
+    Array.isArray(r.positions)&&r.positions.length===6&&r.positions.every(p=>Number.isFinite(p)&&p>=0&&p<=(r.phase==='tiebreak'?tieSpaces:raceSpaces))))return null;
+  const tieStart=rolls.findIndex(r=>r.phase==='tiebreak');
+  if(tieStart===0)return null;
+  const tieActive=tieStart>0?SEATS.filter(id=>rolls[tieStart-1].positions[id]>=raceSpaces):[];
+  if(tieStart>0&&tieActive.length<2)return null;
+  const finalGoal=tieStart>0?tieSpaces:raceSpaces;
+  if(rolls.at(-1).positions[winner]<finalGoal)return null;
+  const end=FIRST_ROLL+(rolls.length-1)*cycle+MOVE_END;
+  const call=(key,time)=>voice[key]?{key,time,...voice[key]}:null;
+  const cues=[call('open',GO+.04)].filter(Boolean);
+  let previous=GATE,priorLeaders=SEATS;
+  rolls.forEach((roll,index)=>{
+    const start=FIRST_ROLL+index*cycle;
+    const active=index>=tieStart&&tieStart>0?tieActive:SEATS;
+    const primary=call(roll.dice.join(''),start+VOICE);
+    if(primary)cues.push(primary);
+    const leaders=leadersOf(roll.positions,active);
+    if(index===tieStart-1){
+      const cue=call('tiebreak',start+MOVE_END);
+      if(cue&&cue.time+cue.duration<start+cycle+VOICE-.06)cues.push(cue);
+    }else if(leaders.length===1&&(priorLeaders.length>1||!priorLeaders.includes(leaders[0]))&&index>0&&index<rolls.length-1&&index!==tieStart&&roll.positions[leaders[0]]>previous[leaders[0]]){
+      const cue=call('lead'+(leaders[0]+1),start+Math.max(MOVE_END,VOICE+(primary?.duration||0)+.08));
+      if(cue&&cue.time+cue.duration<start+cycle+VOICE-.08)cues.push(cue);
     }
-    previous = roll.positions;
-    priorLeader = lead;
+    previous=roll.positions;priorLeaders=leaders;
   });
-  cues.push(call('win'+(winner+1), end));
-
-  function sample(seconds) {
-    const time = Math.max(0, seconds);
-    const done = time >= end;
-    const index = time < FIRST_ROLL ? -1 : Math.min(rolls.length - 1, Math.floor((time - FIRST_ROLL) / cycle));
-    const roll = rolls[index];
-    const tiebreak = tieStart >= 0 && index >= tieStart;
-    const active = tiebreak && tieActive.length ? tieActive : SEATS;
-    const goal = tiebreak ? tieSpaces : raceSpaces;
-    const previous = index <= 0 || index === tieStart ? GATE : rolls[index - 1].positions;
-    const into = time - FIRST_ROLL - index * cycle;
-    const amount = roll ? clamp((into - MOVE) / (MOVE_END - MOVE)) : 0;
-    const exact = roll && amount >= 1 ? roll.positions : previous;
-    const progress = previous.map((from, id) => {
-      const to = roll?.positions[id] ?? from;
-      if (to - from !== 2) return mix(from,to,smooth(amount));
-      return from + smooth(clamp(amount * 2.2)) + smooth(clamp((amount-.545)*2.2));
+  const lastCall=voice[rolls.at(-1).dice.join('')];
+  const winAt=Math.max(end+.15,FIRST_ROLL+(rolls.length-1)*cycle+VOICE+(lastCall?.duration||0)+.08);
+  const win=call('win'+(winner+1),winAt);if(win)cues.push(win);
+  function sample(seconds){
+    const time=Math.max(0,seconds),done=time>=end;
+    const index=time<FIRST_ROLL?-1:Math.min(rolls.length-1,Math.floor((time-FIRST_ROLL)/cycle));
+    const source=rolls[index];
+    const tiebreak=tieStart>0&&index>=tieStart;
+    const active=tiebreak?tieActive:SEATS;
+    const goal=tiebreak?tieSpaces:raceSpaces;
+    const previous=index<=0||index===tieStart?GATE:rolls[index-1].positions;
+    const into=time-FIRST_ROLL-index*cycle;
+    const amount=source?clamp((into-MOVE)/(MOVE_END-MOVE)):0;
+    const settled=Boolean(source&&into>=MOVE_END-1e-8);
+    const exact=settled?source.positions:previous;
+    const progress=previous.map((from,id)=>{
+      const to=source?.positions[id]??from;
+      if(to-from!==2)return mix(from,to,smooth(amount));
+      return from+smooth(clamp(amount/.43))+smooth(clamp((amount-.56)/.44));
     });
-    const surge = progress.map((value,id) => Math.min(1, Math.abs(value-previous[id])) * Math.sin(Math.PI*amount));
-    const segmentStart = tiebreak ? FIRST_ROLL + tieStart * cycle : GO;
-    const segmentEnd = tiebreak ? end : FIRST_ROLL + mainCount * cycle;
-    const raceProgress = clamp((time-segmentStart)/(segmentEnd-segmentStart));
-    const origin = tiebreak ? TRACK_FINISH-42 : LEADER_START;
-    const courseX = mix(origin + goal*SPACE,TRACK_FINISH-NOSE,raceProgress);
-    const world = progress.map(position => courseX + (position-goal)*SPACE);
-    const leaderX = Math.max(...active.map(id => world[id]));
-    const late = raceProgress >= .97;
-    const shot = late ? 'wire' : index <= 0 && !tiebreak ? 'gate' : index % 8 >= 4 ? 'stretch' : 'pack';
-    const cue = cues.findLast(item => item.time <= time && time < item.time + item.duration);
-    return {
-      time, sceneTime: tiebreak ? Math.min(time,end)-segmentStart+GO+.22 : Math.min(time,end),
-      index, roll, into, rolling: Boolean(roll && into < LAND), done, winner, cue,
-      active, progress, exact, surge, leaderX, world, tiebreak, goal, shot,
-      launched: time >= GO,
-    };
+    const world=progress.map(p=>worldAt(p,goal));
+    const leaders=leadersOf(exact,active);
+    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&source.positions[id]!==previous[id]));
+    const surge=moving.map((yes,id)=>yes?Math.sin(Math.PI*amount)*Math.min(1,Math.abs((source?.positions[id]??0)-previous[id])):0);
+    const revealed=Boolean(source&&into>=LAND);
+    const nextLeaders=source?leadersOf(source.positions,active):leaders;
+    const prior=leadersOf(previous,active);
+    const leadChange=revealed&&nextLeaders.length===1&&(prior.length>1||!prior.includes(nextLeaders[0]));
+    const atWire=goal-Math.max(...active.map(id=>previous[id]))<=3||goal-Math.max(...active.map(id=>exact[id]))<=3;
+    const shot=index<0?'gate':atWire?'wire':leadChange?'contest':'pack';
+    const tiePending=Boolean(tieStart>0&&index===tieStart-1&&settled);
+    const lastIndex=settled?index:index-1;
+    const lastRoll=lastIndex>=0?rolls[lastIndex]:null;
+    const cue=cues.findLast(c=>c.time<=time&&time<c.time+c.duration);
+    return {time,sceneTime:time,index,into,rolling:Boolean(source&&into<LAND),revealed,
+      roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,
+      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,
+      done,winner:done?winner:null,leaderX:Math.max(...active.map(id=>world[id])),
+      launched:time>=GO,cue};
   }
-  return { sample, cues, end, endHold: Math.max(2.25,(voice['win'+(winner+1)]?.duration || 0)+.35) };
+  return {sample,cues,end,endHold:Math.max(3.4,winAt-end+(win?.duration||0)+.6),cycle};
 }
-
-export function shotAt(frame, aspect, reduced) {
-  const narrow = aspect < 1.55;
-  if (frame.shot === 'wire') return {from:[TRACK_FINISH+.16,narrow?4.1:3.5,narrow?19:15.5],at:[TRACK_FINISH-(narrow?3.7:3.2),1.28,-.25],fov:narrow?52:42};
-  if (frame.shot === 'gate' && !reduced) {
-    const p=smooth(clamp((frame.time-GO)/2.1));
-    return {from:[frame.leaderX+mix(10,7,p),mix(4.6,4.2,p),narrow?13.8:11.3],at:[frame.leaderX-mix(.8,2.6,p),1.06,0],fov:narrow?53:43};
+export function describeRoll(roll,previous){
+  if(!roll)return 'Every matching die moves its numbered horse one space.';
+  const prefix=roll.dice.join(' and ')+'.';
+  const changes=roll.positions.map((p,i)=>({id:i,delta:p-(previous?.[i]??0)})).filter(x=>x.delta!==0);
+  const movement=changes.map(({id,delta})=>`#${id+1} ${delta<0?'back':'advances'} ${Math.abs(delta)}${Math.abs(delta)===1?' space':' spaces'}`).join(' · ');
+  const effect=roll.mudDieIdx!=null?`Rain cancels die ${roll.mudDieIdx+1} (${roll.dice[roll.mudDieIdx]}). `:
+    roll.fogDieIdx!=null?`Fog reverses die ${roll.fogDieIdx+1} (${roll.dice[roll.fogDieIdx]}). `:'';
+  return `${prefix} ${effect}${movement||'No net change in position.'}`;
+}
+export function rootingHint(frame,follow,condition='sunny'){
+  if(!frame)return 'Choose a horse to follow.';
+  if(frame.done)return frame.winner===follow?'Your horse crossed first.':`#${frame.winner+1} crossed first. You followed #${follow+1}.`;
+  if(frame.tiePending)return `Tied at the wire: ${frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}. Three-space tiebreak next.`;
+  if(!frame.active.includes(follow))return 'Your horse is out of the tiebreak. Follow one of the remaining runners.';
+  const left=frame.goal-frame.exact[follow];
+  if(condition!=='sunny'&&!frame.tiebreak)return `Root for ${follow+1}. ${condition==='rain'?'Rain can cancel a die.':'Fog can reverse a die.'}`;
+  if(left<=1){
+    const rivals=frame.active.filter(i=>i!==follow&&frame.goal-frame.exact[i]<=2);
+    const threat=rivals.find(i=>frame.goal-frame.exact[i]===2);
+    return `A ${follow+1} can reach the wire.${threat!=null?` #${threat+1} needs double ${threat+1}s.`:rivals.length?` ${rivals.map(i=>'#'+(i+1)).join(' + ')} can also finish.`:''}`;
   }
-  const low=frame.shot==='stretch'&&!reduced;
-  const pack=frame.active.map(id=>frame.progress[id]);
-  const behind=(Math.max(...pack)-Math.min(...pack))*SPACE;
-  const target=frame.leaderX-Math.max(3.3,behind*.46);
-  return {from:[frame.leaderX+(low?5.8:8.2),narrow?7.3:low?3.1:4.75,narrow?18.6:low?15.85:14.35],at:[target,1.14,-.08],fov:narrow?56:low?43:39};
+  return left===2?`Double ${follow+1}s can reach the wire.`:`Root for ${follow+1}. Each matching die moves your horse one space.`;
+}
+export function shotAt(frame,aspect,reduced=false){
+  const narrow=aspect<1.5;
+  if(frame.shot==='wire'&&!frame.steady)return {from:[TRACK_FINISH-8,10,narrow?22:18],at:[TRACK_FINISH-8,.5,0],fov:narrow?51:44};
+  const xs=frame.active.map(id=>frame.world[id]);
+  const lo=Math.min(...xs),hi=Math.max(...xs),span=Math.max(15,hi-lo+9);
+  const center=(lo+hi)/2+2.5;
+  const distance=Math.max(17,span/(2*Math.tan(24*Math.PI/180)*aspect));
+  return {from:[center-1,Math.max(11,distance*.62),distance],at:[center,0,0],fov:48};
 }

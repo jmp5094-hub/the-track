@@ -24,6 +24,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible {o
 .track-kicker {font-size:.82rem;font-weight:750;letter-spacing:.14em;text-transform:uppercase;color:var(--track-brass)}
 .track-primary {display:inline-flex;justify-content:center;align-items:center;min-height:44px;padding:10px 17px;background:var(--track-brass);color:#211b13;border:1px solid transparent;border-radius:7px;font-weight:750;font-size:.93rem;cursor:pointer}
 .track-primary:hover:not(:disabled){background:#f5c98f}
+.track-demo-link{text-decoration:none;margin-top:16px}.track-lobby-hero .track-demo-link{margin-left:12px;background:transparent;color:var(--track-ink);border-color:var(--track-brass)}
 .track-primary:disabled{opacity:.64;cursor:wait}
 .track-auth {min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(350px,1fr)}
 .track-auth-story {

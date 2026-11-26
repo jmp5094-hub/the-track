@@ -72,7 +72,7 @@ export function makeRacehorseFactory(T, asset, letterCanvas) {
     const idle = mixer.clipAction(asset.idle).play();
     const seat = new T.Vector3();
     function sample(time, progress, rider, launched) {
-      const blend = smooth(clamp((time-GO)/.22));
+      const blend = launched ? 1 : 0;
       idle.setEffectiveWeight(1-blend);
       gallop.setEffectiveWeight(blend);
       const moment = launched ? gaitTime(time, id, progress, asset.gallop.duration) : time*.85+id*.19;

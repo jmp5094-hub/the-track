@@ -1,4 +1,4 @@
-import { clamp, lane, smooth, SILKS, GO, LEADER_START, COURSE_MIN, COURSE_MAX, TRACK_FINISH } from './playback.mjs';
+import { clamp, lane, smooth, SILKS, GO, SPACE, LEADER_START, COURSE_MIN, COURSE_MAX, TRACK_FINISH } from './playback.mjs';
 
 export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, horseRig }) {
   const V = (x, y, z) => new T.Vector3(x, y, z);
@@ -29,18 +29,31 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const paint = (text, background, color, width=192, height=112, border='#766143') => tex(letterCanvas(text,background,color,width,height,border));
 
   scene.background = new T.Color('#252730');
-  scene.fog = new T.FogExp2('#3a3839',.012);
+  scene.fog = new T.FogExp2('#3a3839',.003);
   scene.add(new T.HemisphereLight('#ffedcc','#6f5146',2.08));
   const warm = new T.DirectionalLight('#ffd29a',2.35); warm.position.set(9,13,12); scene.add(warm);
   const rim = new T.DirectionalLight('#ccdef1',1.7); rim.position.set(-8,5,-10); scene.add(rim);
 
-  const dirt = tex(dirtCanvas); dirt.wrapS = dirt.wrapT = T.RepeatWrapping; dirt.repeat.set(64,3); dirt.anisotropy = 6;
+  const dirt = tex(dirtCanvas); dirt.wrapS = dirt.wrapT = T.RepeatWrapping; dirt.repeat.set(20,3); dirt.anisotropy = 6;
   const length=COURSE_MAX-COURSE_MIN, middle=(COURSE_MAX+COURSE_MIN)/2;
   block(scene,standard('#e0b294',{map:dirt,roughness:1}),middle,-.11,0,length,.21,15.4);
   const dark = standard('#262329'), stone = standard('#4b4849'), concrete = standard('#726b5f');
   const cream = standard('#d4c5a4'), brass = standard('#a87b40',{metalness:.53,roughness:.32}), backlit = simple('#ffd093');
   const glass = standard('#3a4652',{emissive:'#705037',emissiveIntensity:.37,roughness:.52});
   const floor = standard('#514139',{roughness:.94});
+  // The board never drifts: one line per logical space, six fixed lanes.
+  const chalk=standard('#e4d9bd',{transparent:true,opacity:.55,roughness:1});
+  for(let i=0;i<=6;i++)block(scene,chalk,36,.025,(i-3)*1.56,72,.025,.035);
+  for(let step=0;step<=12;step++){
+    block(scene,chalk,step*SPACE,.03,0,step>=9?.12:.07,.026,9.4);
+    if(step>0&&step<12){
+      const label=shape(scene,geo.plane,simple('#ffffff',{map:paint(String(step),'#3a352a','#f5e7c8',96,96),transparent:false}),step*SPACE,.05,5.65,1.15,1.15,1);
+      label.rotation.x=-Math.PI/2;
+    }
+    if(step>=9&&step<12){
+      shape(scene,geo.plane,simple('#ffffff',{map:paint((12-step)+' TO GO','#233c31','#ffe2a7',280,112),side:T.DoubleSide}),step*SPACE,1.15,-6.25,2.35,.94,1);
+    }
+  }
   for (const side of [-1,1]) {
     block(scene,floor,middle,-.155,side*14.8,length,.3,13.8);
     block(scene,side>0?brass:cream,middle,.8,side*7.17,length,.095,.105);
@@ -72,7 +85,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const dummy=new T.Object3D();
   const clothes=['#29252a','#4e3b38','#6f6251','#493f44','#a68b6e','#383b44','#5b3031','#72604a'];
   for(let section=COURSE_MIN;section<COURSE_MAX;section+=40) {
-    const counts=155, fans=new T.InstancedMesh(crowdGeo,crowdMat,counts);
+    const counts=Math.min(155,Math.floor((COURSE_MAX-section-2)/1.24)*5), fans=new T.InstancedMesh(crowdGeo,crowdMat,counts);
     for(let i=0;i<counts;i++) {
       const row=i%5, x=section+Math.floor(i/5)*1.24+row*.46;
       dummy.position.set(x,2.58+row*.48+((i*73)%11)*.017,-10.42-row*.91);
@@ -162,7 +175,11 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
       ball(jockey,leather,.559,.205,side*.154,.052,.029,.034);
     }
     const shadow = shape(root,geo.plane,shadowMat,-.16,.026,0,3.7,1.44,1);shadow.rotation.x = -Math.PI/2;
-    return {root,jockey,rig,shadow};
+    const pin=new T.Sprite(new T.SpriteMaterial({map:paint(String(id+1),SILKS[id],'#162019',96,96),depthTest:false}));
+    pin.position.set(0,3.03,0);pin.scale.set(.65,.65,1);root.add(pin);
+    const followRing=new T.Mesh(new T.RingGeometry(.68,.82,40),simple('#fff0c8',{side:T.DoubleSide}));
+    followRing.rotation.x=-Math.PI/2;followRing.position.set(-.05,.05,0);followRing.scale.set(1.7,1,1);root.add(followRing);
+    return {root,jockey,rig,shadow,pin,followRing};
   }
 
   const horses = Array.from({length:6},(_,id)=>runner(id));
@@ -177,16 +194,19 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
     for(const {hinge,direction} of gates)hinge.rotation.y=-direction*open*Math.PI*.53;
     horses.forEach((animal,i) => {
       animal.root.visible = frame.active.includes(i);
+      animal.followRing.visible=frame.follow===i;
+      animal.pin.scale.setScalar(frame.follow===i ? .96 : .65);
       const energy = frame.surge[i];
       const tuck = Math.sin(elapsed * 10.4 + i * 1.8);
-      animal.root.position.set(frame.world[i],.015,lane(i)+(frame.launched ? Math.sin(elapsed*2.1+i)*.065 : 0));
+      animal.root.position.set(frame.world[i],.015,lane(i));
       animal.root.rotation.y = Math.sin(elapsed*1.45+i)*.014;
       animal.jockey.rotation.z = reduced ? 0 : .027*tuck - .10*energy;
-      animal.rig.sample(elapsed,frame.progress[i],animal.jockey,frame.launched);
+      animal.rig.sample(elapsed,frame.progress[i],animal.jockey,Boolean(frame.moving?.[i])&&!reduced);
     });
-    dust.visible = live && frame.launched && !reduced && !frame.done;
+    dust.visible = live && frame.moving?.some(Boolean) && !reduced && !frame.done;
     if(dust.visible) for(let i=0;i<maxDust;i++) {
-      const id = frame.active[i%frame.active.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];
+      const moving=frame.active.filter(id=>frame.moving[id]);
+      const id = moving[i%moving.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];
       const n=i*3;
       dustPositions[n] = frame.world[id] - .8 - life*(3.55+energy) - (i%5)*.08;
       dustPositions[n+1] = .09 + Math.sin(life*Math.PI)*(.14+(i%11)*.033+energy*.13);

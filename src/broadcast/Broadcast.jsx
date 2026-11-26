@@ -1,190 +1,161 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildPlayback, LAND, PIPS, SILKS } from './playback.mjs';
+import {useEffect,useMemo,useRef,useState} from 'react';
+import {buildPlayback,describeRoll,rootingHint,LAND,MOVE,MOVE_END,PIPS,SILKS} from './playback.mjs';
 import voice from './voice.json';
+import {playRaceEffect} from './race-sound';
 import './broadcast.css';
 
-const audioUrl = import.meta.env.BASE_URL + 'broadcast/david-wolfe.mp3';
-const shots = {gate:'Starting gate',pack:'Trackside',stretch:'Backstretch',wire:'Finish line'};
+const audioUrl=import.meta.env.BASE_URL+'broadcast/david-wolfe.mp3';
 let voiceBytes;
-function loadVoice() {
-  voiceBytes ??= fetch(audioUrl).then(response => {
-    if (!response.ok) throw new Error('Commentary download failed.');
-    return response.arrayBuffer();
-  }).catch(error => { voiceBytes = undefined; throw error; });
-  return voiceBytes;
-}
+const loadVoice=()=>voiceBytes??=(fetch(audioUrl).then(r=>{if(!r.ok)throw Error('Voice unavailable');return r.arrayBuffer();}).catch(e=>{voiceBytes=undefined;throw e;}));
+const readPreference=(key,fallback)=>{try{return localStorage.getItem(key)||fallback;}catch{return fallback;}};
+const savePreference=(key,value)=>{try{localStorage.setItem(key,String(value));}catch{}};
 
-function Dice({ value, rolling, weather }) {
+function Dice({value,rolling,weather}){
   return <span aria-hidden="true" className={'tv-die'+(rolling?' is-rolling':'')+(weather?' '+weather:'')}>
-    {Array.from({length:9},(_,i) => <i key={i} className={PIPS[value]?.includes(i) ? 'is-pip' : ''} />)}
+    {Array.from({length:9},(_,i)=><i key={i} className={PIPS[value]?.includes(i)?'is-pip':''}/>)}
+    {weather&&<small>{weather==='is-mud'?'×':'−'}</small>}
   </span>;
 }
 
-function FlatPositions({ frame }) {
-  return <div className="tv-flat" aria-hidden="true">
-    {frame.active.map(id => <div className="tv-flat-lane" key={id}>
-      <span style={{'--silk':SILKS[id],left:(3+frame.progress[id]/frame.goal*92)+'%'}}>{id+1}</span>
-    </div>)}
+export function RaceField({frame,names,follow,onFollow,flat=false}){
+  return <div className={'tv-field'+(flat?' is-flat':'')}>
+    <div className="tv-field-axis"><span>Follow a runner</span><span><i>{frame.tiebreak?'Tiebreak start':'Start'}</i><i>{frame.goal} spaces</i><b>Finish</b></span><span>To finish</span></div>
+    {names.map((name,id)=>{
+      const eligible=frame.active.includes(id),left=Math.max(0,frame.goal-frame.exact[id]);
+      return <button type="button" key={id} className={'tv-lane'+(follow===id?' is-followed':'')+(!eligible?' is-out':'')}
+        aria-pressed={follow===id} aria-label={`Follow #${id+1} ${name}, ${eligible?left+' spaces to finish':'out of tiebreak'}${frame.leaders.includes(id)?', leading':''}`}
+        onClick={()=>onFollow(id)}>
+        <span className="tv-runner"><b style={{'--silk':SILKS[id]}}>{id+1}</b><span title={name}>{name}</span></span>
+        <span className="tv-lane-track" style={{'--spaces':frame.goal}} aria-hidden="true"><i className="tv-token" style={{left:(Math.min(frame.goal,frame.progress[id])/frame.goal*100)+'%','--silk':SILKS[id]}}>{id+1}</i></span>
+        <span className="tv-distance">{!eligible?'Out':frame.done&&frame.winner===id?'Winner':left+' left'}</span>
+      </button>;
+    })}
   </div>;
 }
 
-export function Broadcast({ race, history, interval, spaces, tieSpaces, names, clock, startTime, replay,
-  speedRef, onFinish, soundOn, onSound, getAudioContext, effects, owners }) {
-  const playback = useMemo(() => buildPlayback(history,interval,spaces,tieSpaces,voice),[history,interval,spaces,tieSpaces]);
-  const [display,setDisplay] = useState(null);
-  const [viewStatus,setViewStatus] = useState('loading');
-  const container = useRef(null);
-  const view = useRef(null);
-  const audio = useRef({});
-  const settings = useRef();
-  const complete = useRef(false);
-  settings.current = {onFinish,soundOn,clock,effects};
-
-  function stopVoice() {
-    const active = audio.current.source;
-    if (active) { active.stop(); audio.current.source = null; }
+export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,names,clock=Date.now,startTime=0,replay=false,
+  speedRef,onFinish=()=>{},soundOn=false,onSound=()=>{},getAudioContext,effects={},owners,bets={},
+  controlRef,followHorse,onFollow,onFrame,exhibition=false}){
+  const playback=useMemo(()=>buildPlayback(history,interval,spaces,tieSpaces,voice),[history,interval,spaces,tieSpaces]);
+  const savedKey='track-follow-'+race.id;
+  const backed=Object.keys(bets).map(Number).filter(id=>Number(bets[id])>0&&id>=0&&id<6);
+  const [localFollow,setLocalFollow]=useState(()=>{
+    const stored=Number(readPreference(savedKey,String(backed[0]??3)));return stored>=0&&stored<6?stored:3;
+  });
+  const follow=followHorse??localFollow;
+  const choose=id=>{setLocalFollow(id);savePreference(savedKey,id);onFollow?.(id);};
+  const [viewMode,setViewMode]=useState(()=>readPreference('track-view',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'board':'trackside'));
+  const [viewStatus,setViewStatus]=useState('loading');
+  const [display,setDisplay]=useState(null);
+  const container=useRef(null),view=useRef(null),audio=useRef({}),settings=useRef({});
+  settings.current={onFinish,soundOn,clock,effects,follow,viewMode,onFrame};
+  function stopVoice(){const source=audio.current.source;if(source){try{source.stop();}catch{}audio.current.source=null;}}
+  function unlock(){
+    try{
+      const ctx=getAudioContext?.();if(!ctx)return;
+      ctx.resume().catch(()=>{});audio.current.context=ctx;
+      audio.current.promise??=loadVoice().then(bytes=>ctx.decodeAudioData(bytes.slice(0))).then(buffer=>{audio.current.buffer=buffer;}).catch(()=>{audio.current.promise=undefined;});
+    }catch{}
   }
-  function unlock() {
-    try {
-      const ctx = getAudioContext();
-      ctx.resume().catch(() => {});
-      const state = audio.current;
-      state.context = ctx;
-      state.bufferPromise ??= loadVoice().then(data => ctx.decodeAudioData(data.slice(0))).then(buffer => {
-        state.buffer = buffer;
-      }).catch(() => { state.bufferPromise = undefined; });
-    } catch {}
-  }
-  useEffect(() => {
-    if (!soundOn) { stopVoice(); return; }
-    unlock();
-    window.addEventListener('pointerdown',unlock,{passive:true});
-    window.addEventListener('keydown',unlock);
-    return () => {
-      window.removeEventListener('pointerdown',unlock);
-      window.removeEventListener('keydown',unlock);
-    };
+  useEffect(()=>{
+    if(!soundOn){stopVoice();return;}
+    unlock();window.addEventListener('pointerdown',unlock,{passive:true});window.addEventListener('keydown',unlock);
+    return()=>{window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);};
   },[soundOn]);
-  useEffect(() => () => stopVoice(),[]);
+  useEffect(()=>()=>stopVoice(),[]);
+  useEffect(()=>{
+    if(viewMode==='board'){setViewStatus('board');return;}
+    let cancelled=false;setViewStatus('loading');
+    import('./track-view').then(({createTrackView})=>createTrackView(container.current)).then(scene=>{
+      if(cancelled){scene.dispose();return;}view.current=scene;setViewStatus('ready');
+    }).catch(()=>{if(!cancelled)setViewStatus('fallback');});
+    return()=>{cancelled=true;view.current?.dispose();view.current=null;};
+  },[viewMode]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const target = container.current;
-    import('./track-view').then(({createTrackView}) => createTrackView(target)).then(scene => {
-      if (cancelled) {scene.dispose(); return;}
-      view.current = scene;
-      setViewStatus('ready');
-    }).catch(() => { if (!cancelled) setViewStatus('fallback'); });
-    return () => { cancelled = true; view.current?.dispose(); view.current = null; };
-  },[]);
-
-  useEffect(() => {
-    if (!playback) return;
-    let timer;
-    let lastPaint = '';
-    let lastCue = '';
-    let lastSoundRoll = -2;
-    let started = false;
-    let atWire = false;
-    let lastTimestamp;
-    let replayTime = 0;
-    let nextDraw = 0;
-    const draw = timestamp => {
-      const {clock,soundOn,onFinish,effects} = settings.current;
-      const speed = replay ? speedRef?.current || 1 : 1;
-      if (replay && lastTimestamp !== undefined) replayTime += (timestamp-lastTimestamp)/1000 * speed;
-      lastTimestamp = timestamp;
-      const elapsed = replay ? replayTime : (clock()-startTime)/1000;
-      const frame = playback.sample(elapsed);
-      const state = audio.current;
-      if (frame.launched && !started) {
-        started = true;
-        if (elapsed < 1.35 && soundOn) effects.gate();
-      }
-      if (!frame.rolling && frame.roll && frame.index !== lastSoundRoll) {
-        lastSoundRoll = frame.index;
-        if (soundOn && frame.into < LAND+.22) effects.land();
-      }
-      if (frame.done && !atWire) {
-        atWire = true;
-        if (soundOn && elapsed < playback.end + .16) effects.wire?.();
-      }
-      const cue = frame.cue;
-      const cueTag = cue ? cue.key+'@'+cue.time : '';
-      if (cue && cueTag !== lastCue) {
-        const voiceTime = frame.time-cue.time;
-        if (voiceTime < .24 && soundOn && state.context?.state === 'running' && state.buffer) {
-          stopVoice();
-          const source = state.context.createBufferSource();
-          source.buffer = state.buffer;
-          source.playbackRate.value = speed;
-          const gain = state.context.createGain();
-          gain.gain.value = .9;
-          source.connect(gain).connect(state.context.destination);
-          source.onended = () => {
-            source.disconnect();
-            gain.disconnect();
-            if (state.source === source) state.source = null;
-          };
-          source.start(0,cue.offset+voiceTime,cue.duration-voiceTime);
-          state.source = source;
-          lastCue = cueTag;
+  useEffect(()=>{
+    if(!playback)return;
+    let timer,lastTimestamp,lastPaint='',lastCue='',lastRoll=-2,lastMove=-2,lastStep=-2,lastCrowd=-2,lastFrameKey='',lastVersion=-1;
+    let replayTime=0,nextDraw=0,finished=false,started=false,atWire=false,slowFrames=0;
+    const draw=timestamp=>{
+      const s=settings.current,control=controlRef?.current;
+      const speed=replay?(control?.speed??speedRef?.current??1):1;
+      const version=control?.version??0;
+      const changed=version!==lastVersion;
+      if(changed){lastVersion=version;finished=false;lastCue='';lastRoll=-2;lastMove=-2;lastStep=-2;lastCrowd=-2;started=false;atWire=false;stopVoice();}
+      const delta=lastTimestamp===undefined||changed?0:(timestamp-lastTimestamp)/1000;
+      lastTimestamp=timestamp;
+      if(replay){if(control){if(!control.paused)control.time+=delta*speed;replayTime=control.time;}else replayTime+=delta*speed;}
+      const elapsed=replay?replayTime:(s.clock()-startTime)/1000;
+      const frame={...playback.sample(elapsed),follow:s.follow,steady:s.viewMode==='steady'};
+      const paused=Boolean(control?.paused);
+      const ctx=audio.current.context;
+      const sound=s.soundOn&&!paused&&ctx?.state==='running';
+      if(paused)stopVoice();
+      if(frame.launched&&!started){started=true;if(sound&&elapsed<1.1)s.effects.gate?.();}
+      if(frame.index>=0&&frame.index!==lastRoll){lastRoll=frame.index;if(sound&&frame.into<.2)playRaceEffect(ctx,'rattle');}
+      if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(sound&&frame.into<LAND+.18){s.effects.land?.();if(!s.effects.land)playRaceEffect(ctx,'land');}}
+      const step=frame.into>=MOVE&&frame.into<MOVE_END?frame.index*2+(frame.into>MOVE+(MOVE_END-MOVE)*.56?1:0):-1;
+      if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){lastStep=step;if(sound)playRaceEffect(ctx,'hooves');}
+      if(frame.done&&!atWire){atWire=true;if(sound&&elapsed<playback.end+.25){s.effects.wire?.();if(!s.effects.wire)playRaceEffect(ctx,'finish');}}
+      if(frame.leadChange&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(sound&&frame.into<MOVE_END+.1)playRaceEffect(ctx,'crowd');}
+      const cue=frame.cue,cueTag=cue?cue.key+'@'+cue.time:'';
+      if(cue&&cueTag!==lastCue){
+        lastCue=cueTag;const offset=frame.time-cue.time;
+        if(sound&&offset<.24&&audio.current.buffer){
+          stopVoice();const source=ctx.createBufferSource(),gain=ctx.createGain();
+          source.buffer=audio.current.buffer;source.playbackRate.value=speed;gain.gain.value=.9;source.connect(gain).connect(ctx.destination);
+          audio.current.source=source;source.onended=()=>{source.disconnect();gain.disconnect();if(audio.current.source===source)audio.current.source=null;};
+          source.start(0,cue.offset+offset,cue.duration-offset);
         }
       }
-      const faceTick = frame.rolling ? Math.floor(frame.into*16) : -1;
-      const dice = frame.rolling ? [(faceTick*3+frame.index)%6+1,(faceTick*5+frame.index+2)%6+1] : frame.roll?.dice || [0,0];
-      const cameraStatus = container.current?.dataset.contextLost === 'true';
-      const ui = [frame.index,frame.rolling,faceTick,frame.exact.join(''),frame.done,frame.shot,cueTag,frame.launched,cameraStatus].join('|');
-      if (ui !== lastPaint) {
-        lastPaint=ui;
-        setDisplay({...frame,dice,contextLost:cameraStatus});
+      const faceTick=frame.rolling?Math.floor(frame.into*15):-1;
+      const dice=frame.rolling?[(faceTick*3+frame.index)%6+1,(faceTick*5+frame.index+2)%6+1]:frame.roll?.dice||frame.lastRoll?.dice||[0,0];
+      const contextLost=container.current?.dataset.contextLost==='true';
+      const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
+      if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost});}
+      if(timestamp>=nextDraw){
+        try{view.current?.draw(frame);}catch{setViewStatus('fallback');view.current?.dispose();view.current=null;}
+        nextDraw=timestamp+30;
       }
-      // Cap rendering on high-refresh monitors without changing the race clock.
-      if (timestamp >= nextDraw) {
-        view.current?.draw(frame);
-        nextDraw=timestamp+25;
-      }
-      if (elapsed >= playback.end+playback.endHold) {
-        if (!complete.current) { complete.current=true; onFinish(frame.winner); }
-        return;
-      }
+      if(document.visibilityState==='visible'&&delta>.085&&delta<.5&&view.current)slowFrames++;else slowFrames=Math.max(0,slowFrames-1);
+      if(slowFrames>40){setViewMode('board');setViewStatus('fallback');slowFrames=0;}
+      const key=frame.index+':'+frame.settled+':'+frame.done+':'+version;
+      if(key!==lastFrameKey){lastFrameKey=key;s.onFrame?.(frame);}
+      if(elapsed>=playback.end+playback.endHold&&!finished){finished=true;s.onFinish(frame.winner);}
       timer=requestAnimationFrame(draw);
     };
-    timer=requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(timer);
-  },[playback,replay,speedRef,startTime]);
+    timer=requestAnimationFrame(draw);return()=>cancelAnimationFrame(timer);
+  },[playback,replay,controlRef,speedRef,startTime]);
 
-  const frame = display || playback?.sample(0);
-  const order = frame?.active.slice().sort((a,b) => frame.exact[b]-frame.exact[a] || a-b);
-  const caption = frame?.done ? names[frame.winner]+' wins.' : frame?.cue?.text ||
-    (frame?.rolling ? 'Dice rolling' : frame?.tiebreak ? 'Tiebreak' : frame?.launched ? 'The field is away.' : 'Six runners at the gate.');
-  return <section className={'track-broadcast'+(replay?' is-replay':'')} aria-label="Race broadcast">
+  const frame=display||playback?.sample(controlRef?.current?.time||0);
+  const roll=frame?.roll||frame?.lastRoll;
+  const rollIndex=frame?.roll?frame.index:frame?.lastIndex;
+  const previous=rollIndex>0&&history?.rolls[rollIndex-1]?.phase===roll?.phase?history.rolls[rollIndex-1].positions:[0,0,0,0,0,0];
+  const summary=describeRoll(roll,previous);
+  const leaders=frame?.leaders||[];
+  const leadLabel=frame?.index<0?'All six at the gate':leaders.length===6?'All six tied':leaders.map(id=>'#'+(id+1)).join(' + ');
+  const leaderLeft=frame?frame.goal-Math.max(...frame.active.map(id=>frame.exact[id])):spaces;
+  const followLeft=frame?frame.goal-frame.exact[follow]:spaces;
+  const flat=viewMode==='board'||viewStatus!=='ready'||frame?.contextLost;
+  return <section className={'track-broadcast'+(replay?' is-replay':'')+(exhibition?' is-exhibition':'')} aria-label="Race broadcast">
+    <header className="tv-heading"><div><p>{exhibition?'Exhibition replay':replay?'Replay':frame?.tiebreak?'Tiebreak':'Live at The Track'} · {race.condition==='rain'?'Rain':race.condition==='fog'?'Fog':'Standard'}</p><h1>{race.name}</h1></div>
+      <div className="tv-tools"><select aria-label="Race view" value={viewMode} onChange={e=>{setViewMode(e.target.value);savePreference('track-view',e.target.value);}}><option value="trackside">Trackside 3D</option><option value="steady">Steady 3D</option><option value="board">Board view</option></select>
+        <button type="button" aria-pressed={soundOn} onClick={()=>{if(!soundOn)unlock();onSound(!soundOn);}}>{soundOn?'Sound on':'Sound off'}</button></div>
+    </header>
+    <div className="tv-focus" aria-live="polite"><div><span>Following</span><strong><b style={{'--silk':SILKS[follow]}}>{follow+1}</b>{names[follow]}</strong><em>{frame?.done&&frame.winner===follow?'Winner':followLeft+' '+(followLeft===1?'space':'spaces')+' to finish'}</em></div>
+      <div><span>{leaders.length>1?'Tied leaders':'Leader'}</span><strong>{leadLabel}</strong><em>{frame?.done?'Across the wire':leaderLeft+' '+(leaderLeft===1?'space':'spaces')+' to finish'}</em></div></div>
+    <p className="tv-stakes" aria-live="polite">{rootingHint(frame,follow,race.condition||'sunny')}</p>
     <div className="tv-video">
-      <div ref={container} className="tv-viewport" />
-      {frame && (viewStatus !== 'ready' || frame.contextLost) && <FlatPositions frame={frame} />}
-      <div className="tv-shade" />
-      <div className="tv-heading"><span>{replay ? 'Replay' : frame?.tiebreak ? 'Tiebreak' : shots[frame?.shot || 'gate']}</span><h1>{race.name}</h1></div>
-      {frame && <div className="tv-dice" aria-label={frame.rolling?'Dice rolling':frame.roll?'Dice '+frame.roll.dice.join(' and '):'Dice ready'}>
-        <span>Roll <strong>{Math.max(0,frame.index+1)}</strong></span>
-        <div>{(frame.dice || [0,0]).map((value,id) => <Dice key={id} value={value} rolling={frame.rolling}
-          weather={!frame.rolling && frame.roll?.mudDieIdx===id?'is-mud':!frame.rolling && frame.roll?.fogDieIdx===id?'is-fog':null}/>)}</div>
-      </div>}
-      <div className="tv-caption">{history ? caption : 'Loading the race…'}</div>
-      {frame?.done && <div className="tv-winner" role="status">Winner <b>{frame.winner+1}</b></div>}
+      <div ref={container} className="tv-viewport" aria-hidden="true"/>
+      {frame&&flat&&<div className="tv-board-scene"><span>{viewStatus==='loading'&&viewMode!=='board'?'Preparing trackside view':'The course'} · {frame.goal} fixed spaces</span><RaceField {...{frame,names,follow}} onFollow={choose} flat/></div>}
+      {!flat&&<div className="tv-shot-label">{frame?.tiebreak?'Three-space tiebreak':frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
+      {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>Three-space tiebreak next</span></div>}
+      {!flat&&frame?.done&&<div className="tv-announcement"><span>Across the wire</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
     </div>
-    <div className="tv-controls">
-      <p>{race.condition === 'rain' ? 'Rain' : race.condition === 'fog' ? 'Fog' : 'Standard race'}</p>
-      <button type="button" onClick={() => { if (!soundOn) unlock(); onSound(!soundOn); }} aria-pressed={soundOn}>
-        {soundOn ? 'Sound on' : 'Enable race sound'}
-      </button>
-    </div>
-    {frame && <div className="tv-order">
-      <h2>Running order</h2>
-      <ol>{order.map(id => <li key={id}>
-        <b style={{'--silk':SILKS[id],'--number':[1,2].includes(id)?'#221b13':'#fff8eb'}}>{id+1}</b>
-        <span><strong title={names[id]}>{names[id]}</strong><small>{frame.done && frame.winner===id?'Winner':frame.goal-frame.exact[id]+' to go'}{owners?.[id]?.username ? ' · '+owners[id].username : ''}</small></span>
-      </li>)}</ol>
-    </div>}
-    <p className="tv-credit">Commentary by David Wolfe. Horse model and gallop by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a>, recolored · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</p>
+    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><Dice key={id} value={value} rolling={frame?.rolling} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/>)}</div></div>
+      <div className="tv-roll-copy" aria-live="polite"><p className="tv-call">{frame?.rolling?'Here come the dice…':frame?.cue?.text||(!history?'Loading the race…':frame?.done?names[frame.winner]+' wins.':roll?'The dice have landed.':'Pick your horse. Watch for its number.')}</p><p className="tv-effect">{frame?.rolling&&roll?'Last roll: ':''}{summary}</p></div></div>
+    {frame&&!flat&&<RaceField {...{frame,names,follow}} onFollow={choose}/>}
+    <div className="tv-ticket">{exhibition?'Exhibition · no wagers or payouts':backed.length?<>Your ticket: {backed.map(id=>'#'+(id+1)+' $'+Number(bets[id]).toFixed(2)).join(' · ')}</>:'Following only · no ticket placed'}{owners?.[follow]?.username?' · Owner: '+owners[follow].username:''}</div>
+    <p className="tv-credit">David Wolfe on commentary · Horses by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></p>
   </section>;
 }

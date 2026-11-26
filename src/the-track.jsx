@@ -1487,6 +1487,7 @@ function AuthScreen({ onLogin }) {
           <p className="track-kicker">Virtual horse racing</p>
           <h1>Every roll changes the race.</h1>
           <p>Pick your horse, watch the dice settle, and follow the field to the wire.</p>
+          <a className="track-primary track-demo-link" href="?demo=1">Watch a demo race</a>
         </div>
         <p className="track-image-credit">Racehorse model by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · Recolored</p>
       </div>
@@ -3705,6 +3706,7 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
           {featured && <button type="button" className="track-primary" onClick={()=>onEnterRace(featured)}>
             {featured._st==="racing"?"Watch live":"View next race"}
           </button>}
+          <a className="track-primary track-demo-link" href="?demo=1">Watch a demo race</a>
         </div>
       </header>
       <div className="track-race-card">
@@ -5268,7 +5270,7 @@ function RaceScreen(props) {
   return <StandardRaceScreen key={props.race.id} {...props}/>;
 }
 
-function StandardRaceScreen({ race, user, auctionOwners, onRaceEnd, isReplay, replayRolls, replayWinner, replaySpeedRef,
+function StandardRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isReplay, replayRolls, replayWinner, replaySpeedRef,
   chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread, ...legacyProps }) {
   const [saved,setSaved] = useState(null);
   const [invalid,setInvalid] = useState(false);
@@ -5303,12 +5305,12 @@ function StandardRaceScreen({ race, user, auctionOwners, onRaceEnd, isReplay, re
   },[isReplay]);
 
   const chatProps = { raceId:race.id,user,msgs:chatMsgs,setMsgs:setChatMsgs,open:chatOpen,setOpen:setChatOpen,unread:chatUnread,setUnread:setChatUnread };
-  if (invalid || (isReplay && history && !buildPlayback(history,ROLL_INTERVAL,TRACK_SPACES,TIEBREAK_SPACES,broadcastVoice))) return <LegacyRaceScreen {...legacyProps} {...{race,user,auctionOwners,onRaceEnd,isReplay,replayRolls,replayWinner,replaySpeedRef,chatMsgs,setChatMsgs,chatOpen,setChatOpen,chatUnread,setChatUnread}}/>;
+  if (invalid || (isReplay && history && !buildPlayback(history,ROLL_INTERVAL,TRACK_SPACES,TIEBREAK_SPACES,broadcastVoice))) return <LegacyRaceScreen {...legacyProps} {...{race,user,bets,auctionOwners,onRaceEnd,isReplay,replayRolls,replayWinner,replaySpeedRef,chatMsgs,setChatMsgs,chatOpen,setChatOpen,chatUnread,setChatUnread}}/>;
   return <>
     <Broadcast {...{race,history,names,startTime,soundOn}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
       tieSpaces={TIEBREAK_SPACES} clock={gameNow} replay={isReplay} speedRef={replaySpeedRef}
       onFinish={onRaceEnd} onSound={setCommentaryEnabled} getAudioContext={getAudioCtx}
-      effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners}/>
+      effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners} bets={bets}/>
     {user && !isReplay && <RaceChat {...chatProps}/>}
   </>;
 }
@@ -6397,6 +6399,8 @@ function ConfettiPieces({ color }) {
 
 // ─── PAYOUT SCREEN ────────────────────────────────────────────────────────────
 function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayAgain, onLobby }) {
+  const [replaying,setReplaying]=useState(false);
+  const hasTicket=Object.values(bets||{}).some(value=>Number(value)>0);
   const horse=HORSES[winner], rt=RACE_TYPES[race.type];
   const wName = horseName(race, winner);
   const coat  = horseCoat(race, winner);
@@ -6529,8 +6533,8 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
           </>
         ):(
           <>
-            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:20}}>BETTER LUCK NEXT RACE</div>
-            <div style={{color:"#ffffff33",marginTop:6,fontSize:13}}>{Object.keys(bets).length===0?"No bets placed.":"Your horses didn't finish first."}</div>
+            <div style={{fontFamily:"var(--track-label)",color:hasTicket?"#ff2d55":"#e5b678",fontSize:20}}>{hasTicket?"TICKET RESULT":"RACE COMPLETE"}</div>
+            <div style={{color:"#c7baa8",marginTop:6,fontSize:13}}>{hasTicket?"Your ticket did not pay out.":"You watched this race without a wager."}</div>
           </>
         )}
       </div>
@@ -6548,8 +6552,10 @@ function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayA
         ))}
       </div>
       <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.5s forwards"}}>
+        <button className="track-primary" onClick={()=>setReplaying(true)}>Replay race</button>
         <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e5b678,#97bd88)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #e5b67866"}}>🏠 BACK TO LOBBY</button>
       </div>
+      {replaying&&<RaceReplayScreen race={race} onClose={()=>setReplaying(false)}/>}
     </div>
   );
 }
@@ -7134,7 +7140,7 @@ function App() {
   useEffect(()=>{
     let meta = document.querySelector("meta[name=viewport]");
     if(!meta){ meta = document.createElement("meta"); meta.name="viewport"; document.head.appendChild(meta); }
-    meta.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no";
+    meta.content = "width=device-width, initial-scale=1";
   },[]);
 
   const [user,          setUser]          = useState(null);

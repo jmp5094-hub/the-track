@@ -1,0 +1,860 @@
+{
+  "label": "The Brass Cup",
+  "seed": 33,
+  "source": "Existing simulateRaceWithHistory, Standard sunny, twelve spaces",
+  "winner": 3,
+  "rolls": [
+    {
+      "dice": [
+        4,
+        5
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 1
+        },
+        {
+          "horse": 4,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 1
+        },
+        {
+          "horse": 0,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        0,
+        0,
+        2,
+        1,
+        0
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        3,
+        5
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 2,
+          "steps": 1
+        },
+        {
+          "horse": 4,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        0,
+        1,
+        2,
+        2,
+        0
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        2,
+        4
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 1,
+          "steps": 1
+        },
+        {
+          "horse": 3,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        1,
+        1,
+        3,
+        2,
+        0
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        5,
+        6
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 4,
+          "steps": 1
+        },
+        {
+          "horse": 5,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        1,
+        1,
+        3,
+        3,
+        1
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 1,
+          "steps": 1
+        },
+        {
+          "horse": 4,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        1
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        2,
+        5
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 1,
+          "steps": 1
+        },
+        {
+          "horse": 4,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        3,
+        1,
+        3,
+        5,
+        1
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 5,
+          "steps": 1
+        },
+        {
+          "horse": 3,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        1,
+        3,
+        1,
+        4,
+        5,
+        2
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 1
+        },
+        {
+          "horse": 0,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        2,
+        3,
+        1,
+        5,
+        5,
+        2
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        1,
+        2
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 0,
+          "steps": 1
+        },
+        {
+          "horse": 1,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        4,
+        1,
+        5,
+        5,
+        2
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        6,
+        2
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 5,
+          "steps": 1
+        },
+        {
+          "horse": 1,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        1,
+        5,
+        5,
+        3
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        5,
+        4
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 4,
+          "steps": 1
+        },
+        {
+          "horse": 3,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        1,
+        6,
+        6,
+        3
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        4,
+        4
+      ],
+      "isDoubles": true,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 2
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        1,
+        8,
+        6,
+        3
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        5,
+        5
+      ],
+      "isDoubles": true,
+      "moves": [
+        {
+          "horse": 4,
+          "steps": 2
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        1,
+        8,
+        8,
+        3
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        3,
+        5
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 2,
+          "steps": 1
+        },
+        {
+          "horse": 4,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        2,
+        8,
+        9,
+        3
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        6,
+        5
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 5,
+          "steps": 1
+        },
+        {
+          "horse": 4,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        2,
+        8,
+        10,
+        4
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        3,
+        6
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 2,
+          "steps": 1
+        },
+        {
+          "horse": 5,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        3,
+        8,
+        10,
+        5
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        6,
+        4
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 5,
+          "steps": 1
+        },
+        {
+          "horse": 3,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        3,
+        5,
+        3,
+        9,
+        10,
+        6
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        4,
+        1
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 1
+        },
+        {
+          "horse": 0,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        4,
+        5,
+        3,
+        10,
+        10,
+        6
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        3,
+        2
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 2,
+          "steps": 1
+        },
+        {
+          "horse": 1,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        4,
+        6,
+        4,
+        10,
+        10,
+        6
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 1
+        },
+        {
+          "horse": 5,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        4,
+        6,
+        4,
+        11,
+        10,
+        7
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        1,
+        6
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 0,
+          "steps": 1
+        },
+        {
+          "horse": 5,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        5,
+        6,
+        4,
+        11,
+        10,
+        8
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        6,
+        6
+      ],
+      "isDoubles": true,
+      "moves": [
+        {
+          "horse": 5,
+          "steps": 2
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        5,
+        6,
+        4,
+        11,
+        10,
+        10
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    },
+    {
+      "dice": [
+        4,
+        6
+      ],
+      "isDoubles": false,
+      "moves": [
+        {
+          "horse": 3,
+          "steps": 1
+        },
+        {
+          "horse": 5,
+          "steps": 1
+        }
+      ],
+      "mudDieIdx": null,
+      "fogDieIdx": null,
+      "positions": [
+        5,
+        6,
+        4,
+        12,
+        10,
+        11
+      ],
+      "legDone": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "phase": "main"
+    }
+  ]
+}

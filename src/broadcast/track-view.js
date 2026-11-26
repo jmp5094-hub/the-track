@@ -32,11 +32,14 @@ export async function createTrackView(container) {
   const observer = new ResizeObserver(resize);
   observer.observe(container);
   resize();
+  let initialized=false;
+  const look=new THREE.Vector3();
   function draw(frame) {
     if (container.dataset.contextLost) return;
     const shot = shotAt(frame,camera.aspect,reduced.matches);
-    camera.position.set(...shot.from);
-    camera.lookAt(...shot.at);
+    const target=new THREE.Vector3(...shot.from),aim=new THREE.Vector3(...shot.at);
+    const amount=!initialized||reduced.matches?1:.12;
+    camera.position.lerp(target,amount);look.lerp(aim,amount);camera.lookAt(look);initialized=true;
     camera.fov = shot.fov;
     camera.updateProjectionMatrix();
     arena.pose({...frame,time:frame.sceneTime},true,reduced.matches);

@@ -10,7 +10,8 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test": "node --test src/broadcast/playback.test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
