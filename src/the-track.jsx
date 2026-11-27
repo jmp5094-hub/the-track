@@ -2587,6 +2587,12 @@ function BankPanel({ user, onClose, onBalanceChange }) {
 function MuteButton({ size=28 }) {
   const [sfxOn,   setSfxOn]   = useState(getSoundEnabled());
   const [musicOn, setMusicOn] = useState(getMusicEnabled());
+  useEffect(()=>{
+    const sync=()=>{setSfxOn(getSoundEnabled());setMusicOn(getMusicEnabled());};
+    const events=["track-sound","track-music","storage"];
+    events.forEach(event=>window.addEventListener(event,sync));
+    return()=>events.forEach(event=>window.removeEventListener(event,sync));
+  },[]);
 
   const toggleSfx = () => {
     const v = !sfxOn;
@@ -2712,6 +2718,12 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
   useEffect(()=>{ const sync=()=>setSoundOn(getSoundEnabled()); window.addEventListener("track-sound",sync); return ()=>window.removeEventListener("track-sound",sync); },[]);
   const toggleSound = () => { const v=!soundOn; setSoundOn(v); setSoundEnabled(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); };
   const [musicOn2, setMusicOn2] = useState(getMusicEnabled());
+  useEffect(()=>{
+    const sync=()=>setMusicOn2(getMusicEnabled());
+    window.addEventListener("track-music",sync);
+    window.addEventListener("storage",sync);
+    return()=>{window.removeEventListener("track-music",sync);window.removeEventListener("storage",sync);};
+  },[]);
   const toggleMusic2 = () => { const v=!musicOn2; setMusicOn2(v); setMusicEnabled(v); setMusicEnabledGlobal(v); };
 
   const closeMenu = (fn) => { setMenuOpen(false); fn && fn(); };
