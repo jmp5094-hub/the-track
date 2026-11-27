@@ -5,6 +5,8 @@ import {simulateRaceWithHistory} from '../functions/race-engine.mjs';
 import {privateSeed,ENGINE_VERSION} from '../functions/race-rules.mjs';
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Broadcast } from "./broadcast/Broadcast";
+import {RaceIntro} from "./broadcast/RaceIntro";
+import {ODDS_SECONDS,auctionOddsSeconds,privateCountdownSeconds,privateStartAt,raceStartAt} from "../functions/race-timing.mjs";
 import { buildPlayback } from "./broadcast/playback.mjs";
 import broadcastVoice from "./broadcast/voice.json";
 import "./track-theme.css";
@@ -143,7 +145,7 @@ const fbClearRacePot = async (raceId) => {
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const TRACK_SPACES   = 12;
-const BET_CLOSE_SECS = 30;          // betting closes 30s before race
+const BET_CLOSE_SECS = ODDS_SECONDS;          // final odds window before the start
 const BET_OPEN_HOURS = 3;           // betting opens 3 hours before race
 const ROLL_INTERVAL    = 3500;  // ms between roll starts — must match cloud function
 const DICE_FLASH_DUR   = 600;   // ms dice spin
@@ -2042,10 +2044,17 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
   );
 }
 
+function CountdownIntro({race,startTime}) {
+  const [soundOn,setSoundOn]=useState(getSoundEnabled);
+  useEffect(()=>{const sync=()=>setSoundOn(getSoundEnabled());window.addEventListener('track-sound',sync);window.addEventListener('storage',sync);return()=>{window.removeEventListener('track-sound',sync);window.removeEventListener('storage',sync);};},[]);
+  useEffect(()=>{stopBgMusic(500);},[]);
+  return <RaceIntro raceId={race.id||race.code} condition={race.condition} startTime={startTime} clock={gameNow} soundOn={soundOn} getAudioContext={getAudioCtx}/>;
+}
+
 // ─── PRIVATE RACE CARD ────────────────────────────────────────────────────────
-const PRIVATE_COUNTDOWN_SECS = 30;
 
 function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
+  const countdownSeconds = privateCountdownSeconds(race);
   const isHost   = race.hostUsername===user.username;
   const me       = race.members?.[user.username]||{};
   const myBets   = me.bets||{};
@@ -2073,18 +2082,18 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
   useEffect(()=>{
     if(!race.started || race.finished) return;
     const elapsed = Math.floor((Date.now() - race.startedAt)/1000);
-    const remaining = Math.max(0, PRIVATE_COUNTDOWN_SECS - elapsed);
+    const remaining = Math.max(0, countdownSeconds - elapsed);
     setCountdown(remaining);
     if(remaining<=0){ onLaunch(race); onClose(); return; }
     const t = setInterval(()=>{
       const el2 = Math.floor((Date.now() - race.startedAt)/1000);
-      const rem2 = Math.max(0, PRIVATE_COUNTDOWN_SECS - el2);
+      const rem2 = Math.max(0, countdownSeconds - el2);
       setCountdown(rem2);
-      if(rem2<=10 && rem2>0) sfx.countdownBeep(rem2<=3);
+      if(rem2<=3 && rem2>0) sfx.countdownBeep(rem2<=3);
       if(rem2<=0){ clearInterval(t); onLaunch(race); onClose(); }
     },1000);
     return ()=>clearInterval(t);
-  },[race.started, race.startedAt, race.finished]);
+  },[race.started, race.startedAt, race.finished, countdownSeconds]);
 
   const saveBet=(hid,val)=>{
     const n=parseFloat(val); const b={...localBets};
@@ -2106,10 +2115,11 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
 
   // ── COUNTDOWN SCREEN — shown to everyone once race.started=true ──────────────
   if(race.started && !race.finished && countdown !== null) {
-    const ringPct = (countdown / PRIVATE_COUNTDOWN_SECS) * 100;
+    const ringPct = (countdown / countdownSeconds) * 100;
     const totalPool = Object.values(race.members||{}).reduce((s,m)=>s+(parseFloat(m.pot)||0),0);
     return (
       <div style={{padding:"20px",background:"rgba(173,187,162,0.08)",border:"2px solid #adbba244",borderRadius:16,animation:"slideIn 0.2s ease-out"}}>
+        <CountdownIntro race={race} startTime={privateStartAt(race)}/>
         {/* Header */}
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:24,marginBottom:4}}>{rt.icon}</div>
@@ -2980,10 +2990,9 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
 
   // ── Pure timing derived from race.startTime ─────────────────────────────────
   // race.startTime = auction END. Auction opens 180s before that.
-  // Presentation window: startTime → startTime+30s
-  // Race fires: startTime+30s
+  // The schedule records the presentation duration so active races keep their clock.
   const TOTAL_AUCTION  = AUCTION_BID_SECS * 6; // 180s
-  const PRESENT_SECS   = 30;
+  const PRESENT_SECS   = auctionOddsSeconds(race);
   const auctionOpenAt  = race.startTime - TOTAL_AUCTION * 1000;
   const raceFiresAt    = race.startTime + PRESENT_SECS * 1000;
   const elapsedSecs    = (now - auctionOpenAt) / 1000;
@@ -3110,10 +3119,10 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
     sfx.betConfirm();
   };
 
-  // ── Odds/owners reveal (same 30s window as regular races) ───────────────────
+  // ── Odds/owners reveal ───────────────────
   // oddsRevealSecs: 0 when auction ends, grows to PRESENT_SECS as race approaches
   const oddsRevealSecs = Math.min(PRESENT_SECS, Math.max(0, -secsToAuctionEnd));
-  const revealCount    = Math.min(6, Math.floor(oddsRevealSecs/5)+1);
+  const revealCount    = Math.min(6, Math.floor(oddsRevealSecs/Math.floor(PRESENT_SECS/6))+1);
 
   // Auto-fire race — only once, guarded by ref
   const firedRaceRef = useRef(false);
@@ -3124,25 +3133,8 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
     }
   },[raceStarted]);
 
-  // Bugle + music for auction races
-  const bugleFiredRef2 = useRef(false);
-  const auctionMusicRef = useRef(false);
-  useEffect(()=>{
-    // Start music at 30s countdown
-    if(secsToRaceFire <= 30 && secsToRaceFire > 0 && !auctionMusicRef.current){
-      auctionMusicRef.current = true;
-      startBgMusic();
-    }
-    // Bugle at 4 seconds
-    if(secsToRaceFire <= 8 && secsToRaceFire > 0 && !bugleFiredRef2.current){
-      bugleFiredRef2.current = true;
-      sfx.bugle();
-      fadeBgMusic(0, 3000);
-    }
-  },[secsToRaceFire, inOdds, raceStarted]);
-
   const totalBet = Object.values(localBets).reduce((sum,value)=>sum+(parseFloat(value)||0),0);
-  return <AuctionView race={race} names={HORSES.map((h,id)=>race.horses?.[id]||h.name)}
+  return <AuctionView race={race} intro={inOdds&&<CountdownIntro race={race} startTime={raceFiresAt}/>} names={HORSES.map((h,id)=>race.horses?.[id]||h.name)}
     typeLabel={rt.label} conditionLabel={TRACK_CONDITIONS[race.condition]?.label||'Clear track'}
     post={fmtTime(new Date(raceFiresAt))} phase={raceStarted?'racing':inOdds?'reveal':inAuction?'auction':'upcoming'}
     tab={tab} onTab={setTab} onBack={onBack} username={user.username}
@@ -3161,7 +3153,7 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={}, onBack }
   useEffect(()=>onSnapshot(doc(db,'global','auctions'),snap=>setAuctions(snap.data()?.data||{})),[]);
   const confirmed=getConfirmed();
   const races=schedule.filter(r=>raceStatus(r,now)!=='finished').map(race=>{
-    const opensAt=race.startTime-180000,firesAt=race.startTime+30000;
+    const opensAt=race.startTime-180000,firesAt=raceStartAt(race);
     const status=now<opensAt?'upcoming':now<race.startTime?'auction':now<firesAt?'locked':'racing';
     const deadline=status==='upcoming'?opensAt:status==='auction'?race.startTime:firesAt;
     return {...race,status,typeLabel:(RACE_TYPES[race.type]||RACE_TYPES.standard).label,
@@ -3211,7 +3203,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
   const [tick, setTick] = useState(0);
   useEffect(()=>{ const t=setInterval(()=>setTick(n=>n+1),500); return()=>clearInterval(t); },[]);
 
-  const liveSecs         = Math.floor((race.startTime - gameNow()) / 1000);
+  const liveSecs         = Math.ceil((race.startTime - gameNow()) / 1000);
   const _naturalSt       = raceStatus(race, gameNow());
   // 🛠 DEV: force locked state for testing
   const st               = devForceStart ? "locked" : _naturalSt;
@@ -3290,7 +3282,6 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
   // Track whether user entered during the full animation window (hook must be at top level)
   const enteredEarlyRef = useRef(null);
-  const bugleFiredRef   = useRef(false);
   const swipedCountRef  = useRef(0);
 
   // Fire swipe sound for each newly revealed odds card
@@ -3307,38 +3298,6 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     }
   },[revealCount_cur]);
 
-  // Fire bugle + start music when countdown begins
-  const musicStartedRef   = useRef(false);
-  const betsCallFiredRef  = useRef(false);
-  useEffect(()=>{
-    const countdown = devForceStart ? devCountdown : Math.max(0, liveSecs);
-    const betsLeft  = Math.max(0, liveSecs - BET_CLOSE_SECS); // secs until betting closes
-
-    // Start music as soon as locked (30s countdown begins)
-    if((isLocked||isRacing) && !musicStartedRef.current){
-      musicStartedRef.current = true;
-      startBgMusic(); // _playTrack handles crossfade internally
-      // Welcome commentary when 30s countdown starts
-      const wKey = race.id+'-welcome';
-      if(!firedCommentaryKeys.has(wKey)) {
-        firedCommentaryKeys.add(wKey);
-        setTimeout(()=>queueCommentary(COMMENTARY.raceWelcome(race.name), 2), 800);
-      }
-    }
-    // Bets closing commentary — fires when betting window has 5 seconds left
-    if(betsLeft <= 5 && betsLeft > 0 && st === "betting" && !betsCallFiredRef.current) {
-      betsCallFiredRef.current = true;
-      queueCommentary(COMMENTARY.betsClosing(), 2);
-    }
-    if(betsLeft === 0) betsCallFiredRef.current = false;
-    // Bugle at 8 seconds of race countdown
-    if(countdown <= 8 && countdown > 0 && !bugleFiredRef.current) {
-      bugleFiredRef.current = true;
-      sfx.bugle();
-      fadeBgMusic(0, 3000);
-    }
-    if(countdown === 0) bugleFiredRef.current = false;
-  }, [liveSecs, devCountdown, devForceStart, isLocked, isRacing]);
   if(enteredEarlyRef.current === null) {
     enteredEarlyRef.current = devForceStart ? true : liveSecs > BET_CLOSE_SECS * 0.75;
   }
@@ -3348,7 +3307,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     if(isRacing) onRaceStart();
   },[isRacing]);
 
-  // ── LOCKED COUNTDOWN (60s window) — animated odds reveal ─────────────────
+  // ── LOCKED COUNTDOWN (20s window) — animated odds reveal ─────────────────
   if(isLocked || isRacing) {
     const countdown    = devForceStart ? devCountdown : Math.max(0, liveSecs);
     const ringPct      = (countdown / BET_CLOSE_SECS) * 100;
@@ -3378,6 +3337,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
 
     return (
       <div style={{minHeight:"100vh",background:"var(--track-bg)",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 40px",overflowY:"auto"}}>
+        <CountdownIntro race={race} startTime={devForceStart ? gameNow()+devCountdown*1000 : race.startTime}/>
         {/* Race header */}
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:32,marginBottom:4}}>{rt.icon}</div>
@@ -4554,7 +4514,7 @@ function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepla
   const [soundOn,setSoundOn] = useState(getSoundEnabled);
   const [musicAllowed,setMusicAllowed] = useState(getMusicEnabled);
   const names = HORSES.map((_, id) => horseName(race,id));
-  const startTime = isReplay ? 0 : race.startTime + (race.isAuction ? 30000 : 0);
+  const startTime = isReplay ? 0 : raceStartAt(race);
   const history = useMemo(() => isReplay ? {rolls:replayRolls,winner:replayWinner,engineVersion:race.engineVersion||1} : saved,[isReplay,replayRolls,replayWinner,race.engineVersion,saved]);
 
   useEffect(() => {
@@ -4974,7 +4934,7 @@ function HowItWorksPanel({ onClose }) {
         <Section icon="🏁" title="HOW A RACE WORKS">
           <Row label="Track length" value="New races: 13 spaces; Down & Back and Magic Dice: 12 out, 13 home. The final space is beyond the finish line."/>
           <Row label="Race interval" value="Races fire every 1–5 minutes"/>
-          <Row label="Betting window" value="Closes 30 seconds before regular races; at the end of an auction"/>
+          <Row label="Betting window" value="Closes 20 seconds before regular races; at the end of an auction"/>
           <Row label="Race duration" value="~3–5 minutes depending on dice rolls"/>
           <Row label="Payout" value="Credited instantly after the winner crosses the line"/>
         </Section>
@@ -5046,7 +5006,7 @@ function HowItWorksPanel({ onClose }) {
           <Row label="Bidding" value="Place a bid higher than the current top bid to take the lead"/>
           <Row label="One owner per horse" value="Once you own a horse you can't bid on others"/>
           <Row label="No sale" value="If nobody bids on a horse, it runs unowned"/>
-          <Row label="After auction" value="30-second presentation showing owners + odds"/>
+          <Row label="After auction" value="20-second presentation showing owners + odds"/>
         </Section>
         <Section icon="💵" title="AUCTION BETTING">
           <div style={{color:"#ffffffbb",fontSize:13,lineHeight:1.6,marginBottom:10}}>
@@ -5386,7 +5346,7 @@ function App() {
       id:        `private_${privateRace.code}`,
       name:      privateRace.name,
       type:      privateRace.raceType || "standard",
-      startTime: (privateRace.startedAt || Date.now()) + PRIVATE_COUNTDOWN_SECS*1000,
+      startTime: privateStartAt({...privateRace,startedAt:privateRace.startedAt||Date.now()}),
       condition: privateRace.condition || 'sunny', seed:privateRace.seed??privateSeed(privateRace.code), engineVersion:privateRace.engineVersion||1,
       status:    "racing",
       horses:    privateRace.horses,
@@ -5476,7 +5436,7 @@ function App() {
             onBack={()=>setSelectedAuctionRace(null)}
             onRaceStart={()=>{
               const r=auctionSchedule.find(x=>x.id===selectedAuctionRace.id)||selectedAuctionRace;
-              // RaceScreen handles the +30s auction offset via race.isAuction flag — don't add it here
+              // RaceScreen uses the presentation duration recorded on the auction.
               setActivePrivateRace(null);setSelectedRace(r);
               const ticket=userBets[r.id];setBets(ticket?.bets||{});setTotalPot(ticket?.pot||0);
               fbGetAuctions().then(allA => setAuctionOwners((allA[r.id]||{}).owners||null));

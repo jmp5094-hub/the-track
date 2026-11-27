@@ -20,11 +20,16 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
   const overdue={...base,id:'scheduler-missed-start',startTime:now-60000};
   const finished={...base,id:'scheduler-finished',startTime:now-900000};
   const original={...simulateRaceWithHistory('standard','sunny',19,1),visualFinishAt:now+50000,computedAt:now};
+  const futureAuction={...legacy,id:'scheduler-auction-future',isAuction:true};
+  const activeAuction={...legacy,id:'scheduler-auction-active',isAuction:true,startTime:now-10000};
+  const auctionResults={...original,visualFinishAt:futureAuction.startTime+30000+1300+original.rolls.length*3500};
   const legacyArchive={archived:'x'.repeat(1040000),[finished.id]:'12345678901234567890123456789012'};
   try{
     await db.doc('private/raceSeeds').set(legacyArchive);
     await db.doc('global/schedule').set({races:[ongoing,legacy,recorded,overdue,finished]});
-    await db.doc('global/auctionSchedule').set({races:[]});
+    await db.doc('global/auctionSchedule').set({races:[futureAuction,activeAuction]});
+    await db.doc('raceRolls/'+futureAuction.id).set(auctionResults);
+    await db.doc('raceRolls/'+activeAuction.id).set(original);
     await db.doc('raceRolls/'+ongoing.id).set({...long,visualFinishAt:ongoing.startTime+1300+long.rolls.length*3500,computedAt:now});
     await db.doc('raceRolls/'+recorded.id).set(original);
     await db.doc('raceRolls/'+finished.id).set({...long,visualFinishAt:now-60000,computedAt:now});
@@ -36,15 +41,20 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
     assert.equal(schedule.find(r=>r.id===finished.id).revealedSeed,legacyArchive[finished.id]);
     assert.deepEqual((await db.doc('private/raceSeeds').get()).data(),legacyArchive);
     assert.deepEqual((await db.doc('raceRolls/'+recorded.id).get()).data(),original);
+    assert.equal(auctions.find(r=>r.id===futureAuction.id).oddsSeconds,20);
+    assert.equal(auctions.find(r=>r.id===activeAuction.id).oddsSeconds,undefined);
+    assert.deepEqual((await db.doc('raceRolls/'+futureAuction.id).get()).data(),{...auctionResults,visualFinishAt:auctionResults.visualFinishAt-10000});
+    assert.deepEqual((await db.doc('raceRolls/'+activeAuction.id).get()).data(),original);
     const old=(await db.doc('raceRolls/'+legacy.id).get()).data();
     assert.equal(old.engineVersion,1);assert.deepEqual(old.rolls,simulateRaceWithHistory(legacy.type,legacy.condition,legacy.seed,1).rolls);
     assert.equal((await db.doc('raceRolls/'+overdue.id).get()).data().engineVersion,2);
-    const generated=[...schedule.filter(r=>!r.id.startsWith('scheduler-')),...auctions];
+    const generated=[...schedule,...auctions].filter(r=>!r.id.startsWith('scheduler-'));
     assert.equal(generated.length,128);assert.equal(new Set(auctions.map(r=>r.type)).size,5);
     const savedSeeds=await db.getAll(...generated.map(r=>db.doc('private/raceSeeds/races/'+r.id)));
     for(let i=0;i<generated.length;i++){
       const r=generated[i],seed=savedSeeds[i].data().seed;
       assert.equal(r.engineVersion,3);assert.ok(validConditions(r.type).includes(r.condition));assert.equal(r.horses.length,6);
+      if(r.isAuction)assert.equal(r.oddsSeconds,20);
       assert.equal(createHash('sha256').update(seed).digest('hex'),r.seedHash);
     }
     const newlyFinished={...generated[0],startTime:now-900000};
@@ -54,12 +64,15 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
     assert.equal((await db.doc('global/schedule').get()).data().races.find(r=>r.id===newlyFinished.id).revealedSeed,savedSeeds[0].data().seed);
     // The manual recovery handler must use the same bounded storage path.
     await db.doc('global/schedule').set({races:[]});
-    await db.doc('global/auctionSchedule').set({races:[]});
+    await db.doc('global/auctionSchedule').set({races:[futureAuction,activeAuction]});
+    await db.doc('raceRolls/'+futureAuction.id).set(auctionResults);
     let response;
     await raceSchedulerHttp({}, {json:value=>{response=value;}});
     assert.equal(response.ok,true);
     const httpRaces=(await db.doc('global/schedule').get()).data().races;
     assert.equal(httpRaces.length,64);
+    assert.deepEqual((await db.doc('raceRolls/'+futureAuction.id).get()).data(),{...auctionResults,visualFinishAt:auctionResults.visualFinishAt-10000});
+    assert.deepEqual((await db.doc('raceRolls/'+activeAuction.id).get()).data(),original);
     assert.equal((await db.doc('private/raceSeeds/races/'+httpRaces[0].id).get()).exists,true);
     assert.deepEqual((await db.doc('private/raceSeeds').get()).data(),legacyArchive);
   }finally{await admin.app().delete();}

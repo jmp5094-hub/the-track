@@ -1,5 +1,6 @@
 import {simulateRaceWithHistory} from './race-engine.mjs';
 import {privateSeed,ENGINE_VERSION} from './race-rules.mjs';
+import {ODDS_SECONDS,bettingClosesAt,privateStartAt} from './race-timing.mjs';
 
 export const money=value=>Math.round(Number(value)*100)/100;
 export function cleanTicket(input) {
@@ -24,7 +25,7 @@ export function createRaceStore({ref,transact},{clock=Date.now}={}) {
     return transact(async tx=>{
       const ur=ref('users',user.uid),br=ref('bets',user.uid),pr=ref('global','racePots');
       const [us,bs,ps]=await Promise.all([tx.get(ur),tx.get(br),tx.get(pr)]);
-      if(clock()>=race.startTime-(race.isAuction?0:30000))throw Error('Betting has closed');
+      if(clock()>=bettingClosesAt(race))throw Error('Betting has closed');
       const u=data(us),b=data(bs),pots=data(ps),confirmed={...b.confirmed},previous=confirmed[race.id]?.pot||0;
       if(b.settled?.[race.id])throw Error('This race is already settled');
       const balance=money(u.balance-ticket.pot+previous);
@@ -121,11 +122,11 @@ export function createRaceStore({ref,transact},{clock=Date.now}={}) {
           const ticket=cleanTicket(payload),me=race.members[user.username];balance=money(balance-ticket.pot+(me.debited?me.pot||0:0));
           if(balance<0)throw Error('Insufficient funds');race.members[user.username]={...me,...ticket,confirmed:true,debited:true,uid:user.uid};tx.update(ur,{balance});
         }
-        if(action==='start'){if(race.hostUsername!==user.username)throw Error('Only the host can start this race');if(!race.started){race.started=true;race.startedAt=clock();}}
+        if(action==='start'){if(race.hostUsername!==user.username)throw Error('Only the host can start this race');if(!race.started){race.started=true;race.startedAt=clock();race.countdownSeconds=ODDS_SECONDS;}}
         if(action==='settle'){
           if(!race.started)throw Error('Race has not started');
           const result=simulateRaceWithHistory(race.raceType,race.condition||'sunny',race.seed??privateSeed(code),race.engineVersion||1);
-          if(clock()<race.startedAt+30000+1300+result.rolls.length*3500)throw Error('Race is still running');
+          if(clock()<privateStartAt(race)+1300+result.rolls.length*3500)throw Error('Race is still running');
           const totalPot=Object.values(race.members).reduce((n,m)=>n+(m.pot||0),0),totals={};
           for(const m of Object.values(race.members))for(const [id,amount] of Object.entries(m.bets||{}))totals[id]=(totals[id]||0)+amount;
           const memberResults={};for(const [name,m] of Object.entries(race.members)){const o=priceTicket(m.bets||{},totalPot,totals,result.winner);memberResults[name]={...o,pot:m.pot||0,won:o.payout>0};}

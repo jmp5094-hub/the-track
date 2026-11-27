@@ -3,7 +3,7 @@ import {RunnerSilk} from './RunnerSilk';
 
 const money=value=>Number(value||0).toLocaleString('en-US',{style:'currency',currency:'USD'});
 
-export function AuctionView({race,names,typeLabel,conditionLabel,post,phase,auction,ticket,tab,onTab,onBack,username}){
+export function AuctionView({race,names,typeLabel,conditionLabel,post,phase,auction,ticket,tab,onTab,onBack,username,intro}){
   const live=phase==='auction',reveal=phase==='reveal'||phase==='racing';
   const current=auction.currentHorseId;
   const bidValid=Number.isFinite(Number(auction.amount))&&Number(auction.amount)>=auction.minBid&&Number(auction.amount)<=ticket.cashBalance;
@@ -11,6 +11,7 @@ export function AuctionView({race,names,typeLabel,conditionLabel,post,phase,auct
     <button className="site-back" onClick={onBack}>← Auction race card</button>
     <header className="site-page-header"><div><p className="track-kicker">Auction race · {typeLabel} · {conditionLabel}</p><h1>{race.name}</h1><p>Own a runner. Back a winner. Follow the field to the wire.</p></div><span className="site-status">{live?'Auction live':reveal?'To the starting gate':'Auction coming up'}</span></header>
     <div className="site-auction-timeline"><span><b>01</b> Six 30-second lots</span><span><b>02</b> Place your race bets</span><span><b>03</b> Automatic start · {post}</span></div>
+    {intro}
     {!reveal&&<nav className="site-auction-tabs" aria-label="Auction sections"><button aria-pressed={tab==='auction'} onClick={()=>onTab('auction')}>The auction</button><button aria-pressed={tab==='bets'} onClick={()=>onTab('bets')}>Race ticket{ticket.total>0&&<span>{money(ticket.total)}</span>}</button><p>Ownership and race bets are separate.</p></nav>}
 
     {reveal?<div className="site-entry-grid">

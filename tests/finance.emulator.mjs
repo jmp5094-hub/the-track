@@ -51,7 +51,8 @@ test('isolated Firestore: bank, competing bids, ticket edits, every private form
       const pool=(await get('global','racePots'))[race.id];assert.equal(pool.totalPot,90);assert.equal(pool.betsPerHorse[winner],30);
       await assert.rejects(()=>store.confirmTicket(alice,race,{[winner]:2000}),/Insufficient/);
       await assert.rejects(()=>store.confirmTicket(alice,race,{7:10}),/Invalid/);
-      now=race.startTime-29999;await assert.rejects(()=>store.confirmTicket(alice,race,{[winner]:1}),/closed/);
+      now=race.startTime-25000;await store.confirmTicket(alice,race,{[winner]:10});
+      now=race.startTime-20000;await assert.rejects(()=>store.confirmTicket(alice,race,{[winner]:1}),/closed/);
     });
     await t.test('recorded result settles each bettor once without clearing other tickets or pool',async()=>{
       const visualFinishAt=race.startTime+1300+history.rolls.length*3500;
@@ -88,10 +89,12 @@ test('isolated Firestore: bank, competing bids, ticket edits, every private form
         await store.privateRace(bob,code,'join');await store.privateRace(alice,code,'confirm',{[result.winner]:10});await store.privateRace(bob,code,'confirm',{[result.winner]:30});
         assert.equal((await get('users',alice.uid)).balance,990);
         await assert.rejects(()=>store.privateRace(bob,code,'start'),/host/);
-        const {race}=await store.privateRace(alice,code,'start');assert.equal(race.engineVersion,3);assert.equal(race.condition,condition);assert.equal(race.seed,privateSeed(code));
+        const {race}=await store.privateRace(alice,code,'start');assert.equal(race.countdownSeconds,20);assert.equal(race.engineVersion,3);assert.equal(race.condition,condition);assert.equal(race.seed,privateSeed(code));
         await assert.rejects(()=>store.privateRace(bob,code,'confirm',{0:5}),/closed/);
         await assert.rejects(()=>store.privateRace(alice,code,'settle'),/running/);
-        now=race.startedAt+30000+1300+result.rolls.length*3500+100;
+        now=race.startedAt+20000+1300+result.rolls.length*3500-1;
+        await assert.rejects(()=>store.privateRace(alice,code,'settle'),/running/);
+        now++;
         await Promise.all([store.privateRace(alice,code,'settle'),store.privateRace(bob,code,'settle')]);await store.privateRace(alice,code,'settle');
         assert.equal((await get('users',alice.uid)).balance,1000);assert.equal((await get('users',bob.uid)).balance,1000);
         assert.equal((await get('global','privateRaces')).races[code].winner,result.winner);

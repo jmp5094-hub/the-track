@@ -1,5 +1,6 @@
 const {simulateRaceWithHistory} = require('./race-engine.mjs');
 const {ENGINE_VERSION} = require('./race-rules.mjs');
+const {ODDS_SECONDS,raceStartAt,publishAuctionTiming} = require('./race-timing.mjs');
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest, onCall, HttpsError }  = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -23,7 +24,6 @@ function seedToInt(seedHex) {
 // ─── CONSTANTS (must match frontend) ─────────────────────────────────────────
 const TRACK_SPACES    = 12;
 const TIEBREAK_SPACES = 3;
-const BET_CLOSE_SECS  = 30;
 const ROLL_INTERVAL   = 3500;
 const HURDLE_CELL     = 5;
 
@@ -308,7 +308,7 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
     seedsDoc[raceId] = seedHex;
     races.push({
       id: raceId, name: generateRaceName(raceId), type, condition,
-      startTime: cursor, status: "upcoming", isAuction: true, horseOrder,
+      startTime: cursor, status: "upcoming", isAuction: true, horseOrder, oddsSeconds: ODDS_SECONDS,
       seedHash, seed: seedInt, engineVersion: ENGINE_VERSION,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
@@ -395,11 +395,12 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
 
   // Persist commitments before publishing their races, including on retries.
   await saveNewRaceSeeds(seedsDoc, persistedSeedIds);
+  auctionSched = await publishAuctionTiming(db, auctionSched, now);
 
   // ── 2. Pre-compute roll histories for races starting in the next 2 minutes ──
   const allRaces = [...schedule, ...auctionSched];
   const upcoming = allRaces.filter(r => {
-    const fireTime = r.isAuction ? r.startTime + 30000 : r.startTime;
+    const fireTime = raceStartAt(r);
     return fireTime > now - 30 * 60 * 1000 && fireTime <= now + 2 * 60 * 1000 && r.status !== "finished";
   });
 
@@ -433,7 +434,7 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
     if(existingRollIds.has(race.id)) continue;
     console.log("Pre-computing rolls for", race.id, race.name);
     const { winner, rolls } = simulateRaceWithHistory(race.type, race.condition || "sunny", race.seed, race.engineVersion);
-    const visualFinishAt = (race.isAuction ? race.startTime + 30000 : race.startTime) + 1300 + rolls.length * ROLL_INTERVAL;
+    const visualFinishAt = raceStartAt(race) + 1300 + rolls.length * ROLL_INTERVAL;
     writeOps.push(db.collection("raceRolls").doc(race.id).set({ winner, rolls, engineVersion:race.engineVersion||1, visualFinishAt, computedAt: now }));
   }
   if(writeOps.length > 0) {
@@ -455,7 +456,7 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
 
   const shouldBeFinished = (r) => {
     if(r.status === "finished") return false;
-    const fireTime = r.isAuction ? r.startTime + 30000 : r.startTime;
+    const fireTime = raceStartAt(r);
     const rollData = rollMeta[r.id];
     if(rollData) return now > rollData.visualFinishAt + 30000;
     if(now > fireTime + MAX_RACE_MS) return true;
@@ -533,6 +534,7 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
   }
 
   await saveNewRaceSeeds(seedsDoc, persistedSeedIds);
+  auctionSched = await publishAuctionTiming(db, auctionSched, now);
 
   await Promise.all([
     db.doc("global/schedule").set({ races: schedule, generatedAt: now }),
@@ -542,7 +544,7 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
   // Pre-compute rolls for next 3 minutes
   const allRaces = [...schedule, ...auctionSched];
   const upcoming = allRaces.filter(r => {
-    const ft = r.isAuction ? r.startTime + 30000 : r.startTime;
+    const ft = raceStartAt(r);
     return ft > now - 30 * 60 * 1000 && ft <= now + 3 * 60 * 1000 && r.status !== "finished";
   });
   const existingRollsSnap = await db.collection("raceRolls").get();
@@ -551,7 +553,7 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
   for(const race of upcoming) {
     if(existingIds.has(race.id)) continue;
     const { winner, rolls } = simulateRaceWithHistory(race.type, race.condition||"sunny", race.seed, race.engineVersion);
-    const visualFinishAt = (race.isAuction ? race.startTime+30000 : race.startTime) + 1300 + rolls.length * ROLL_INTERVAL;
+    const visualFinishAt = raceStartAt(race) + 1300 + rolls.length * ROLL_INTERVAL;
     writeOps2.push(db.collection("raceRolls").doc(race.id).set({ winner, rolls, engineVersion:race.engineVersion||1, visualFinishAt, computedAt: now }));
   }
   if(writeOps2.length > 0) await Promise.all(writeOps2);

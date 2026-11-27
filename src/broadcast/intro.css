@@ -1,0 +1,5 @@
+.race-intro{box-sizing:border-box;width:100%;max-width:640px;margin:0 auto 16px;padding:12px 18px;border:1px solid #e4c48b40;border-radius:10px;background:#e4c48b0a;text-align:center;color:var(--track-cream,#f5ead8)}
+.race-intro-label{display:flex;align-items:center;justify-content:center;gap:12px;font:700 10px var(--track-label,sans-serif);letter-spacing:2px;text-transform:uppercase;color:#e4c48b}
+.race-intro-label b{font-variant-numeric:tabular-nums;min-width:28px;letter-spacing:0;font-size:13px}
+.race-intro p{margin:7px 0 0;font:500 clamp(14px,1.5vw,18px)/1.4 var(--track-body,sans-serif)}
+.tv-video>.race-intro{position:absolute;z-index:2;top:12px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);background:#101914ed}

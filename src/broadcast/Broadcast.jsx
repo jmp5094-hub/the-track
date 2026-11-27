@@ -3,11 +3,10 @@ import {buildPlayback,describeRoll,rootingHint,raceMoment,LAND,MOVE,MOVE_END,PIP
 import voice from './voice.json';
 import {playRaceEffect,stopRaceEffects} from './race-sound';
 import {createRaceSoundscape} from './soundscape';
+import {loadAnnouncer} from './announcer';
+import {RaceIntro} from './RaceIntro';
 import './broadcast.css';
 
-const audioUrl=import.meta.env.BASE_URL+'broadcast/audio/announcer.mp3';
-let voiceBytes;
-const loadVoice=()=>voiceBytes??=(fetch(audioUrl).then(r=>{if(!r.ok)throw Error('Voice unavailable');return r.arrayBuffer();}).catch(e=>{voiceBytes=undefined;throw e;}));
 const readPreference=(key,fallback)=>{try{return localStorage.getItem(key)||fallback;}catch{return fallback;}};
 const savePreference=(key,value)=>{try{localStorage.setItem(key,String(value));}catch{}};
 
@@ -64,7 +63,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const ctx=getAudioContext?.();if(!ctx)return;
       ctx.resume().catch(()=>{});audio.current.context=ctx;
       audio.current.mix??=createRaceSoundscape(ctx);
-      audio.current.promise??=loadVoice().then(bytes=>ctx.decodeAudioData(bytes.slice(0))).then(buffer=>{audio.current.buffer=buffer;}).catch(()=>{audio.current.promise=undefined;});
+      audio.current.promise??=loadAnnouncer(ctx).then(buffer=>{audio.current.buffer=buffer;}).catch(()=>{audio.current.promise=undefined;});
     }catch{}
   }
   useEffect(()=>{
@@ -96,7 +95,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       lastTimestamp=timestamp;
       if(replay){if(control){if(!control.paused)control.time+=delta*speed;replayTime=control.time;}else replayTime+=delta*speed;}
       const elapsed=replay?replayTime:(s.clock()-startTime)/1000;
-      const frame={...playback.sample(elapsed),follow:s.follow,steady:s.viewMode==='steady'};
+      const frame={...playback.sample(elapsed),countdown:Math.max(0,Math.ceil(-elapsed)),follow:s.follow,steady:s.viewMode==='steady'};
       const paused=Boolean(control?.paused);
       const ctx=audio.current.context;
       const sound=s.soundOn&&!paused&&document.visibilityState!=='hidden'&&ctx?.state==='running';
@@ -124,7 +123,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const faceTick=frame.rolling?Math.floor(frame.into*15):-1;
       const dice=frame.rolling?Array.from({length:race.type==='triple_dice'?3:2},(_,i)=>(faceTick*(3+i*2)+frame.index+i*2)%6+1):frame.roll?.dice||frame.lastRoll?.dice||[0,0];
       const contextLost=container.current?.dataset.contextLost==='true';
-      const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
+      const ui=[frame.countdown,frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
       if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost,paused});}
       if(timestamp>=nextDraw){
         try{view.current?.draw(frame);}catch{setViewStatus('fallback');view.current?.dispose();view.current=null;}
@@ -167,10 +166,11 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
     <p className="tv-stakes" aria-live="polite">{rootingHint(frame,follow,race.condition||'sunny')}</p>
     </div>
     <div className="tv-video">
+      {exhibition&&<RaceIntro raceId={race.id} condition={race.condition} soundOn={soundOn} getAudioContext={getAudioContext} controlRef={controlRef} showCountdown/>}
       <div ref={container} className="tv-viewport" aria-hidden="true"/>
       {frame&&flat&&<div className="tv-board-scene"><span>{viewStatus==='loading'&&viewMode!=='board'?'Preparing trackside view':'The course'} · {frame.goal} fixed spaces</span><RaceField {...{frame,names,follow}} onFollow={choose} flat/></div>}
       {!flat&&<div className="tv-shot-label">{frame?.tiebreak?`${frame.tieSpaces}-space tiebreak`:frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
-      {!flat&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
+      {!flat&&!frame?.countdown&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
       {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>{frame.tieSpaces}-space tiebreak next</span></div>}
       {!flat&&frame?.done&&<div className="tv-announcement"><span>{frame.historicalResult?'Official recorded result':'Across the wire'}</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
     </div>
