@@ -1,10 +1,13 @@
 import {useEffect,useRef,useState} from 'react';
 import {loadAnnouncer} from './announcer';
 import {canStartIntroCue,introFrame} from './intro-plan.mjs';
+import {useRaceAudio} from './AudioControls';
+import {raceAudio} from './audio-session';
 import './intro.css';
 
-export function RaceIntro({raceId,condition='sunny',startTime,clock=Date.now,soundOn,getAudioContext,controlRef,showCountdown=false}) {
-  const options=useRef({});options.current={startTime,clock,soundOn,getAudioContext,controlRef};
+export function RaceIntro({raceId,condition='sunny',startTime,clock=Date.now,controlRef,showCountdown=false}) {
+  const audioState=useRaceAudio();
+  const options=useRef({});options.current={startTime,clock,soundOn:audioState.enabled&&audioState.voiceReady,controlRef};
   const [view,setView]=useState(null);
   useEffect(()=>{
     let timer,source,context,buffer,loading=false,retryAt=0,disposed=false,lastPaint='',lastVersion,seen=new Set();
@@ -12,8 +15,7 @@ export function RaceIntro({raceId,condition='sunny',startTime,clock=Date.now,sou
     const unlock=()=>{
       const o=options.current;if(!o.soundOn)return;
       try{
-        context=o.getAudioContext?.();if(!context)return;
-        if(context.state==='suspended')context.resume().catch(()=>{});
+        context=raceAudio.getContext();if(!context)return;
         if(!loading&&performance.now()>=retryAt){loading=true;
           // Warm the race reel too: the starting call must be ready at the gate.
           loadAnnouncer(context).catch(()=>{});
@@ -32,11 +34,8 @@ export function RaceIntro({raceId,condition='sunny',startTime,clock=Date.now,sou
       if(frame.cue){
         if(canStartIntroCue(frame.cue,elapsed,seen)&&audible&&context?.state==='running'&&buffer){
           stop();seen.add(frame.cue.key);
-          const offset=elapsed-frame.cue.time,node=context.createBufferSource(),gain=context.createGain();
-          node.buffer=buffer;node.playbackRate.value=c?.speed??1;gain.gain.value=.9;
-          node.connect(gain).connect(context.destination);source=node;
-          node.onended=()=>{node.disconnect();gain.disconnect();if(source===node)source=null;};
-          node.start(0,frame.cue.offset+offset,frame.cue.duration-offset);
+          const offset=elapsed-frame.cue.time;
+          source=raceAudio.playVoice(buffer,{speed:c?.speed??1,offset:frame.cue.offset+offset,duration:frame.cue.duration-offset});
         }
         // Late joins and an unmuted/foregrounded tab wait for the next call.
         if(elapsed-frame.cue.time>=.24)seen.add(frame.cue.key);
@@ -45,10 +44,10 @@ export function RaceIntro({raceId,condition='sunny',startTime,clock=Date.now,sou
       if(paint!==lastPaint){lastPaint=paint;setView(frame);}
       timer=requestAnimationFrame(draw);
     };
-    unlock();window.addEventListener('pointerdown',unlock,{passive:true});window.addEventListener('keydown',unlock);
+    unlock();
     const hide=()=>{if(document.visibilityState!=='visible')stop();};document.addEventListener('visibilitychange',hide);
     timer=requestAnimationFrame(draw);
-    return()=>{disposed=true;cancelAnimationFrame(timer);stop();window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);document.removeEventListener('visibilitychange',hide);};
+    return()=>{disposed=true;cancelAnimationFrame(timer);stop();document.removeEventListener('visibilitychange',hide);};
   },[raceId,condition]);
   if(!view?.active)return null;
   return <div className="race-intro" data-countdown-seconds={view.seconds}>

@@ -6,6 +6,8 @@ import {privateSeed,ENGINE_VERSION} from '../functions/race-rules.mjs';
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Broadcast } from "./broadcast/Broadcast";
 import {RaceIntro} from "./broadcast/RaceIntro";
+import {AudioControls} from "./broadcast/AudioControls";
+import {raceAudio} from "./broadcast/audio-session";
 import {ODDS_SECONDS,auctionOddsSeconds,privateCountdownSeconds,privateStartAt,raceStartAt} from "../functions/race-timing.mjs";
 import { buildPlayback } from "./broadcast/playback.mjs";
 import broadcastVoice from "./broadcast/voice.json";
@@ -496,160 +498,29 @@ function pickHorseCoats(raceId) {
 
 // ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
 // All sounds generated via Web Audio API — no files needed
-let _audioCtx = null;
-const getAudioCtx = () => {
-  if(!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return _audioCtx;
-};
+const getAudioCtx = () => raceAudio.getContext();
 
 // Global mute stored in localStorage
 
 // ── Background race results storage ──────────────────────────────────────────
 const getRaceResults  = () => { try { return JSON.parse(localStorage.getItem("tt_race_results")||"{}"); } catch { return {}; } };
 const saveRaceResults = r  => localStorage.setItem("tt_race_results", JSON.stringify(r));
-const getSoundEnabled = () => { try { return localStorage.getItem("tt_sound")==="1"; } catch { return false; } };
-const setSoundEnabled = (v) => { try { localStorage.setItem("tt_sound", v?"1":"0"); } catch {} window.dispatchEvent(new Event("track-sound")); };
-const getMusicEnabled = () => { try { return localStorage.getItem("tt_music")==="1"; } catch { return false; } };
-const setMusicEnabled = (v) => { try { localStorage.setItem("tt_music", v?"1":"0"); } catch {} };
-
 // ── Global game clock (respects dev 4x speed) ────────────────────────────────
 let _gameTimeOffset = 0;
 const gameNow = () => Date.now() + _gameTimeOffset;
 
 
 
-const playSound = (fn) => {
-  if(!getSoundEnabled()) return;
-  try {
-    const ctx = getAudioCtx();
-    if(ctx.state==="suspended") {
-      ctx.resume().then(()=>fn(ctx)).catch(()=>{});
-    } else {
-      fn(ctx);
-    }
-  } catch(e) {}
+const playSound = fn => {
+  if(!raceAudio.getSnapshot().running) return;
+  try { fn(getAudioCtx()); } catch {}
 };
 
-// Master audio unlock — fires on EVERY gesture until confirmed unlocked
-// Handles both Web Audio API (sfx) and HTML Audio (music/bugle/commentary)
-let _masterUnlocked = false;
-const _masterUnlock = () => {
-  // 1. Resume Web Audio context for sfx (always needed)
-  if(_audioCtx && _audioCtx.state==="suspended") _audioCtx.resume().catch(()=>{});
-  // Retry pending commentary on every gesture
-  if(pendingAudio) { pendingAudio.play().catch(()=>{}); pendingAudio=null; }
-  if(!_masterUnlocked) {
-    _masterUnlocked = true;
-    // 2. Unlock music tracks — use muted:true so no audible blip on iOS
-    Object.keys(MUSIC_TRACKS||{}).forEach(name=>{
-      const a=_aud[name]; if(!a) return;
-      a.muted=true;
-      a.play().then(()=>{
-        if(a._shouldPlay){ a.muted=false; }
-        else { a.pause(); a.currentTime=0; a.muted=false; }
-      }).catch(()=>{ a.muted=false; });
-    });
-
-  }
-};
-if(typeof window !== "undefined") {
-  ["touchstart","mousedown","click","keydown"].forEach(evt=>
-    window.addEventListener(evt, _masterUnlock, {passive:true})
-  );
-}
-const unlockAudio = _masterUnlock; // keep old name working
-
-// ── Individual sound effects ──────────────────────────────────────────────────
-
-
-// Bugle audio — created lazily on first use, not at module load
-let _bugleAudio = null;
-function _getBugle() {
-  if(!_bugleAudio) {
-    _bugleAudio = new Audio("/Bugle.mp3");
-    _bugleAudio.preload = "none";
-  }
-  return _bugleAudio;
-}
-
-// ─── BACKGROUND MUSIC — iOS-safe unified audio manager ───────────────────────
-// iOS requires all Audio elements to be .play()'d synchronously inside a user
-// gesture before async playback is allowed. We pre-create all tracks and unlock
-// them all together on the first user tap.
-
-const MUSIC_TRACKS = {
-  lobby:     { src:"/broadcast/audio/pulse.mp3", targetVol:0.06 },
-  countdown: { src:"/broadcast/audio/pulse.mp3", targetVol:0.10 },
-  race:      { src:"/broadcast/audio/pulse.mp3", targetVol:0.12 },
-};
-const _aud = {};       // name → Audio element
-let _audUnlocked = false;
-let _currentTrack = null;
-
-function _getTrack(name) {
-  if(!_aud[name]) {
-    const a = new Audio(MUSIC_TRACKS[name].src);
-    a.loop = true; a.volume = 0; a.preload = "auto";
-    _aud[name] = a;
-  }
-  return _aud[name];
-}
-
-function fadeAudio(audio, targetVol, durationMs, onDone) {
-  if(!audio) { if(onDone) onDone?.(); return; }
-  if(audio._fadeIv) { clearInterval(audio._fadeIv); audio._fadeIv=null; }
-  const startVol = audio.volume;
-  const diff = targetVol - startVol;
-  if(Math.abs(diff)<0.001) { if(onDone) onDone?.(); return; }
-  const steps = Math.max(1, Math.round(durationMs/50));
-  let step = 0;
-  audio._fadeIv = setInterval(()=>{
-    step++;
-    audio.volume = Math.max(0, Math.min(1, startVol+diff*(step/steps)));
-    if(step>=steps){ clearInterval(audio._fadeIv); audio._fadeIv=null; if(onDone) onDone?.(); }
-  }, durationMs/steps);
-}
-
-// _desiredTrack = what SHOULD be playing regardless of mute state
-// musicEnabled   = whether audio is actually audible
-// These are completely separate concerns.
-let _desiredTrack = null;
-
-function _applyTrack(name) {
-  // Transition to new track — fade out others, fade in new one
-  Object.keys(MUSIC_TRACKS).forEach(n=>{
-    const a=_aud[n]; if(!a) return;
-    if(n!==name) {
-      if(!a.paused) fadeAudio(a, 0, 800, ()=>{ a.pause(); a.currentTime=0; });
-    }
-  });
-  const a = _getTrack(name);
-  const targetVol = musicEnabled ? MUSIC_TRACKS[name].targetVol : 0;
-  setTimeout(()=>{
-    if(_desiredTrack !== name) return; // already changed
-    if(a.paused) {
-      a.volume = 0;
-      a.play().catch(()=>{
-        ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>{
-          if(_desiredTrack===name) { a.play().catch(()=>{}); }
-        },{once:true,passive:true}));
-      });
-    }
-    fadeAudio(a, targetVol, 1500);
-  }, 600);
-}
-
-// Public: set which track should play (ignores mute — music flows naturally)
-function startLobbyMusic()   { if(_desiredTrack==="lobby") return; _desiredTrack="lobby";     _applyTrack("lobby");     }
-function startBgMusic()      { if(_desiredTrack==="countdown") return; _desiredTrack="countdown"; _applyTrack("countdown"); }
-function startRaceMusic()    { _desiredTrack="race";     _applyTrack("race");      }
-function stopLobbyMusic(ms)  { if(_desiredTrack!=="lobby") return; _desiredTrack=null; const a=_aud.lobby; if(a&&!a.paused) fadeAudio(a,0,ms||1500,()=>{a.pause();a.currentTime=0;}); }
-function fadeBgMusic(v,ms,cb){ const a=_aud.countdown; if(a) fadeAudio(a,v,ms||1500,cb); }
-function stopBgMusic(ms=2000){ ["countdown","race"].forEach(n=>{ _desiredTrack=null; const a=_aud[n]; if(a&&!a.paused) fadeAudio(a,0,ms,()=>{a.pause();a.currentTime=0;}); }); }
-function stopAllMusic(ms=1500){ Object.keys(MUSIC_TRACKS).forEach(n=>{ const a=_aud[n]; if(a&&!a.paused) fadeAudio(a,0,ms,()=>{a.pause();a.currentTime=0;}); }); _desiredTrack=null; }
-function initBgMusic()   {}
-function initRaceMusic() {}
-function initLobbyMusic(){}
+// Lobby and race music share the caller's gain-controlled output on every device.
+function startLobbyMusic() { raceAudio.setLobby(true); }
+function stopLobbyMusic() { raceAudio.setLobby(false); }
+function stopBgMusic() { raceAudio.setLobby(false); }
+function stopAllMusic() { raceAudio.setLobby(false); }
 
 // ─── ELEVENLABS RACE COMMENTARY ──────────────────────────────────────────────
 // Reset commentary state when race changes
@@ -658,66 +529,28 @@ const EL_URL = "/api/commentary"; // Vercel serverless proxy — keeps API key s
 
 let commentaryQueue   = [];
 let commentaryPlaying = false;
-let commentaryEnabled = getSoundEnabled(); // off by default until user enables
+let commentarySource = null;
+let commentaryGeneration = 0;
+raceAudio.registerStop(() => { commentaryGeneration++; commentaryQueue=[]; commentaryPlaying=false; commentarySource?.stop(); commentarySource=null; });
 let lastCommentaryTime = 0;   // timestamp of last commentary start
 const COMMENTARY_COOLDOWN = 3000; // ms minimum between tier-2/3 lines
 const firedCommentaryKeys = new Set(); // track all fired keys
 
-// Pre-create commentary audio element once — iOS requires unlock before async use
-let _commentaryAudio = null;
-function _getCommentaryAudio() {
-  if(!_commentaryAudio) {
-    _commentaryAudio = new Audio();
-    _commentaryAudio.preload = "none";
-    // Register for master unlock
-    if(!window._commentaryPool) window._commentaryPool = [];
-    window._commentaryPool.push(_commentaryAudio);
-  }
-  return _commentaryAudio;
-}
-
 async function speakLine(text) {
-  if(!commentaryEnabled) return;
-  lastCommentaryTime = Date.now();
+  if(!raceAudio.getSnapshot().running) return;
+  const generation=commentaryGeneration;
+  lastCommentaryTime=Date.now();
+  commentaryPlaying=true;
   try {
-    const res = await fetch(EL_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text })
-    });
-    if(!res.ok) { commentaryPlaying=false; drainQueue(); return; }
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    // Reuse pre-unlocked audio element
-    const audio = _getCommentaryAudio();
-    audio.src = url;
-    audio.volume = 0.85;
-    commentaryPlaying = true;
-    audio.onended = () => {
-      commentaryPlaying = false;
-      URL.revokeObjectURL(url);
-      drainQueue();
-    };
-    audio.onerror = () => { commentaryPlaying=false; drainQueue(); };
-    audio.load(); // iOS requires load() after src change
-    audio.play().catch(() => {
-      // Still blocked — queue for next gesture
-      pendingAudio = audio;
-      commentaryPlaying = false;
-      const retry = () => {
-        if(pendingAudio){ pendingAudio.play().catch(()=>{}); pendingAudio=null; }
-      };
-      window.addEventListener("touchstart", retry, {once:true, passive:true});
-      window.addEventListener("click",      retry, {once:true, passive:true});
-    });
-  } catch(e) {
-    commentaryPlaying = false;
-    drainQueue();
+    const res=await fetch(EL_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+    if(!res.ok) throw Error('Commentary unavailable');
+    const buffer=await getAudioCtx().decodeAudioData(await res.arrayBuffer());
+    if(generation!==commentaryGeneration||!raceAudio.getSnapshot().running) return;
+    commentarySource=raceAudio.playVoice(buffer,{onEnded:()=>{commentaryPlaying=false;drainQueue();}});
+  } catch {
+    if(generation===commentaryGeneration){commentaryPlaying=false;drainQueue();}
   }
 }
-
-// Pending audio for autoplay unlock
-let pendingAudio = null;
 
 function drainQueue() {
   if(commentaryQueue.length === 0) { commentaryPlaying=false; return; }
@@ -738,7 +571,7 @@ function resetCommentaryForRace(raceId) {
 // tier 2 = plays only if nothing playing + cooldown elapsed (doubles, big lead, weather)
 // tier 3 = plays only if completely silent + cooldown elapsed (early leader, midrace)
 function queueCommentary(text, tier=2) {
-  if(!commentaryEnabled) return;
+  if(!raceAudio.getSnapshot().running) return;
   const now = Date.now();
 
   if(tier === 1) {
@@ -951,38 +784,12 @@ const COMMENTARY = {
   ]),
 };
 
-function setCommentaryEnabled(v) {
-  commentaryEnabled = v;
-  setSoundEnabled(v); // keep localStorage in sync
-  if(!v) { commentaryQueue=[]; commentaryPlaying=false; }
-}
-let musicEnabled = getMusicEnabled(); // sync with localStorage on startup
-function setMusicEnabledGlobal(v) {
-  musicEnabled = v;
-  setMusicEnabled(v);
-  window.dispatchEvent(new Event("track-music"));
-  if(!v) {
-    // Mute — fade all playing tracks to 0 but keep them running
-    Object.keys(MUSIC_TRACKS).forEach(n=>{
-      const a=_aud[n]; if(!a||a.paused) return;
-      fadeAudio(a, 0, 500);
-    });
-  } else {
-    // Unmute — restore volume of the desired track
-    if(_desiredTrack) {
-      const a=_aud[_desiredTrack];
-      if(a && !a.paused) fadeAudio(a, MUSIC_TRACKS[_desiredTrack].targetVol, 500);
-      else if(a && a.paused) { a.play().catch(()=>{}); fadeAudio(a, MUSIC_TRACKS[_desiredTrack].targetVol, 800); }
-    }
-  }
-}
-
 const sfx = {
   // Rapid click while dice are spinning
   diceRoll: () => playSound(ctx => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(raceAudio.output('effects'));
     osc.type = "square";
     osc.frequency.setValueAtTime(180 + Math.random()*80, ctx.currentTime);
     gain.gain.setValueAtTime(0.06, ctx.currentTime);
@@ -995,7 +802,7 @@ const sfx = {
     [0, 0.05, 0.1].forEach(t => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type = "triangle";
       osc.frequency.setValueAtTime(320 + t*400, ctx.currentTime + t);
       gain.gain.setValueAtTime(0.12, ctx.currentTime + t);
@@ -1009,7 +816,7 @@ const sfx = {
     Array.from({length:steps}).forEach((_,i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type = "sine";
       osc.frequency.setValueAtTime(260 + i*40, ctx.currentTime + i*0.07);
       osc.frequency.exponentialRampToValueAtTime(320 + i*40, ctx.currentTime + i*0.07 + 0.06);
@@ -1024,7 +831,7 @@ const sfx = {
     [261.6, 329.6, 392, 523.2].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type = "triangle";
       osc.frequency.setValueAtTime(freq, ctx.currentTime + i*0.06);
       gain.gain.setValueAtTime(0.14, ctx.currentTime + i*0.06);
@@ -1038,7 +845,7 @@ const sfx = {
     // whoosh up
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
-    osc1.connect(gain1); gain1.connect(ctx.destination);
+    osc1.connect(gain1); gain1.connect(raceAudio.output('effects'));
     osc1.type = "sawtooth";
     osc1.frequency.setValueAtTime(200, ctx.currentTime);
     osc1.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.25);
@@ -1048,7 +855,7 @@ const sfx = {
     // thud landing
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
-    osc2.connect(gain2); gain2.connect(ctx.destination);
+    osc2.connect(gain2); gain2.connect(raceAudio.output('effects'));
     osc2.type = "sine";
     osc2.frequency.setValueAtTime(120, ctx.currentTime + 0.3);
     osc2.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.5);
@@ -1061,7 +868,7 @@ const sfx = {
   turnAround: () => playSound(ctx => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(raceAudio.output('effects'));
     osc.type = "sine";
     osc.frequency.setValueAtTime(600, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.35);
@@ -1077,7 +884,7 @@ const sfx = {
     melody.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type = "triangle";
       osc.frequency.setValueAtTime(freq, ctx.currentTime + times[i]);
       gain.gain.setValueAtTime(0.18, ctx.currentTime + times[i]);
@@ -1092,7 +899,7 @@ const sfx = {
     [523, 659, 784].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type = "sine";
       osc.frequency.setValueAtTime(freq, ctx.currentTime + i*0.1);
       gain.gain.setValueAtTime(0.1, ctx.currentTime + i*0.1);
@@ -1105,7 +912,7 @@ const sfx = {
   countdownBeep: (isFinal=false) => playSound(ctx => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(raceAudio.output('effects'));
     osc.type = "square";
     osc.frequency.setValueAtTime(isFinal ? 880 : 440, ctx.currentTime);
     gain.gain.setValueAtTime(isFinal ? 0.15 : 0.07, ctx.currentTime);
@@ -1117,7 +924,7 @@ const sfx = {
   error: () => playSound(ctx => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(raceAudio.output('effects'));
     osc.type = "sawtooth";
     osc.frequency.setValueAtTime(200, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.2);
@@ -1131,7 +938,7 @@ const sfx = {
     [1047, 1319, 1568].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type = "sine";
       osc.frequency.setValueAtTime(freq, ctx.currentTime + i*0.07);
       gain.gain.setValueAtTime(0.12, ctx.currentTime + i*0.07);
@@ -1145,7 +952,7 @@ const sfx = {
     // Quick ascending brass hit
     [{f:523,t:0,d:0.08},{f:659,t:0.07,d:0.08},{f:784,t:0.14,d:0.08},{f:1047,t:0.21,d:0.35}].forEach(({f,t,d})=>{
       const osc=ctx.createOscillator(), gain=ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(raceAudio.output('effects'));
       osc.type="sawtooth"; osc.frequency.value=f;
       gain.gain.setValueAtTime(0,ctx.currentTime+t);
       gain.gain.linearRampToValueAtTime(0.2,ctx.currentTime+t+0.02);
@@ -1161,7 +968,7 @@ const sfx = {
     noise.buffer=buf;
     const filter=ctx.createBiquadFilter(); filter.type="bandpass"; filter.frequency.value=800; filter.Q.value=0.5;
     const ngain=ctx.createGain();
-    noise.connect(filter); filter.connect(ngain); ngain.connect(ctx.destination);
+    noise.connect(filter); filter.connect(ngain); ngain.connect(raceAudio.output('effects'));
     ngain.gain.setValueAtTime(0,ctx.currentTime+0.2);
     ngain.gain.linearRampToValueAtTime(0.3,ctx.currentTime+0.3);
     ngain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.8);
@@ -1176,7 +983,7 @@ const sfx = {
     const src = ctx.createBufferSource(); src.buffer=buf;
     const lp = ctx.createBiquadFilter(); lp.type="bandpass"; lp.frequency.value=1800; lp.Q.value=0.8;
     const g = ctx.createGain();
-    src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+    src.connect(lp); lp.connect(g); g.connect(raceAudio.output('effects'));
     g.gain.setValueAtTime(0.18, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.12);
     src.start(); src.stop(ctx.currentTime+0.14);
@@ -1193,7 +1000,7 @@ const sfx = {
     const g = ctx.createGain();
     const f = ctx.createBiquadFilter();
     f.type = "peaking"; f.frequency.value = 3000; f.gain.value = 8;
-    noise.connect(f); f.connect(g); g.connect(ctx.destination);
+    noise.connect(f); f.connect(g); g.connect(raceAudio.output('effects'));
     g.gain.setValueAtTime(1.0, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.22);
     noise.start(ctx.currentTime); noise.stop(ctx.currentTime+0.25);
@@ -1204,22 +1011,22 @@ const sfx = {
     const rev = ctx.createBufferSource();
     rev.buffer = bufR;
     const rg = ctx.createGain();
-    rev.connect(rg); rg.connect(ctx.destination);
+    rev.connect(rg); rg.connect(raceAudio.output('effects'));
     rg.gain.setValueAtTime(0.15, ctx.currentTime+0.05);
     rg.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.4);
     rev.start(ctx.currentTime+0.05); rev.stop(ctx.currentTime+0.45);
   }),
 
-  bugle: () => {
-    const audio = _getBugle();
-    audio.currentTime = 0;
-    audio.volume = 0.9;
-    audio.play().catch(()=>{
-      ['touchstart','click'].forEach(e=>window.addEventListener(e,()=>{
-        audio.currentTime=0; audio.play().catch(()=>{});
-      },{once:true,passive:true}));
+  bugle: () => playSound(ctx => {
+    [392,523,659].forEach((hz,i)=>{
+      const osc=ctx.createOscillator(),gain=ctx.createGain();
+      osc.frequency.value=hz;gain.gain.setValueAtTime(.06,ctx.currentTime+i*.15);
+      gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+i*.15+.25);
+      osc.connect(gain).connect(raceAudio.output('effects'));
+      osc.start(ctx.currentTime+i*.15);osc.stop(ctx.currentTime+i*.15+.25);
+      osc.onended=()=>{osc.disconnect();gain.disconnect();};
     });
-  },
+  }),
 };
 
 // Profile: { bio, avatar (emoji), joinedDate }
@@ -2045,10 +1852,8 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
 }
 
 function CountdownIntro({race,startTime}) {
-  const [soundOn,setSoundOn]=useState(getSoundEnabled);
-  useEffect(()=>{const sync=()=>setSoundOn(getSoundEnabled());window.addEventListener('track-sound',sync);window.addEventListener('storage',sync);return()=>{window.removeEventListener('track-sound',sync);window.removeEventListener('storage',sync);};},[]);
-  useEffect(()=>{stopBgMusic(500);},[]);
-  return <RaceIntro raceId={race.id||race.code} condition={race.condition} startTime={startTime} clock={gameNow} soundOn={soundOn} getAudioContext={getAudioCtx}/>;
+  useEffect(()=>{stopBgMusic();},[]);
+  return <RaceIntro raceId={race.id||race.code} condition={race.condition} startTime={startTime} clock={gameNow}/>;
 }
 
 // ─── PRIVATE RACE CARD ────────────────────────────────────────────────────────
@@ -2504,70 +2309,8 @@ function BankPanel({ user, onClose, onBalanceChange }) {
   );
 }
 
-// ─── SOUND CONTROLS — two toggles: sfx/commentary + music ───────────────────
-function MuteButton({ size=28 }) {
-  const [sfxOn,   setSfxOn]   = useState(getSoundEnabled());
-  const [musicOn, setMusicOn] = useState(getMusicEnabled());
-  useEffect(()=>{
-    const sync=()=>{setSfxOn(getSoundEnabled());setMusicOn(getMusicEnabled());};
-    const events=["track-sound","track-music","storage"];
-    events.forEach(event=>window.addEventListener(event,sync));
-    return()=>events.forEach(event=>window.removeEventListener(event,sync));
-  },[]);
-
-  const toggleSfx = () => {
-    const v = !sfxOn;
-    setSfxOn(v);
-    setSoundEnabled(v);
-    setCommentaryEnabled(v);
-    if(v) sfx.betConfirm();
-  };
-
-  const toggleMusic = () => {
-    const v = !musicOn;
-    setMusicOn(v);
-    setMusicEnabled(v);
-    setMusicEnabledGlobal(v);
-  };
-
-  const btnStyle = (active) => ({
-    width:size, height:size, borderRadius:7,
-    border:`1px solid ${active?"rgba(255,255,255,0.25)":"rgba(255,255,255,0.08)"}`,
-    background: active?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",
-    cursor:"pointer", fontSize:size*0.48,
-    display:"flex", alignItems:"center", justifyContent:"center",
-    transition:"all 0.15s", opacity: active?1:0.45,
-  });
-
-  return (
-    <div style={{display:"flex",gap:4}}>
-      <button onClick={toggleSfx}   title={sfxOn?"Mute sound & commentary":"Unmute sound & commentary"} style={btnStyle(sfxOn)}>
-        {sfxOn?"🔊":"🔇"}
-      </button>
-      <button onClick={toggleMusic} title={musicOn?"Mute music":"Unmute music"} style={btnStyle(musicOn)}>
-        {musicOn?"🎵":"🔕"}
-      </button>
-    </div>
-  );
-}
-
-function MuteButton_UNUSED({ size=28 }) {
-  const [on, setOn] = useState(getSoundEnabled());
-  const toggle = () => {
-    const v = !on; setOn(v); setSoundEnabled(v); setCommentaryEnabled(v);
-    if(v) sfx.betConfirm();
-  };
-  return (
-    <button onClick={toggle} title={on?"Mute sounds":"Unmute sounds"} style={{
-      width:size, height:size, borderRadius:7, border:"1px solid rgba(255,255,255,0.12)",
-      background:"rgba(255,255,255,0.06)", cursor:"pointer", fontSize:size*0.5,
-      display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.15s",
-    }}
-      onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.12)"}
-      onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
-    >{on ? "🔊" : "🔇"}</button>
-  );
-}
+// The same audio controls and state are used in the lobby, races and demo.
+function MuteButton() { return <AudioControls compact/>; }
 
 // ─── NAVBAR ───────────────────────────────────────────────────────────────────
 function UserMenu({ avatar, user, onProfile, onBank, onHowTo, onPrivateRaces, onLogout }) {
@@ -2635,18 +2378,6 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
     ["❓","How It Works",   onHowTo,         null],
     ["⬡", "Sign Out",   onLogout,         null],
   ];
-  const [soundOn, setSoundOn] = useState(getSoundEnabled());
-  useEffect(()=>{ const sync=()=>setSoundOn(getSoundEnabled()); window.addEventListener("track-sound",sync); return ()=>window.removeEventListener("track-sound",sync); },[]);
-  const toggleSound = () => { const v=!soundOn; setSoundOn(v); setSoundEnabled(v); setCommentaryEnabled(v); if(v) sfx.betConfirm(); };
-  const [musicOn2, setMusicOn2] = useState(getMusicEnabled());
-  useEffect(()=>{
-    const sync=()=>setMusicOn2(getMusicEnabled());
-    window.addEventListener("track-music",sync);
-    window.addEventListener("storage",sync);
-    return()=>{window.removeEventListener("track-music",sync);window.removeEventListener("storage",sync);};
-  },[]);
-  const toggleMusic2 = () => { const v=!musicOn2; setMusicOn2(v); setMusicEnabled(v); setMusicEnabledGlobal(v); };
-
   const closeMenu = (fn) => { setMenuOpen(false); fn && fn(); };
 
   if(isMobile) {
@@ -2661,13 +2392,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
               <span style={{fontSize:12}}>🏦</span>
               <span style={{color:"#e4c48b",fontFamily:"var(--track-label)",fontSize:12}}>${fmt2(user.balance)}</span>
             </button>
-            {/* Sound + Music toggles */}
-            <button onClick={toggleSound} style={{width:32,height:32,borderRadius:8,background:soundOn?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:soundOn?1:0.45}}>
-              {soundOn?"🔊":"🔇"}
-            </button>
-            <button onClick={toggleMusic2} style={{width:32,height:32,borderRadius:8,background:musicOn2?"rgba(255,255,255,0.10)":"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.15)",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",opacity:musicOn2?1:0.45}}>
-              {musicOn2?"🎵":"🔕"}
-            </button>
+            <AudioControls compact/>
             {/* Burger */}
             <button aria-label={menuOpen?'Close menu':'Open menu'} aria-expanded={menuOpen} onClick={()=>setMenuOpen(o=>!o)} style={{position:"relative",width:36,height:36,borderRadius:8,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.12)",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
               {[0,1,2].map(i=>(
@@ -3189,11 +2914,6 @@ function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sha
 // onRaceStart: called when clock hits zero
 function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBets, confirmedPot, sharedPot, onRaceStart, devForceStart, onDevForceStart, chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
   useEffect(()=>{
-    // User tapped to get here — pre-unlock bugle now while we're in a gesture context
-    // We can't call play() here (not sync gesture) but we can load it
-    const b = _getBugle();
-    b.load();
-    // Start lobby music if not already in countdown/race
     startLobbyMusic();
     return ()=>{};
   },[]);
@@ -4511,8 +4231,6 @@ function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepla
   chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
   const [saved,setSaved] = useState(null);
   const [invalid,setInvalid] = useState(false);
-  const [soundOn,setSoundOn] = useState(getSoundEnabled);
-  const [musicAllowed,setMusicAllowed] = useState(getMusicEnabled);
   const names = HORSES.map((_, id) => horseName(race,id));
   const startTime = isReplay ? 0 : raceStartAt(race);
   const history = useMemo(() => isReplay ? {rolls:replayRolls,winner:replayWinner,engineVersion:race.engineVersion||1} : saved,[isReplay,replayRolls,replayWinner,race.engineVersion,saved]);
@@ -4530,19 +4248,14 @@ function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepla
   useEffect(() => {
     stopLobbyMusic(350);
     stopBgMusic(350);
-    const sync = () => {setSoundOn(getSoundEnabled());setMusicAllowed(getMusicEnabled());};
-    window.addEventListener("track-sound",sync);
-    window.addEventListener("track-music",sync);
-    window.addEventListener("storage",sync);
-    return () => { window.removeEventListener("track-sound",sync); window.removeEventListener("track-music",sync); window.removeEventListener("storage",sync); };
   },[isReplay]);
 
   const chatProps = { raceId:race.id,user,msgs:chatMsgs,setMsgs:setChatMsgs,open:chatOpen,setOpen:setChatOpen,unread:chatUnread,setUnread:setChatUnread };
   if (invalid || (isReplay && history && !buildPlayback(history,ROLL_INTERVAL,TRACK_SPACES,TIEBREAK_SPACES,broadcastVoice,race.type,race.condition))) return <section className="track-race-unavailable"><h1>{race.name}</h1><p>This race history is unavailable. Its recorded result is preserved.</p><button className="track-primary" onClick={()=>window.location.reload()}>Retry loading</button></section>;
   return <>
-    <Broadcast {...{race,history,names,startTime,soundOn,musicAllowed}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
+    <Broadcast {...{race,history,names,startTime}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
       tieSpaces={TIEBREAK_SPACES} clock={gameNow} replay={isReplay} speedRef={replaySpeedRef}
-      onFinish={onRaceEnd} onSound={setCommentaryEnabled} getAudioContext={getAudioCtx}
+      onFinish={onRaceEnd}
       effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners} bets={bets}/>
     {user && !isReplay && <RaceChat {...chatProps}/>}
   </>;
@@ -5293,7 +5006,6 @@ function App() {
   },[screen, user]);
 
   const handleEnterRace=async(race)=>{
-    {const b=_getBugle();if(b.readyState===0)b.load();}
     setActivePrivateRace(null);setAuctionOwners(null);setSelectedRace(race);setBets({});setTotalPot(0);setWinner(null);
     setChatMsgs([]);setChatOpen(false);setChatUnread(0);
     const st=raceStatus(race,gameNow());

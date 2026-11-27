@@ -1,0 +1,10 @@
+.track-audio-controls{display:flex;align-items:center;gap:6px;color:#f7edda;font:inherit;position:relative;z-index:20}
+.track-audio-controls button,.track-audio-panel .track-sound-toggle{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px!important;min-height:44px!important;padding:8px 10px!important;border:1px solid #6f745c;border-radius:6px;background:#24342a;color:#f7edda;font:inherit;font-size:13px!important;line-height:1;cursor:pointer;white-space:nowrap;touch-action:manipulation}
+.track-audio-controls svg,.track-audio-panel svg{width:20px;height:20px;flex:none}.track-sound-toggle[aria-pressed=true]{border-color:#bca571;background:#324734}.is-compact .track-audio-settings{width:44px}
+.track-audio-panel{box-sizing:border-box;position:fixed;width:min(280px,calc(100vw - 32px));padding:16px;background:#17271f;border:1px solid #8b8e70;border-radius:10px;box-shadow:0 10px 30px #0008;display:grid;gap:12px;font:13px/1.4 var(--track-ui,system-ui);text-align:left;color:#f7edda;z-index:1000}
+.track-audio-panel strong{font-size:15px}.track-audio-panel label{display:flex;justify-content:space-between}.track-audio-panel select{box-sizing:border-box;width:100%;height:44px!important;min-height:44px!important;font-size:14px!important;padding:8px!important;color:#f7edda;background:#24342a;border:1px solid #6f745c;border-radius:6px}.track-audio-panel input{width:100%;min-height:32px;margin:0;accent-color:#dfbf87}.track-audio-panel p{margin:0;color:#d3d2bd;font-size:12px;letter-spacing:normal;text-transform:none}.track-audio-panel button{width:100%}
+.track-audio-controls :focus-visible,.track-audio-panel :focus-visible{outline:2px solid #f2d192;outline-offset:3px}
+@media(max-height:500px) and (orientation:landscape){.track-audio-panel{max-height:calc(100dvh - 110px);overflow:auto}}
+
+.tv-heading .tv-tools>button,.tv-heading .tv-tools>select{height:44px!important;min-height:44px!important}
+@media(min-width:640px) and (orientation:landscape) and (max-height:600px){body .track-broadcast{grid-template-rows:44px minmax(0,1fr)}}

@@ -1,6 +1,5 @@
 import {useCallback,useMemo,useRef,useState} from 'react';
 import {Broadcast} from './Broadcast';
-import {getRaceAudioContext} from './race-sound';
 import {FIRST_ROLL,buildPlayback} from './playback.mjs';
 import {INTRO_SECONDS} from './intro-plan.mjs';
 import {simulateV3,RACE_FORMATS,validConditions} from '../../functions/race-rules.mjs';
@@ -19,7 +18,6 @@ export default function Exhibition(){
   const control=useRef({time:-INTRO_SECONDS,paused:true,speed:1,version:0});
   const [follow,setFollow]=useState(3),[paused,setPaused]=useState(true),[finished,setFinished]=useState(false),[speed,setSpeed]=useState(1);
   const [begun,setBegun]=useState(false);
-  const [sound,setSound]=useState(()=>localStorage.getItem('track-demo-sound')==='true');
   const finish=useCallback(()=>{control.current.paused=true;setPaused(true);setFinished(true);},[]);
   const go=(time=-INTRO_SECONDS,play=true)=>{control.current.time=time;control.current.version++;control.current.paused=!play;setBegun(play||time>-INTRO_SECONDS);setPaused(!play);setFinished(false);};
   const toggle=()=>{if(finished){go();return;}setBegun(true);control.current.paused=!control.current.paused;setPaused(control.current.paused);};
@@ -36,7 +34,7 @@ export default function Exhibition(){
       <button type="button" aria-label="Playback speed" onClick={()=>{const next=speed===1?2:1;control.current.speed=next;setSpeed(next);}}>{speed}×</button>
     </div>
     <Broadcast key={race.id} race={race} history={history} names={names} replay exhibition controlRef={control} followHorse={follow} onFollow={setFollow}
-      onFinish={finish} soundOn={sound} onSound={v=>{setSound(v);localStorage.setItem('track-demo-sound',String(v));}} getAudioContext={getRaceAudioContext}/>
+      onFinish={finish}/>
     {finished&&<section className="exhibition-result" aria-live="polite"><p>THE DECISIVE ROLL</p><h2>{names[history.winner]} wins the Brass Cup.</h2><p>{follow===history.winner?'You followed the winner.':`You followed #${follow+1} ${names[follow]}. #${history.winner+1} crossed first.`} This exhibition has no wagers or payouts.</p><button type="button" onClick={()=>go(playback.end-8)}>Replay the finish</button><a href="/">Enter The Track</a></section>}
   </main>;
 }
