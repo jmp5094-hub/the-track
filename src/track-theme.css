@@ -1,11 +1,11 @@
 :root {
   color-scheme:dark;
-  --track-bg:#141614;
-  --track-surface:#1d201c;
-  --track-line:#474136;
-  --track-brass:#e5b678;
-  --track-ink:#f6efe4;
-  --track-muted:#c7baa8;
+  --track-bg:#141c16;
+  --track-surface:#1e3025;
+  --track-line:#59664f;
+  --track-brass:#e4c48b;
+  --track-ink:#f5efdc;
+  --track-muted:#c4cbb7;
   --track-ui:"Segoe UI",system-ui,sans-serif;
   --track-display:Georgia,"Times New Roman",serif;
   --track-label:"Segoe UI",system-ui,sans-serif;
@@ -13,9 +13,10 @@
   background:var(--track-bg);
   color:var(--track-ink);
 }
+*,*::before,*::after {box-sizing:border-box}
 body,button,input,select {font-family:var(--track-ui)}
 button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible {outline:2px solid var(--track-brass);outline-offset:3px}
-.track-app {min-height:100dvh;background:linear-gradient(155deg,#23231d 0%,#141614 45%)}
+.track-app {min-height:100dvh;background:linear-gradient(155deg,#23392e 0%,#141c16 50%)}
 .track-wordmark {display:inline-flex;align-items:center;gap:.65em;color:var(--track-ink);font-weight:800;text-transform:uppercase;letter-spacing:.16em;white-space:nowrap}
 .track-mark {height:1.2em;display:flex;align-items:flex-end;gap:.15em;transform:skewX(-17deg)}
 .track-mark i {width:.19em;height:47%;background:var(--track-brass)}
@@ -23,7 +24,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible {o
 .track-mark i:nth-child(3){height:100%}
 .track-kicker {font-size:.82rem;font-weight:750;letter-spacing:.14em;text-transform:uppercase;color:var(--track-brass)}
 .track-primary {display:inline-flex;justify-content:center;align-items:center;min-height:44px;padding:10px 17px;background:var(--track-brass);color:#211b13;border:1px solid transparent;border-radius:7px;font-weight:750;font-size:.93rem;cursor:pointer}
-.track-primary:hover:not(:disabled){background:#f5c98f}
+.track-primary:hover:not(:disabled){background:#f4dbab}
 .track-demo-link{text-decoration:none;margin-top:16px}.track-lobby-hero .track-demo-link{margin-left:12px;background:transparent;color:var(--track-ink);border-color:var(--track-brass)}
 .track-primary:disabled{opacity:.64;cursor:wait}
 .track-auth {min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(350px,1fr)}
@@ -38,18 +39,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible {o
 .track-auth-title>p:last-child,.track-lobby-hero div>p:not(.track-kicker) {max-width:32rem;font-size:clamp(.97rem,1.6vw,1.2rem);line-height:1.52;color:var(--track-muted)}
 .track-image-credit,.track-image-credit a{font-size:.73rem;color:#bcae9a}
 .track-image-credit a{text-underline-offset:2px}
-.track-auth-form {display:grid;align-items:center;padding:clamp(26px,6vw,100px);background:radial-gradient(ellipse at 25% 25%,#27271e,transparent 80%),var(--track-bg)}
+.track-auth-form {display:grid;align-items:center;padding:clamp(26px,6vw,100px);background:radial-gradient(ellipse at 25% 25%,#23392e,transparent 80%),var(--track-bg)}
 .track-auth-form form{width:100%;max-width:435px;margin:0 auto}
 .track-auth-tabs{display:flex;gap:22px;border-bottom:1px solid var(--track-line);margin-bottom:32px}
 .track-auth-tabs button{padding:0 0 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--track-muted);font-size:.95rem;cursor:pointer}
 .track-auth-tabs button[aria-pressed=true]{border-color:var(--track-brass);color:var(--track-ink);font-weight:700}
 .track-auth form h2 {font:500 clamp(2.15rem,3.6vw,3.5rem)/1.04 var(--track-display);letter-spacing:-.045em;margin-bottom:24px}
 .track-auth form label{display:grid;gap:7px;color:var(--track-ink);font-size:.9rem;font-weight:600;margin-bottom:15px}
-.track-auth input{width:100%;padding:10px 12px;border:1px solid #645748;border-radius:7px;background:#151714;color:var(--track-ink);min-height:45px;font-size:1rem}
+.track-auth input{width:100%;padding:10px 12px;border:1px solid var(--track-line);border-radius:7px;background:#142019;color:var(--track-ink);min-height:45px;font-size:1rem}
 .track-auth form .track-primary{width:100%;margin-top:6px}
 .track-auth-error{color:#f4a297;font-size:.88rem;margin:4px 0 10px}
 .track-auth-note{color:var(--track-muted);font-size:.85rem;line-height:1.45;margin-top:16px;text-align:center}
-.track-nav{padding-inline:max(16px,calc((100% - 1340px)/2))!important;border-color:#e5b67836!important}
+.track-nav{padding-inline:max(16px,calc((100% - 1340px)/2))!important;border-color:var(--track-line)!important}
 .track-nav-brand{border:0;background:none;cursor:pointer;font-size:.9rem}
 .track-nav button:not(.track-nav-brand){color:var(--track-ink)}
 .track-lobby {padding:78px 0 60px;width:min(100% - 42px,1320px);margin:auto}
@@ -76,3 +77,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible {o
   .track-race-row{gap:8px;padding:10px}
 }
 @media(prefers-reduced-motion:reduce){.track-app *, .track-auth *{scroll-behavior:auto}}
+
+.track-modal>div{border-color:var(--track-line)!important;box-shadow:0 18px 70px #0008}
+.track-modal h2{font-family:var(--track-display)!important;font-size:28px!important;letter-spacing:-.02em!important;text-shadow:none!important;color:var(--track-ink)!important}

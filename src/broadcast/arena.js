@@ -202,7 +202,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
       animal.jockey.rotation.z = reduced ? 0 : .027*tuck - .10*energy;
       animal.rig.sample(elapsed,frame.progress[i],animal.jockey,Boolean(frame.moving?.[i])&&!reduced);
     });
-    dust.visible = live && frame.moving?.some(Boolean) && !reduced && !frame.done;
+    dust.visible = live && frame.moving?.some(Boolean) && !reduced;
     if(dust.visible) for(let i=0;i<maxDust;i++) {
       const moving=frame.active.filter(id=>frame.moving[id]);
       const id = moving[i%moving.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];

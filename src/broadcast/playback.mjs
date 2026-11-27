@@ -13,6 +13,9 @@ export const LAND = .64;
 export const VOICE = .76;
 export const MOVE = 1.38;
 export const MOVE_END = 2.52;
+// Scoring ends at the wire. Finishers then run out beyond it without earning spaces.
+export const RUN_OUT = 6;
+export const RUN_OUT_TIME = .8;
 const SEATS = [0,1,2,3,4,5];
 const GATE = [0,0,0,0,0,0];
 export const clamp=(n,lo=0,hi=1)=>Math.max(lo,Math.min(hi,n));
@@ -76,9 +79,11 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
       if(to-from!==2)return mix(from,to,smooth(amount));
       return from+smooth(clamp(amount/.43))+smooth(clamp((amount-.56)/.44));
     });
-    const world=progress.map(p=>worldAt(p,goal));
+    const runOut=source&&settled?smooth(clamp((into-MOVE_END)/RUN_OUT_TIME)):0;
+    const finishers=source?active.filter(id=>source.positions[id]>=goal):[];
+    const world=progress.map((p,id)=>worldAt(p,goal)+(finishers.includes(id)?RUN_OUT*runOut:0));
     const leaders=leadersOf(exact,active);
-    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&source.positions[id]!==previous[id]));
+    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&source.positions[id]!==previous[id])||Boolean(finishers.includes(id)&&settled&&runOut<1));
     const surge=moving.map((yes,id)=>yes?Math.sin(Math.PI*amount)*Math.min(1,Math.abs((source?.positions[id]??0)-previous[id])):0);
     const revealed=Boolean(source&&into>=LAND);
     const nextLeaders=source?leadersOf(source.positions,active):leaders;
@@ -92,7 +97,7 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     const cue=cues.findLast(c=>c.time<=time&&time<c.time+c.duration);
     return {time,sceneTime:time,index,into,rolling:Boolean(source&&into<LAND),revealed,
       roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,
-      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,
+      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,runOut,
       done,winner:done?winner:null,leaderX:Math.max(...active.map(id=>world[id])),
       launched:time>=GO,cue};
   }
@@ -139,7 +144,10 @@ export function raceMoment(frame,follow,condition='sunny'){
 }
 export function shotAt(frame,aspect,reduced=false){
   const narrow=aspect<1.5;
-  if(frame.shot==='wire'&&!frame.steady)return {from:[TRACK_FINISH-8,10,narrow?22:18],at:[TRACK_FINISH-8,.5,0],fov:narrow?51:44};
+  if(frame.shot==='wire'&&!frame.steady){
+    const center=TRACK_FINISH-8+4*(frame.runOut||0);
+    return {from:[center,10,narrow?22:18],at:[center,.5,0],fov:narrow?51:44};
+  }
   const xs=frame.active.map(id=>frame.world[id]);
   const lo=Math.min(...xs),hi=Math.max(...xs),span=Math.max(15,hi-lo+9);
   const center=(lo+hi)/2+2.5;

@@ -118,7 +118,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const faceTick=frame.rolling?Math.floor(frame.into*15):-1;
       const dice=frame.rolling?[(faceTick*3+frame.index)%6+1,(faceTick*5+frame.index+2)%6+1]:frame.roll?.dice||frame.lastRoll?.dice||[0,0];
       const contextLost=container.current?.dataset.contextLost==='true';
-      const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
+      const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.runOut>=.85,frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
       if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost,paused});}
       if(timestamp>=nextDraw){
         try{view.current?.draw(frame);}catch{setViewStatus('fallback');view.current?.dispose();view.current=null;}
@@ -163,7 +163,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       {!flat&&<div className="tv-shot-label">{frame?.tiebreak?'Three-space tiebreak':frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
       {!flat&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
       {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>Three-space tiebreak next</span></div>}
-      {!flat&&frame?.done&&<div className="tv-announcement"><span>Across the wire</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
+      {!flat&&frame?.done&&frame.runOut>=.85&&<div className="tv-announcement"><span>Across the wire</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
     </div>
     <div className="tv-sidebar">
     <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><Dice key={id} {...{follow}} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/>)}</div></div>

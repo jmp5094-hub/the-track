@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH} from './playback.mjs';
+import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH,RUN_OUT,RUN_OUT_TIME} from './playback.mjs';
 const fixture=JSON.parse(readFileSync(new URL('./exhibition.json',import.meta.url),'utf8'));
 const voice=JSON.parse(readFileSync(new URL('./voice.json',import.meta.url),'utf8'));
 const source=readFileSync(new URL('../the-track.jsx',import.meta.url),'utf8');
@@ -26,8 +26,8 @@ test('horses earning zero spaces stay at the same course coordinate',()=>{
     }
   }
 });
-test('every logical space has a fixed world coordinate through the race',()=>{
-  for(let t=0;t<playback.end+1;t+=.071){const f=playback.sample(t);f.world.forEach((x,id)=>assert.equal(x,worldAt(f.progress[id],f.goal)));}
+test('every earned space has a fixed coordinate until the finish run-out',()=>{
+  for(let t=0;t<playback.end;t+=.071){const f=playback.sample(t);f.world.forEach((x,id)=>assert.equal(x,worldAt(f.progress[id],f.goal)));}
 });
 test('doubles have a full first-space beat before the second move',()=>{
   const start=FIRST_ROLL+12*3.5;
@@ -39,7 +39,18 @@ test('the winner is revealed when the winning move reaches the physical wire',()
   const before=playback.sample(playback.end-.02),at=playback.sample(playback.end+.001);
   assert.equal(before.winner,null);assert.equal(before.done,false);assert.ok(before.world[fixture.winner]+NOSE<TRACK_FINISH);
   assert.equal(at.winner,fixture.winner);assert.equal(at.exact[fixture.winner],12);
-  assert.equal(at.world[fixture.winner]+NOSE,TRACK_FINISH);
+  assert.ok(at.world[fixture.winner]+NOSE>TRACK_FINISH);
+});
+test('finishers cross completely while scores and non-finishers stay fixed',()=>{
+  const halfway=playback.sample(playback.end+RUN_OUT_TIME/2),after=playback.sample(playback.end+RUN_OUT_TIME+.01);
+  assert.equal(halfway.moving[fixture.winner],true);
+  assert.equal(after.moving[fixture.winner],false);
+  assert.ok(after.world[fixture.winner]-2>TRACK_FINISH,'even the rear of the horse clears the line');
+  assert.equal(after.world[fixture.winner],worldAt(12)+RUN_OUT);
+  assert.deepEqual(after.exact,fixture.rolls.at(-1).positions);
+  assert.deepEqual(after.progress,fixture.rolls.at(-1).positions);
+  for(let id=0;id<6;id++)if(id!==fixture.winner)assert.equal(after.world[id],worldAt(after.exact[id]));
+  assert.deepEqual(playback.sample(playback.end+RUN_OUT_TIME+.01),after,'replay/late join remains deterministic');
 });
 test('a late join or replay sample has the same revealed dice and settled positions',()=>{
   fixture.rolls.forEach((r,i)=>{
@@ -63,7 +74,8 @@ test('tied finishers are introduced then reset to the three-space tiebreak',()=>
   const p=buildPlayback(history,3500,2,3,voice),tied=p.sample(FIRST_ROLL+3.5+2.7),restart=p.sample(FIRST_ROLL+7+.1);
   assert.equal(tied.tiePending,true);assert.deepEqual(tied.leaders,[0,1]);assert.equal(tied.winner,null);
   assert.deepEqual(restart.active,[0,1]);assert.equal(restart.goal,3);assert.deepEqual(restart.exact,[0,0,0,0,0,0]);
-  assert.equal(p.sample(p.end+.01).world[1]+NOSE,TRACK_FINISH);
+  assert.ok(tied.world[0]+NOSE>TRACK_FINISH);assert.equal(tied.world[0],tied.world[1]);
+  assert.ok(p.sample(p.end+RUN_OUT_TIME).world[1]-2>TRACK_FINISH);
 });
 test('the wire camera follows remaining spaces before the final playback percentage',()=>{
   const frame=playback.sample(FIRST_ROLL+16*3.5+.1);

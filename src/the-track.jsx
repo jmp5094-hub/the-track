@@ -3,6 +3,7 @@ import { Broadcast } from "./broadcast/Broadcast";
 import { buildPlayback } from "./broadcast/playback.mjs";
 import broadcastVoice from "./broadcast/voice.json";
 import "./track-theme.css";
+import {LobbyView,RaceEntryView,RaceResultView} from "./site/RaceViews";
 import LottieHorse, { OutlineFilters, getCoatIndex, getCoatName } from "./LottieHorse";
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
@@ -1393,7 +1394,7 @@ const GS = `
     50%     { transform: scaleX(0.9) scaleY(1.25) translateY(-6px); opacity: 0.85; }
   }
   *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-  body { background:#141614; overflow-x:hidden; font-family:var(--track-ui); }
+  body { background:var(--track-bg); overflow-x:hidden; font-family:var(--track-ui); }
   ::-webkit-scrollbar { width:6px; background:#181a17; }
   ::-webkit-scrollbar-thumb { background:#e5b67833; border-radius:3px; }
   input { font-family:inherit; }
@@ -1819,8 +1820,8 @@ function ProfilePanel({ user, schedule, auctionSchedule, now, onClose, onGoToRac
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
-      <div style={{width:"100%",maxWidth:580,background:"rgba(10,10,30,0.99)",border:"1px solid #e5b67822",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"#14251ff7",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:580,background:"var(--track-surface)",border:"1px solid #e5b67822",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:22}}>
           <div style={{display:"flex",alignItems:"center",gap:16}}>
             <button onClick={()=>setTab("avatar")} style={{width:64,height:64,borderRadius:16,background:"rgba(229,182,120,0.08)",border:"2px solid #e5b67833",fontSize:34,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title="Change avatar">
@@ -2001,8 +2002,8 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
-      <div style={{width:"100%",maxWidth:600,background:"rgba(10,10,30,0.99)",border:"1px solid #bf5fff33",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out",boxShadow:"0 0 60px #bf5fff0a"}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"#14251ff7",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:600,background:"var(--track-surface)",border:"1px solid #bf5fff33",borderRadius:20,padding:28,maxHeight:"90vh",overflow:"auto",animation:"slideIn 0.2s ease-out",boxShadow:"0 0 60px #bf5fff0a"}} onClick={e=>e.stopPropagation()}>
         
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
           <div>
@@ -2441,8 +2442,8 @@ function BankPanel({ user, onClose, onBalanceChange }) {
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.97)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
-      <div style={{width:"100%",maxWidth:520,background:"rgba(10,10,30,0.99)",border:"1px solid #ffd70033",borderRadius:20,padding:28,maxHeight:"88vh",overflow:"auto",animation:"slideIn 0.2s ease-out",boxShadow:"0 0 80px #ffd70010"}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"fixed",inset:0,background:"#14251ff7",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:520,background:"var(--track-surface)",border:"1px solid #ffd70033",borderRadius:20,padding:28,maxHeight:"88vh",overflow:"auto",animation:"slideIn 0.2s ease-out",boxShadow:"0 0 80px #ffd70010"}} onClick={e=>e.stopPropagation()}>
 
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
@@ -2718,7 +2719,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
     return (
       <>
         {/* Mobile bar: logo left, balance + burger right */}
-        <div className="track-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"rgba(20,22,20,0.97)",backdropFilter:"blur(16px)",borderBottom:"1px solid #e5b67818",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",height:52}}>
+        <div className="track-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:300,background:"#14251ff7",backdropFilter:"blur(16px)",borderBottom:"1px solid #e5b67818",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",height:52}}>
           <button type="button" className="track-nav-brand" onClick={onLobby} aria-label="The Track lobby"><TrackWordmark/></button>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {/* Balance pill */}
@@ -2781,7 +2782,7 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
 
   // ── Desktop / landscape ────────────────────────────────────────────────────
   return (
-    <div className="track-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:200,background:"rgba(20,22,20,0.96)",backdropFilter:"blur(16px)",borderBottom:"1px solid #e5b67818",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",height:56,flexShrink:0,gap:8}}>
+    <div className="track-nav" style={{position:"fixed",top:0,left:0,right:0,zIndex:200,background:"#14251ff5",backdropFilter:"blur(16px)",borderBottom:"1px solid #e5b67818",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 16px",height:56,flexShrink:0,gap:8}}>
       <button type="button" className="track-nav-brand" onClick={onLobby} aria-label="The Track lobby"><TrackWordmark/></button>
       <div style={{display:"flex",alignItems:"center",gap:4,flex:1,justifyContent:"center"}}>
         {[
@@ -2814,8 +2815,8 @@ function NavBar({ user, onLobby, onMyBets, onProfile, onPrivateRaces, onAuctions
 // ─── MODAL WRAPPER ────────────────────────────────────────────────────────────
 function Modal({ title, accent="#e5b678", onClose, children, wide }) {
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(20,22,20,0.95)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
-      <div style={{width:"100%",maxWidth:wide?680:500,background:"rgba(12,12,36,0.98)",border:`1px solid ${accent}33`,borderRadius:16,padding:28,maxHeight:"85vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
+    <div className="track-modal" style={{position:"fixed",inset:0,background:"#101c18ed",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:wide?680:500,background:"var(--track-surface)",border:`1px solid ${accent}33`,borderRadius:16,padding:28,maxHeight:"85vh",overflow:"auto",animation:"slideIn 0.2s ease-out"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <h2 style={{fontFamily:"var(--track-label)",color:accent,fontSize:17,letterSpacing:3,textShadow:`0 0 12px ${accent}`}}>{title}</h2>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#ffffff44",fontSize:22,cursor:"pointer",lineHeight:1}}>✕</button>
@@ -3260,7 +3261,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   },[secsToRaceFire, inOdds, raceStarted]);
 
   return (
-    <div style={{minHeight:"100vh",background:"#141614",paddingTop:68,paddingBottom:40}}>
+    <div style={{minHeight:"100vh",background:"var(--track-bg)",paddingTop:68,paddingBottom:40}}>
       <div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13,margin:"12px 0",display:"flex",alignItems:"center",gap:6}}>← Back</button>
 
@@ -3603,7 +3604,7 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
   const withStatus = schedule.map(r=>({...r, _st:raceStatus(r,now)})).filter(r=>r._st!=="finished");
 
   return (
-    <div style={{minHeight:"100vh",background:"#141614",paddingTop:72,paddingBottom:40}}>
+    <div style={{minHeight:"100vh",background:"var(--track-bg)",paddingTop:72,paddingBottom:40}}>
       <div style={{maxWidth:700,margin:"0 auto",padding:"16px"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:36,marginBottom:6}}>🔨</div>
@@ -3686,103 +3687,20 @@ function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
 }
 
 function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sharedPot={} }) {
-  const withStatus = useMemo(()=>schedule.map(r=>({...r,_st:raceStatus(r,now)})).filter(r=>r._st!=="finished"),[schedule,now]);
-  const sections=[
-    {title:"Live now",   filter:r=>r._st==="racing"||r._st==="locked", accent:"#ff2d55"},
-    {title:"Betting open",filter:r=>r._st==="betting",                  accent:"#97bd88"},
-    {title:"Up next",    filter:r=>r._st==="upcoming"&&r.startTime-now<60*60*1000, accent:"#ffd700"},
-    {title:"Schedule",   filter:r=>r._st==="upcoming"&&r.startTime-now>=60*60*1000,accent:"#e5b678"},
-  ];
-
-  const featured = withStatus.find(r=>r._st==="racing") || withStatus.find(r=>r._st==="locked") || withStatus[0];
-
-  return (
-    <main className="track-lobby">
-      <header className="track-lobby-hero">
-        <div>
-          <p className="track-kicker">Race card</p>
-          <h1>The Race Lobby</h1>
-          <p>View the field, check post times, and watch the race from trackside.</p>
-          {featured && <button type="button" className="track-primary" onClick={()=>onEnterRace(featured)}>
-            {featured._st==="racing"?"Watch live":"View next race"}
-          </button>}
-          <a className="track-primary track-demo-link" href="?demo=1">Watch a demo race</a>
-        </div>
-      </header>
-      <div className="track-race-card">
-        {sections.map(sec=>{
-          const races=withStatus.filter(sec.filter);
-          if(!races.length) return null;
-          return (
-            <section key={sec.title} className="track-card-section">
-              <h2>{sec.title}</h2>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {races.map(race=>{
-                  const rt=RACE_TYPES[race.type];
-                  const st=race._st;
-                  const secs=Math.floor((race.startTime-now)/1000);
-                  const draftBet=userBets[race.id]&&Object.keys(userBets[race.id]).length>0;
-                  const confirmedBetData=getConfirmed()[race.id];
-                  const hasBet=draftBet||!!confirmedBetData;
-                  const myAmt=confirmedBetData?confirmedBetData.pot:draftBet?Object.values(userBets[race.id]).reduce((s,v)=>s+(parseFloat(v)||0),0):0;
-                  const betIsConfirmed=!!confirmedBetData;
-                  return (
-                    <button type="button" className="track-race-row" key={race.id} onClick={()=>onEnterRace(race)}>
-                      <div style={{width:44,height:44,borderRadius:10,background:`${rt.color}15`,border:`2px solid ${rt.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,position:"relative"}}>
-                        {rt.icon}
-                        {race.condition&&race.condition!=="sunny"&&(
-                          <span style={{position:"absolute",bottom:-6,right:-6,fontSize:14,filter:"drop-shadow(0 0 3px rgba(0,0,0,0.8))"}}>
-                            {TRACK_CONDITIONS[race.condition].icon}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{color:"#fff",fontWeight:700,fontSize:15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{race.name}</div>
-                        <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap",alignItems:"center"}}>
-                          <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
-                          {race.condition&&race.condition!=="sunny"&&(
-                            <span style={{color:TRACK_CONDITIONS[race.condition].color,fontSize:11,fontWeight:600,background:`${TRACK_CONDITIONS[race.condition].color}18`,border:`1px solid ${TRACK_CONDITIONS[race.condition].color}44`,borderRadius:10,padding:"1px 7px"}}>
-                              {TRACK_CONDITIONS[race.condition].icon} {TRACK_CONDITIONS[race.condition].label}
-                            </span>
-                          )}
-                          {hasBet&&<span style={{background:betIsConfirmed?"rgba(229,182,120,0.1)":"rgba(255,215,0,0.1)",border:`1px solid ${betIsConfirmed?"#e5b67833":"#ffd70033"}`,borderRadius:10,padding:"1px 8px",color:betIsConfirmed?"#e5b678":"#ffd700",fontSize:11}}>{betIsConfirmed?"✓":"🎫"} ${fmt2(myAmt)}</span>}
-                          {friendRaces[race.id]>0&&<span style={{background:"rgba(191,95,255,0.12)",border:"1px solid #bf5fff33",borderRadius:10,padding:"1px 8px",color:"#bf5fff",fontSize:11}}>👥 {friendRaces[race.id]}</span>}
-{(sharedPot[race.id]?.totalPot||0)>0&&<span style={{background:"rgba(151,189,136,0.08)",border:"1px solid #97bd8833",borderRadius:10,padding:"1px 8px",color:"#97bd88",fontSize:11,fontFamily:"var(--track-label)"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span>}
-                        </div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0,minWidth:100}}>
-                        {st==="racing"&&(
-                          <div style={{background:"#ff2d55",color:"#fff",padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:700,letterSpacing:1,animation:"racingBlink 1s infinite"}}>LIVE 🔴</div>
-                        )}
-                        {st==="locked"&&(
-                          <div>
-                            <div style={{fontFamily:"var(--track-label)",color:"#ff2d55",fontSize:16,fontWeight:900,textShadow:"0 0 12px #ff2d55",lineHeight:1}}>{secs}s</div>
-                            <div style={{color:"#ff2d5577",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
-                          </div>
-                        )}
-                        {st==="betting"&&(
-                          <div>
-                            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:15,fontWeight:700,lineHeight:1}}>{fmtCD(secs-BET_CLOSE_SECS)}</div>
-                            <div style={{color:"#97bd8866",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
-                          </div>
-                        )}
-                        {st==="upcoming"&&(
-                          <div>
-                            <div style={{fontFamily:"var(--track-label)",color:secs<600?"#ffd700":"#ffffff44",fontSize:13,lineHeight:1}}>{fmtCD(secs)}</div>
-                            <div style={{color:"#ffffff22",fontSize:10,letterSpacing:1,marginTop:2}}>TO POST</div>
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-    </main>
-  );
+  const confirmed=getConfirmed();
+  const races=schedule.map(race=>{
+    const status=raceStatus(race,now),secs=Math.floor((race.startTime-now)/1000);
+    const ticket=confirmed[race.id];
+    const draft=userBets[race.id];
+    return {...race,status,typeLabel:RACE_TYPES[race.type].label,
+      conditionLabel:race.condition&&race.condition!=="sunny"?TRACK_CONDITIONS[race.condition].label:"Clear track",
+      post:fmtTime(new Date(race.startTime)),pot:sharedPot[race.id]?.totalPot||0,
+      ticket:ticket?.pot||(draft?Object.values(draft).reduce((sum,v)=>sum+(parseFloat(v)||0),0):0),
+      confirmed:!!ticket,friends:friendRaces[race.id]||0,
+      countdown:fmtCD(Math.max(0,status==="betting"?secs-BET_CLOSE_SECS:secs))};
+  }).filter(r=>r.status!=="finished");
+  // Preserve the original schedule record; view metadata is presentation only.
+  return <LobbyView races={races} onEnterRace={row=>onEnterRace(schedule.find(r=>r.id===row.id))}/>;
 }
 
 // ─── RACE DETAIL / BETTING ────────────────────────────────────────────────────
@@ -3971,7 +3889,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     const timerColor = countdown<=10?"#ff2d55":countdown<=20?"#ffd700":"#e5b678";
 
     return (
-      <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 40px",overflowY:"auto"}}>
+      <div style={{minHeight:"100vh",background:"var(--track-bg)",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 40px",overflowY:"auto"}}>
         {/* Race header */}
         <div style={{textAlign:"center",marginBottom:20}}>
           <div style={{fontSize:32,marginBottom:4}}>{rt.icon}</div>
@@ -3992,25 +3910,25 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
           </svg>
           <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
             <div style={{fontFamily:"var(--track-label)",color:timerColor,fontSize:38,fontWeight:900,lineHeight:1,textShadow:`0 0 20px ${timerColor}77`,transition:"color 0.5s"}}>{countdown}</div>
-            <div style={{color:"#ffffff44",fontSize:9,letterSpacing:2,marginTop:2}}>SECONDS</div>
+            <div style={{color:"var(--track-muted)",fontSize:9,letterSpacing:2,marginTop:2}}>SECONDS</div>
           </div>
         </div>
 
-        <div style={{fontFamily:"var(--track-label)",color:"#ffffff55",fontSize:11,letterSpacing:3,marginBottom:12,animation:"racingBlink 1s infinite"}}>
+        <div style={{fontFamily:"var(--track-label)",color:"var(--track-muted)",fontSize:11,letterSpacing:3,marginBottom:12,animation:"racingBlink 1s infinite"}}>
           {countdown<=0?"LOADING RACE…":"BETS CLOSED — RACE STARTING"}
         </div>
 
         {/* Live pot display */}
         <div style={{marginBottom:20,padding:"10px 28px",background:"rgba(255,215,0,0.07)",border:"1px solid #ffd70033",borderRadius:12,textAlign:"center"}}>
-          <div style={{color:"#ffffff44",fontSize:10,letterSpacing:3,marginBottom:3}}>🌐 LIVE POT</div>
+          <div style={{color:"var(--track-muted)",fontSize:10,letterSpacing:3,marginBottom:3}}>🌐 LIVE POT</div>
           <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:28,fontWeight:900,textShadow:"0 0 20px #ffd70066"}}>${fmt2(spTotal||0)}</div>
         </div>
 
         {/* Odds reveal — stage card swipes in from right at fixed height, hangs, then list grows below */}
         <div style={{width:"100%",maxWidth:480,overflow:"hidden"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <span style={{color:"#ffffff33",fontSize:11,letterSpacing:2}}>RACE ODDS</span>
-            <span style={{color:"#ffffff22",fontSize:10}}>{enteredEarly?"revealing…":"final odds"}</span>
+            <span style={{color:"var(--track-muted)",fontSize:11,letterSpacing:2}}>RACE ODDS</span>
+            <span style={{color:"var(--track-muted)",fontSize:10}}>{enteredEarly?"revealing…":"final odds"}</span>
           </div>
 
           {/* Stage — fixed height slot where newest card swipes in and hangs */}
@@ -4029,7 +3947,7 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
                     <div style={{width:34,height:34,borderRadius:"50%",background:`${h.color}18`,border:`2px solid ${h.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
                     <div style={{flex:1}}>
                       <div style={{color:h.color,fontWeight:700,fontSize:14}}>{rank} {horseName(race,h.id)}</div>
-                      <div style={{color:"#ffffff33",fontSize:11,marginTop:1}}>{i===0?"FAVOURITE":i===HORSES.length-1?"LONG SHOT":""}</div>
+                      <div style={{color:"var(--track-muted)",fontSize:11,marginTop:1}}>{i===0?"FAVOURITE":i===HORSES.length-1?"LONG SHOT":""}</div>
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontFamily:"var(--track-label)",color:odds?"#ffd700":"#ffffff33",fontSize:18,fontWeight:900,textShadow:odds?"0 0 10px #ffd70066":"none"}}>{odds?`${odds.toFixed(2)}x`:"—"}</div>
@@ -4079,142 +3997,13 @@ function RaceDetailScreen({ race, user, now, onBack, onConfirmBets, confirmedBet
     );
   }
 
-  // ── BETTING OPEN or TOO EARLY ──────────────────────────────────────────────
-  return (
-    <div style={{minHeight:"100vh",background:"#141614",paddingTop:72,paddingBottom:40}}>
-      <div style={{maxWidth:700,margin:"0 auto",padding:"16px 16px 0"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13,marginBottom:14,display:"flex",alignItems:"center",gap:6}}>← Back to Lobby</button>
-
-        {/* Race header */}
-        <div style={{padding:"18px 22px",background:`${rt.color}0a`,border:`1px solid ${rt.color}44`,borderRadius:14,marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <div style={{fontSize:38}}>{rt.icon}</div>
-            <div style={{flex:1}}>
-              <h1 style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:20,letterSpacing:2}}>{race.name}</h1>
-              <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{color:rt.color,fontWeight:700,fontSize:13}}>{rt.label}</span>
-                <span style={{color:"#ffffff33"}}>·</span>
-                <span style={{color:"#ffffff55",fontSize:13}}>🕐 {fmtTime(new Date(race.startTime))}</span>
-                <span style={{color:"#ffffff33"}}>·</span>
-                <span style={{color:"#ffffff44",fontSize:13}}>{rt.dice} dice per roll</span>
-              </div>
-            </div>
-            {canBet&&!confirmed&&<div style={{background:"rgba(151,189,136,0.15)",border:"1px solid #97bd8844",color:"#97bd88",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>BETTING OPEN</div>}
-            {confirmed&&<div style={{background:"rgba(229,182,120,0.15)",border:"1px solid #e5b67844",color:"#e5b678",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:700,letterSpacing:1}}>✓ BETS CONFIRMED</div>}
-            {st==="upcoming"&&<div style={{color:"#ffffff44",fontFamily:"var(--track-label)",fontSize:13}}>{fmtCD(liveSecs)}</div>}
-          </div>
-          <p style={{color:"#ffffff55",fontSize:13,marginTop:12,lineHeight:1.6}}>{rt.desc}</p>
-        </div>
-
-        {/* Too early — betting not open yet */}
-        {st==="upcoming"&&(
-          <div style={{textAlign:"center",padding:"32px 20px",background:"rgba(255,255,255,0.02)",borderRadius:12,marginBottom:20}}>
-            <div style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:16,marginBottom:8}}>BETTING OPENS IN</div>
-            <div style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:44,textShadow:"0 0 20px #ffd700"}}>{fmtCD(liveSecs - BET_OPEN_HOURS*3600)}</div>
-            <p style={{color:"#ffffff33",marginTop:12,fontSize:12}}>Opens {BET_OPEN_HOURS}h before post · Closes 30s before start</p>
-          </div>
-        )}
-
-        {/* Betting open — timer bar */}
-        {canBet&&(
-          <div style={{marginBottom:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{color:"#ffffff44",fontSize:12,letterSpacing:2}}>BETTING CLOSES IN</span>
-              <span style={{fontFamily:"var(--track-label)",color:bettingSecsLeft<120?"#ff2d55":"#ffd700",fontSize:15,textShadow:bettingSecsLeft<120?"0 0 12px #ff2d55":"none"}}>{fmtCD(bettingSecsLeft)}</span>
-            </div>
-            <div style={{height:7,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:bettingSecsLeft<120?"linear-gradient(90deg,#ff2d55,#ff6b00)":"linear-gradient(90deg,#e5b678,#97bd88)",boxShadow:`0 0 8px ${bettingSecsLeft<120?"#ff2d55":"#e5b678"}`,transition:"width 1s linear"}}/>
-            </div>
-          </div>
-        )}
-
-        {/* Confirmed banner */}
-        {confirmed&&canBet&&(
-          <div style={{background:"rgba(229,182,120,0.06)",border:"1px solid #e5b67833",borderRadius:10,padding:"12px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:20}}>✅</span>
-            <div>
-              <div style={{color:"#e5b678",fontWeight:700,fontSize:14}}>Bets Confirmed!</div>
-              <div style={{color:"#ffffff44",fontSize:12,marginTop:2}}>Your bets are locked in. Race fires at post time. Sit tight!</div>
-            </div>
-          </div>
-        )}
-
-        {/* Horse bet cards */}
-        {canBet&&(
-          <>
-            <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(255,215,0,0.05)",border:"1px solid #ffd70022",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-              <div style={{textAlign:"left"}}>
-                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>YOUR BET</div>
-                <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:18}}>${fmt2(totalBet)}</div>
-              </div>
-              <div style={{width:1,height:32,background:"rgba(255,255,255,0.08)"}}/>
-              <div style={{textAlign:"right"}}>
-                <div style={{color:"#ffffff44",fontSize:10,letterSpacing:2,marginBottom:2}}>🌐 LIVE POT</div>
-                <div style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:18,textShadow:"0 0 10px #e5b67866"}}>${fmt2(sharedPot?.totalPot||0)}</div>
-              </div>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
-              {HORSES.map(h=>{
-                const betVal=localBets[h.id]||"";
-                const betNum=parseFloat(betVal)||0;
-                return (
-                  <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",borderRadius:12,border:`1px solid ${betNum>0?h.color+"55":"rgba(255,255,255,0.06)"}`,boxShadow:betNum>0?`0 0 16px ${h.color}14`:"none",transition:"all 0.2s"}}>
-                    <div style={{width:38,height:38,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,background:`${h.color}15`,border:`2px solid ${h.color}`,boxShadow:`0 0 8px ${h.color}44`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-                    <div style={{flex:1}}><div style={{color:h.color,fontWeight:700,fontSize:14,letterSpacing:1}}>{horseName(race, h.id)}</div></div>
-                    {/* Always editable while betting window is open */}
-                    <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                      <div style={{position:"relative"}}>
-                        <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#ffd70066",fontSize:13,pointerEvents:"none"}}>$</span>
-                        <input type="number" min="0" placeholder="0" value={betVal}
-                          onChange={e=>saveBet(h.id,e.target.value)}
-                          style={{width:86,padding:"7px 7px 7px 20px",background:"rgba(255,255,255,0.06)",border:`1px solid ${betNum>0?h.color+"55":"#ffffff15"}`,borderRadius:7,color:"#fff",fontSize:16,outline:"none"}}/>
-                      </div>
-                      <button onClick={()=>saveBet(h.id,betVal?"":"50")} style={{padding:"7px 11px",borderRadius:7,border:`1px solid ${h.color}44`,background:betNum>0?`${h.color}18`:"transparent",color:betNum>0?h.color:"#ffffff33",cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:1}}>{betNum>0?"✓":"+"}</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-
-            {/* Always show action area while betting is open */}
-            <div style={{textAlign:"center"}}>
-              {overBalance&&<p style={{color:"#ff2d55",marginBottom:8,fontSize:13}}>⚠ Exceeds available balance (${fmt2(availableBalance)})</p>}
-              {confirmed ? (
-                <div>
-                  {/* Confirmed state — show green banner + Edit button */}
-                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(229,182,120,0.07)",border:"1px solid #e5b67844",borderRadius:10,marginBottom:12}}>
-                    <span style={{fontSize:18}}>✅</span>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{color:"#e5b678",fontWeight:700,fontSize:13}}>Bets Confirmed — ${fmt2(totalBet)} locked</div>
-                      <div style={{color:"#ffffff44",fontSize:11,marginTop:2}}>Race fires at post time. You can still edit until bets close.</div>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-                    <button onClick={handleEditBets} style={{padding:"11px 26px",borderRadius:10,border:"1px solid #ffd70044",background:"rgba(255,215,0,0.08)",color:"#ffd700",cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:2}}>
-                      ✏️ EDIT BETS
-                    </button>
-                    <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"11px 26px",borderRadius:10,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBet<=0?"#ffffff33":"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:12,letterSpacing:2,boxShadow:overBalance||totalBet<=0?"none":"0 0 20px #e5b67855"}}>
-                      🔒 UPDATE BETS
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <button onClick={handleConfirm} disabled={overBalance||totalBet<=0} style={{padding:"14px 44px",borderRadius:12,border:"none",cursor:overBalance||totalBet<=0?"not-allowed":"pointer",background:overBalance||totalBet<=0?"rgba(255,255,255,0.07)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBet<=0?"#ffffff33":"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:3,boxShadow:overBalance||totalBet<=0?"none":"0 0 28px #e5b67866"}}>
-                    🔒 CONFIRM BETS
-                  </button>
-                  <p style={{color:"#ffffff22",fontSize:11,marginTop:8}}>Race fires at post time · Available: ${fmt2(availableBalance)}</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-
-    </div>
-  );
+  // Shared view keeps account logic above separate from the race presentation.
+  return <RaceEntryView race={race} names={HORSES.map(h=>horseName(race,h.id))}
+    typeLabel={rt.label} description={rt.desc} post={fmtTime(new Date(race.startTime))}
+    canBet={canBet} confirmed={confirmed} bets={localBets} totalBet={totalBet}
+    pot={sharedPot?.totalPot||0} availableBalance={availableBalance} overBalance={overBalance}
+    countdown={fmtCD(bettingSecsLeft)} openCountdown={fmtCD(liveSecs-BET_OPEN_HOURS*3600)}
+    onBack={onBack} onBet={saveBet} onConfirm={handleConfirm}/>;
 }
 
 // ─── ODDS REVEAL ──────────────────────────────────────────────────────────────
@@ -4223,7 +4012,7 @@ function OddsRevealScreen({ race, bets, totalPot, odds }) {
   const rt=RACE_TYPES[race.type];
   useEffect(()=>{const t=setInterval(()=>setCount(c=>Math.max(0,c-1)),1000);return()=>clearInterval(t);},[]);
   return (
-    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px"}}>
+    <div style={{minHeight:"100vh",background:"var(--track-bg)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px"}}>
       <div style={{fontSize:44,marginBottom:10}}>{rt.icon}</div>
       <h1 style={{fontFamily:"var(--track-label)",color:"#ffd700",fontSize:22,letterSpacing:4,textShadow:"0 0 20px #ffd700",marginBottom:4}}>{race.name}</h1>
       <p style={{color:rt.color,letterSpacing:2,marginBottom:6,fontSize:13,fontWeight:700}}>{rt.label.toUpperCase()}</p>
@@ -5942,7 +5731,7 @@ function LegacyRaceScreen({ race, bets, totalPot, onRaceEnd, user, chatMsgs, set
   const cond = TRACK_CONDITIONS[race.condition||"sunny"];
 
   return (
-    <div style={{height:"100vh",background:"#141614",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+    <div style={{height:"100vh",background:"var(--track-bg)",paddingTop:isLandscape?0:(isReplay?0:56),display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
       {winner!==null&&<Confetti/>}
 
       {/* TIE dramatic overlay */}
@@ -6296,7 +6085,7 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
   const myResult = results[user?.username]||{};
 
   return (
-    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 60px",overflowY:"auto"}}>
+    <div style={{minHeight:"100vh",background:"var(--track-bg)",display:"flex",flexDirection:"column",alignItems:"center",padding:"72px 16px 60px",overflowY:"auto"}}>
       <Confetti/>
       {/* Race label */}
       <div style={{color:"#ffffff33",fontSize:11,letterSpacing:3,marginBottom:8}}>{rt.icon} {pr.name.toUpperCase()} · PRIVATE RACE</div>
@@ -6400,167 +6189,12 @@ function ConfettiPieces({ color }) {
 // ─── PAYOUT SCREEN ────────────────────────────────────────────────────────────
 function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayAgain, onLobby }) {
   const [replaying,setReplaying]=useState(false);
-  const hasTicket=Object.values(bets||{}).some(value=>Number(value)>0);
-  const horse=HORSES[winner], rt=RACE_TYPES[race.type];
-  const wName = horseName(race, winner);
-  const coat  = horseCoat(race, winner);
-  const userBetAmt=bets[winner]||0;
-  const payout=userBetAmt>0&&odds[winner]?userBetAmt*odds[winner]:0;
-
-  // ── Cinematic winner CSS ─────────────────────────────────────────────────────
-  const winCSS = `
-    @keyframes pw_gallopIn {
-      0%   { transform: scaleX(-1) translateX(700px); }
-      65%  { transform: scaleX(-1) translateX(-22px); }
-      82%  { transform: scaleX(-1) translateX(10px); }
-      100% { transform: scaleX(-1) translateX(0); }
-    }
-    @keyframes pw_bounce {
-      0%,100% { transform: scaleX(-1) translateY(0); }
-      50%     { transform: scaleX(-1) translateY(-9px); }
-    }
-    @keyframes pw_glow {
-      0%,100% { filter: ${coat} drop-shadow(0 0 10px ${horse.color}88); }
-      50%     { filter: ${coat} drop-shadow(0 0 32px ${horse.color}) drop-shadow(0 0 60px ${horse.color}66); }
-    }
-    @keyframes pw_crownDrop {
-      0%   { transform: translateX(-50%) translateY(-90px); opacity:0; }
-      100% { transform: translateX(-50%) translateY(-8px);  opacity:1; }
-    }
-    @keyframes pw_crownGlow {
-      0%,100% { filter: drop-shadow(0 0 14px #ffd700) drop-shadow(0 0 36px #ffd70077); }
-      50%     { filter: drop-shadow(0 0 28px #ffd700) drop-shadow(0 0 60px #ffd700aa); }
-    }
-    @keyframes pw_sash {
-      0%   { opacity:1; clip-path: inset(0 100% 0 0); }
-      100% { opacity:1; clip-path: inset(0 0% 0 0); }
-    }
-    @keyframes pw_ringBurst {
-      0%   { transform: translate(-50%,-50%) scale(0.2); opacity:0.9; }
-      100% { transform: translate(-50%,-50%) scale(4);   opacity:0; }
-    }
-    @keyframes pw_starBurst {
-      0%   { opacity:1; transform: translate(-50%,-50%) rotate(var(--a)) translateY(0); }
-      60%  { opacity:1; transform: translate(-50%,-50%) rotate(var(--a)) translateY(var(--d)); }
-      100% { opacity:0; transform: translate(-50%,-50%) rotate(var(--a)) translateY(calc(var(--d) * 1.4)); }
-    }
-    @keyframes pw_dust {
-      0%   { opacity:0.7; transform: scale(0.4); }
-      100% { opacity:0;   transform: scale(2.4) translateX(28px); }
-    }
-    @keyframes pw_nameReveal {
-      0%   { opacity:0; transform: scale(0.82) translateY(10px); letter-spacing:10px; }
-      100% { opacity:1; transform: scale(1)    translateY(0);    letter-spacing:3px; }
-    }
-    @keyframes pw_fadeUp {
-      from { opacity:0; transform: translateY(10px); }
-      to   { opacity:1; transform: translateY(0); }
-    }
-    @keyframes pw_spot {
-      0%,100% { opacity:0.5; } 50% { opacity:1; }
-    }
-    @keyframes pw_confetti {
-      0%   { opacity:1; transform: translateY(0)    rotate(0deg)   translateX(0); }
-      50%  { opacity:1; transform: translateY(42vh) rotate(420deg) translateX(var(--dx)); }
-      100% { opacity:0; transform: translateY(100vh) rotate(840deg) translateX(calc(var(--dx)*1.6)); }
-    }
-  `;
-
-  return (
-    <div style={{minHeight:"100vh",background:"#141614",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 20px 40px",overflowY:"auto",position:"relative",overflow:"hidden"}}>
-      <style>{winCSS}</style>
-
-      {/* Spotlight */}
-      <div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:480,height:"100vh",background:`radial-gradient(ellipse 55% 100% at 50% 0%, ${horse.color}18 0%, transparent 65%)`,pointerEvents:"none",animation:"pw_spot 2s ease-in-out infinite"}}/>
-
-      {/* Confetti */}
-      <ConfettiPieces color={horse.color}/>
-
-      <div style={{color:"#ffffff33",fontSize:11,letterSpacing:3,marginBottom:16,animation:"pw_fadeUp 0.5s ease-out 0.1s both"}}>{rt.icon} {race.name.toUpperCase()}</div>
-
-      {/* ── Horse cinematic ── */}
-      <div style={{position:"relative",marginBottom:0,height:130,width:260,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-
-        {/* Burst rings on skid stop */}
-        {[horse.color,"#ff8c00","#ffffff44"].map((col,i)=>(
-          <div key={i} style={{position:"absolute",top:"50%",left:"50%",width:90,height:90,border:`2px solid ${col}`,borderRadius:"50%",animation:`pw_ringBurst 0.65s ease-out ${0.74+i*0.1}s both`}}/>
-        ))}
-
-        {/* Star burst */}
-        {["⭐","✨","⭐","✨","⭐","✨","⭐"].map((s,i)=>(
-          <div key={i} style={{position:"absolute",top:"50%",left:"50%",fontSize:18,opacity:0,
-            ["--a"]: `${i*51}deg`, ["--d"]: `-${82+i%2*14}px`,
-            animation:`pw_starBurst 0.75s ease-out ${1.65+i*0.04}s both`}}>{s}</div>
-        ))}
-
-        {/* Crown */}
-        <div style={{position:"absolute",top:0,left:"50%",fontSize:48,opacity:0,
-          animation:`pw_crownDrop 0.5s cubic-bezier(0.34,1.56,0.64,1) 1.6s forwards, pw_crownGlow 1.2s ease-in-out 2.1s infinite`,
-          filter:"drop-shadow(0 0 16px #ffd700) drop-shadow(0 0 40px #ffd70077)",zIndex:10}}>👑</div>
-
-        {/* Sash */}
-        <div style={{position:"absolute",top:"44%",left:"50%",transform:"translateX(-50%) rotate(-15deg)",
-          background:"linear-gradient(135deg,#ffd700,#ff8c00,#ffd700)",
-          color:"#141614",fontSize:12,fontWeight:900,letterSpacing:3,padding:"5px 24px",
-          whiteSpace:"nowrap",opacity:0,clipPath:"inset(0 100% 0 0)",
-          animation:"pw_sash 0.45s ease-out 2.1s forwards",
-          boxShadow:"0 2px 20px #ffd70066",borderTop:"1px solid rgba(255,255,255,0.4)",zIndex:5}}>
-          🏆 &nbsp;WINNER&nbsp; 🏆
-        </div>
-
-        {/* Horse */}
-        <div style={{fontSize:100,lineHeight:1,
-          filter:coat,
-          animation:`pw_gallopIn 0.7s cubic-bezier(0.22,1,0.36,1) 0.1s forwards, pw_bounce 0.22s ease-in-out 0.82s 4, pw_glow 1.5s ease-in-out 2.0s infinite`}}>🐴</div>
-
-        {/* Dust puff */}
-        <div style={{position:"absolute",right:10,bottom:0,fontSize:36,opacity:0,
-          animation:"pw_dust 0.65s ease-out 0.76s forwards"}}>💨</div>
-      </div>
-
-      {/* Winner name */}
-      <div style={{color:"#ffffff33",fontSize:10,letterSpacing:5,marginTop:20,opacity:0,animation:"pw_fadeUp 0.5s ease-out 2.5s forwards"}}>RACE WINNER</div>
-      <div style={{fontFamily:"var(--track-label)",fontSize:26,fontWeight:900,letterSpacing:3,
-        color:horse.color,textShadow:`0 0 30px ${horse.color}, 0 0 60px ${horse.color}66`,
-        textAlign:"center",opacity:0,animation:"pw_nameReveal 0.6s cubic-bezier(0.22,1,0.36,1) 2.7s forwards",marginTop:6}}>{wName}</div>
-      <div style={{color:"#ffffff33",letterSpacing:5,fontSize:10,marginTop:8,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.0s forwards"}}>WINS THE RACE</div>
-      <div style={{width:"100%",maxWidth:440,marginTop:20,marginBottom:20,padding:"18px",borderRadius:14,textAlign:"center",background:payout>0?"rgba(151,189,136,0.07)":"rgba(255,45,85,0.07)",border:`1px solid ${payout>0?"#97bd8833":"#ff2d5533"}`,opacity:0,animation:"pw_fadeUp 0.5s ease-out 3.2s forwards"}}>
-        {payout>0?(
-          <>
-            <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:24,textShadow:"0 0 20px #97bd88"}}>YOU WON!</div>
-            <div style={{color:"#ffd700",fontFamily:"var(--track-label)",fontSize:22,marginTop:6}}>+${fmt2(payout)}</div>
-            <div style={{color:"#ffffff44",marginTop:4,fontSize:13}}>at {(odds[winner]||1).toFixed(2)}x · bet ${userBetAmt}</div>
-          </>
-        ):(
-          <>
-            <div style={{fontFamily:"var(--track-label)",color:hasTicket?"#ff2d55":"#e5b678",fontSize:20}}>{hasTicket?"TICKET RESULT":"RACE COMPLETE"}</div>
-            <div style={{color:"#c7baa8",marginTop:6,fontSize:13}}>{hasTicket?"Your ticket did not pay out.":"You watched this race without a wager."}</div>
-          </>
-        )}
-      </div>
-      <div style={{color:"#ffffff44",marginBottom:6,fontSize:13,opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.4s forwards"}}>Balance: <span style={{color:"#ffd700",fontFamily:"var(--track-label)"}}>${fmt2(userBalance)}</span></div>
-      <div style={{width:"100%",maxWidth:440,marginBottom:24}}>
-        <div style={{color:"#ffffff22",fontSize:11,letterSpacing:2,marginBottom:8,textAlign:"center"}}>FINAL ODDS</div>
-        {HORSES.map(h=>(
-          <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",marginBottom:4,borderRadius:9,background:"rgba(255,255,255,0.03)",border:`1px solid ${h.id===winner?h.color+"44":"rgba(255,255,255,0.06)"}`}}>
-            <div style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:`${h.color}15`,border:`1.5px solid ${h.color}`,flexShrink:0}}><span style={{filter:horseCoat(race,h.id)}}>🐴</span></div>
-            <HorseName race={race} horseId={h.id} style={{flex:1,color:h.id===winner?h.color:"#ffffff66",fontWeight:700,fontSize:13}}/>
-            {h.id===winner&&<span style={{color:"#ffd700",fontSize:10,letterSpacing:1}}>WINNER</span>}
-            <span style={{color:"#e5b678",fontFamily:"var(--track-label)",fontSize:12}}>{odds[h.id]?`${odds[h.id].toFixed(2)}x`:"—"}</span>
-            {bets[h.id]>0&&<span style={{color:"#ffd70055",fontSize:11}}>${bets[h.id]}</span>}
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",opacity:0,animation:"pw_fadeUp 0.4s ease-out 3.5s forwards"}}>
-        <button className="track-primary" onClick={()=>setReplaying(true)}>Replay race</button>
-        <button onClick={onLobby} style={{padding:"13px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e5b678,#97bd88)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:2,boxShadow:"0 0 28px #e5b67866"}}>🏠 BACK TO LOBBY</button>
-      </div>
-      {replaying&&<RaceReplayScreen race={race} onClose={()=>setReplaying(false)}/>}
-    </div>
-  );
+  return <>
+    <RaceResultView race={race} names={HORSES.map(h=>horseName(race,h.id))} winner={winner}
+      bets={bets} odds={odds} userBalance={userBalance} onReplay={()=>setReplaying(true)} onLobby={onLobby}/>
+    {replaying&&<RaceReplayScreen race={race} onClose={()=>setReplaying(false)}/>}
+  </>;
 }
-
-
 
 // ─── PROVABLY FAIR ────────────────────────────────────────────────────────────
 function ProvablyFairBadge({ race, expanded=false }) {
@@ -6679,7 +6313,7 @@ function RaceReplayScreen({ race, onClose }) {
   const rt = RACE_TYPES[race.type]||RACE_TYPES.standard;
 
   return (
-    <div style={{position:"fixed",inset:0,zIndex:600,background:"#141614",display:"flex",flexDirection:"column"}}>
+    <div style={{position:"fixed",inset:0,zIndex:600,background:"var(--track-bg)",display:"flex",flexDirection:"column"}}>
       {/* Replay header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"rgba(20,22,20,0.98)",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0,zIndex:10}}>
         <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
@@ -7662,13 +7296,13 @@ function App() {
         />
       )}
       {showAuction && !selectedAuctionRace && (
-        <div style={{position:"fixed",inset:0,zIndex:50,background:"#141614",overflowY:"auto"}}>
+        <div style={{position:"fixed",inset:0,zIndex:50,background:"var(--track-bg)",overflowY:"auto"}}>
           <AuctionLobbyScreen schedule={auctionSchedule} now={now} onEnterRace={race=>{setSelectedAuctionRace(race);}} sharedPot={sharedPot}/>
           <button onClick={()=>setShowAuction(false)} style={{position:"fixed",top:16,left:16,zIndex:60,background:"none",border:"none",color:"#ffffff44",cursor:"pointer",fontSize:13}}>← Close</button>
         </div>
       )}
       {showAuction && selectedAuctionRace && screen!=="race" && (
-        <div style={{position:"fixed",inset:0,zIndex:50,background:"#141614",overflowY:"auto"}}>
+        <div style={{position:"fixed",inset:0,zIndex:50,background:"var(--track-bg)",overflowY:"auto"}}>
           <AuctionRaceScreen
             race={auctionSchedule.find(r=>r.id===selectedAuctionRace.id)||selectedAuctionRace}
             user={user} now={now}
