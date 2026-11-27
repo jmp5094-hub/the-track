@@ -1,4 +1,5 @@
 import {raceDistance,RACE_FORMATS,courseRules} from '../../functions/race-rules.mjs';
+import {planCommentary} from './commentary.mjs';
 // Presentation consumes settled engine history. It never rolls dice or changes results.
 export const SILKS = ['#00f5ff','#ff2d55','#ffd700','#97bd88','#bf5fff','#ff8c00'];
 export const PIPS = [[],[4],[0,8],[0,4,8],[0,2,6,8],[0,2,4,6,8],[0,2,3,5,6,8]];
@@ -52,35 +53,12 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
   const tieActive=tieStart>0?(rolls[tieStart].active||SEATS.filter(id=>positions[tieStart-1][id]>=mainGoal||rolls.slice(tieStart).some(r=>r.moves?.some(m=>m.horse===id)))):[];
   if(tieStart>0&&!tieActive.length)return null;
   const historicalResult=positions.at(-1)[winner]<goalAt(rolls.length-1)||rolls.some(r=>r.positions.some(p=>p<(roundTrip&&r.phase!=='tiebreak'?homeSpace:0)||p>(r.phase==='tiebreak'?tieSpaces:raceSpaces)));
-  const primaryKey=roll=>type==='magic_dice'&&roll.phase!=='tiebreak'||roll.dice.length!==2||roll.mudDieIdx!=null||roll.fogDieIdx!=null?null:roll.dice.join('');
   const end=FIRST_ROLL+(rolls.length-1)*cycle+MOVE_END;
-  const call=(key,time)=>voice[key]?{key,time,...voice[key]}:null;
-  const cues=[call('open',GO+.04)].filter(Boolean);
-  let previous=GATE,priorLeaders=SEATS,stretchCalled=false,chanceCalled=false;
-  rolls.forEach((roll,index)=>{
-    const start=FIRST_ROLL+index*cycle;
-    const active=index>=tieStart&&tieStart>0?tieActive:SEATS;
-    const primary=call(primaryKey(roll),start+VOICE);
-    if(primary)cues.push(primary);
-    const leaders=leadersOf(positions[index],active);
-    const remaining=goalAt(index)-Math.max(...active.map(id=>positions[index][id]));
-    const beatTime=start+Math.max(MOVE_END,VOICE+(primary?.duration||0)+.08);
-    const fits=cue=>cue&&cue.time+cue.duration<start+cycle+VOICE-.08;
-    if(index===tieStart-1){
-      const cue=call('tiebreak',start+MOVE_END);
-      if(cue&&cue.time+cue.duration<start+cycle+VOICE-.06)cues.push(cue);
-    }else if(remaining>0){
-      const stretch=!stretchCalled&&remaining<=3?call('stretch',beatTime):null;
-      const chance=!chanceCalled&&remaining===1?call('chance',beatTime):null;
-      const lead=leaders.length===1&&(priorLeaders.length>1||!priorLeaders.includes(leaders[0]))&&index>0&&index!==tieStart&&positions[index][leaders[0]]>previous[leaders[0]]?call('lead'+(leaders[0]+1),beatTime):null;
-      const cue=[stretch,lead,chance].find(fits);
-      if(cue){cues.push(cue);if(cue===stretch)stretchCalled=true;if(cue===chance)chanceCalled=true;}
-    }
-    previous=positions[index];priorLeaders=leaders;
-  });
-  const lastCall=voice[primaryKey(rolls.at(-1))];
-  const winAt=Math.max(end+.15,FIRST_ROLL+(rolls.length-1)*cycle+VOICE+(lastCall?.duration||0)+.08);
-  const win=call('win'+(winner+1),winAt);if(win)cues.push(win);
+  const {cues,stories}=planCommentary({rolls,positions,cycle,goalAt,tieStart,tieActive,type,voice,timing:{FIRST_ROLL,GO,VOICE,MOVE_END}});
+  const lastCall=cues.at(-1);
+  const winAt=Math.max(end+.15,(lastCall?.time||0)+(lastCall?.duration||0)+.09);
+  const winKey=voice['winAlt'+(winner+1)]&&rolls[0].dice[0]%2?'winAlt'+(winner+1):'win'+(winner+1);
+  const win=voice[winKey]?{...voice[winKey],key:winKey,time:winAt,kind:'winner'}:null;if(win)cues.push(win);
   function sample(seconds){
     const time=Math.max(0,seconds),done=time>=end;
     const index=time<FIRST_ROLL?-1:Math.min(rolls.length-1,Math.floor((time-FIRST_ROLL)/cycle));
@@ -123,12 +101,12 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     const cue=cues.findLast(c=>c.time<=time&&time<c.time+c.duration);
     return {time,sceneTime:time,index,into,rolling:Boolean(source&&into<LAND),revealed,
       roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,matched,waiting,
-      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,tieSpaces,
+      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,tieSpaces,reaction:settled?stories[index]?.reaction:null,
       type,condition,roundTrip:homeFinish,directions,jumps,jumping:jumping.map(yes=>revealed&&yes),hurdleX:worldAt(HURDLE_SPACE,goal),physical,historicalResult,formatLabel:RACE_FORMATS[type],finishX:homeFinish?homeSpace*SPACE:TRACK_FINISH,startX:homeFinish?-SPACE/2:worldAt(0,goal),
       done,winner:done?winner:null,leaderX:Math.max(...active.map(id=>world[id])),
       launched:time>=GO,cue};
   }
-  return {sample,cues,end,endHold:Math.max(3.4,winAt-end+(win?.duration||0)+.6),cycle};
+  return {sample,cues,end,endHold:Math.max(3.4,winAt-end+(win?.duration||0)+.6),cycle,winningRollAt:FIRST_ROLL+(rolls.length-1)*cycle};
 }
 export function describeRoll(roll,previous,type='standard',previousLegDone=[]){
   if(!roll)return type==='magic_dice'?'First die: horse. Second die: distance. Race out and back.':type==='triple_dice'?'Three dice move their matching horses.':'Every matching die moves its numbered horse one space.';

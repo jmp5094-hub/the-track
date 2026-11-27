@@ -1,0 +1,638 @@
+{
+  "alt11": {
+    "file": "race-calls",
+    "text": "A pair of ones.",
+    "offset": 0.059,
+    "duration": 1.196
+  },
+  "alt12": {
+    "file": "race-calls",
+    "text": "One and two on the dice.",
+    "offset": 1.745,
+    "duration": 1.59
+  },
+  "alt13": {
+    "file": "race-calls",
+    "text": "It's one and three.",
+    "offset": 3.865,
+    "duration": 1.15
+  },
+  "alt14": {
+    "file": "race-calls",
+    "text": "One with a four.",
+    "offset": 5.751,
+    "duration": 1.024
+  },
+  "alt15": {
+    "file": "race-calls",
+    "text": "One and five on the dice.",
+    "offset": 7.522,
+    "duration": 1.413
+  },
+  "alt16": {
+    "file": "race-calls",
+    "text": "It's one and six.",
+    "offset": 9.385,
+    "duration": 1.31
+  },
+  "alt22": {
+    "file": "race-calls",
+    "text": "A pair of twos.",
+    "offset": 11.137,
+    "duration": 1.158
+  },
+  "alt23": {
+    "file": "race-calls",
+    "text": "Two with a three.",
+    "offset": 12.817,
+    "duration": 1.718
+  },
+  "alt24": {
+    "file": "race-calls",
+    "text": "Two and four on the dice.",
+    "offset": 14.505,
+    "duration": 1.95
+  },
+  "alt25": {
+    "file": "race-calls",
+    "text": "It's two and five.",
+    "offset": 16.425,
+    "duration": 1.79
+  },
+  "alt26": {
+    "file": "race-calls",
+    "text": "Two with a six.",
+    "offset": 18.185,
+    "duration": 1.63
+  },
+  "alt33": {
+    "file": "race-calls",
+    "text": "A pair of threes.",
+    "offset": 19.785,
+    "duration": 1.717
+  },
+  "alt34": {
+    "file": "race-calls",
+    "text": "It's three and four.",
+    "offset": 21.465,
+    "duration": 1.725
+  },
+  "alt35": {
+    "file": "race-calls",
+    "text": "Three with a five.",
+    "offset": 23.225,
+    "duration": 1.71
+  },
+  "alt36": {
+    "file": "race-calls",
+    "text": "Three and six on the dice.",
+    "offset": 24.905,
+    "duration": 2.03
+  },
+  "alt44": {
+    "file": "race-calls",
+    "text": "A pair of fours.",
+    "offset": 26.905,
+    "duration": 1.645
+  },
+  "alt45": {
+    "file": "race-calls",
+    "text": "Four and five on the dice.",
+    "offset": 28.585,
+    "duration": 1.95
+  },
+  "alt46": {
+    "file": "race-calls",
+    "text": "It's four and six.",
+    "offset": 30.505,
+    "duration": 1.71
+  },
+  "alt55": {
+    "file": "race-calls",
+    "text": "A pair of fives.",
+    "offset": 32.185,
+    "duration": 1.639
+  },
+  "alt56": {
+    "file": "race-calls",
+    "text": "Five with a six.",
+    "offset": 33.865,
+    "duration": 1.55
+  },
+  "alt66": {
+    "file": "race-calls",
+    "text": "A pair of sixes.",
+    "offset": 35.385,
+    "duration": 1.71
+  },
+  "urgent11": {
+    "file": "race-calls",
+    "text": "Double ones!",
+    "offset": 37.145,
+    "duration": 1.39
+  },
+  "urgent12": {
+    "file": "race-calls",
+    "text": "one and two!",
+    "offset": 38.505,
+    "duration": 1.15
+  },
+  "urgent13": {
+    "file": "race-calls",
+    "text": "one and three!",
+    "offset": 39.705,
+    "duration": 1.23
+  },
+  "urgent14": {
+    "file": "race-calls",
+    "text": "one and four!",
+    "offset": 40.905,
+    "duration": 1.31
+  },
+  "urgent15": {
+    "file": "race-calls",
+    "text": "one and five!",
+    "offset": 42.265,
+    "duration": 1.31
+  },
+  "urgent16": {
+    "file": "race-calls",
+    "text": "one and six!",
+    "offset": 43.625,
+    "duration": 1.31
+  },
+  "urgent22": {
+    "file": "race-calls",
+    "text": "Double twos!",
+    "offset": 45.116,
+    "duration": 1.019
+  },
+  "urgent23": {
+    "file": "race-calls",
+    "text": "two and three!",
+    "offset": 46.105,
+    "duration": 1.23
+  },
+  "urgent24": {
+    "file": "race-calls",
+    "text": "two and four!",
+    "offset": 47.305,
+    "duration": 1.23
+  },
+  "urgent25": {
+    "file": "race-calls",
+    "text": "two and five!",
+    "offset": 48.57,
+    "duration": 1.245
+  },
+  "urgent26": {
+    "file": "race-calls",
+    "text": "two and six!",
+    "offset": 49.785,
+    "duration": 1.31
+  },
+  "urgent33": {
+    "file": "race-calls",
+    "text": "Double threes!",
+    "offset": 51.065,
+    "duration": 1.31
+  },
+  "urgent34": {
+    "file": "race-calls",
+    "text": "three and four!",
+    "offset": 52.345,
+    "duration": 1.23
+  },
+  "urgent35": {
+    "file": "race-calls",
+    "text": "three and five!",
+    "offset": 53.545,
+    "duration": 1.23
+  },
+  "urgent36": {
+    "file": "race-calls",
+    "text": "three and six!",
+    "offset": 54.745,
+    "duration": 1.39
+  },
+  "urgent44": {
+    "file": "race-calls",
+    "text": "Double fours!",
+    "offset": 56.105,
+    "duration": 1.31
+  },
+  "urgent45": {
+    "file": "race-calls",
+    "text": "four and five!",
+    "offset": 57.385,
+    "duration": 1.23
+  },
+  "urgent46": {
+    "file": "race-calls",
+    "text": "four and six!",
+    "offset": 58.585,
+    "duration": 1.31
+  },
+  "urgent55": {
+    "file": "race-calls",
+    "text": "Double fives!",
+    "offset": 59.865,
+    "duration": 1.31
+  },
+  "urgent56": {
+    "file": "race-calls",
+    "text": "five and six!",
+    "offset": 61.145,
+    "duration": 1.23
+  },
+  "urgent66": {
+    "file": "race-calls",
+    "text": "Double sixes!",
+    "offset": 62.345,
+    "duration": 1.47
+  },
+  "leadAlt1": {
+    "file": "race-calls",
+    "text": "Number one hits the front!",
+    "offset": 63.923,
+    "duration": 1.652
+  },
+  "leadAlt2": {
+    "file": "race-calls",
+    "text": "Number two hits the front!",
+    "offset": 65.545,
+    "duration": 1.71
+  },
+  "leadAlt3": {
+    "file": "race-calls",
+    "text": "Number three hits the front!",
+    "offset": 67.225,
+    "duration": 1.87
+  },
+  "leadAlt4": {
+    "file": "race-calls",
+    "text": "Number four hits the front!",
+    "offset": 69.203,
+    "duration": 1.652
+  },
+  "leadAlt5": {
+    "file": "race-calls",
+    "text": "Number five hits the front!",
+    "offset": 70.963,
+    "duration": 1.652
+  },
+  "leadAlt6": {
+    "file": "race-calls",
+    "text": "Number six hits the front!",
+    "offset": 72.796,
+    "duration": 1.499
+  },
+  "winAlt1": {
+    "file": "race-calls",
+    "text": "It's number one at the wire!",
+    "offset": 74.33,
+    "duration": 1.805
+  },
+  "winAlt2": {
+    "file": "race-calls",
+    "text": "It's number two at the wire!",
+    "offset": 76.105,
+    "duration": 1.79
+  },
+  "winAlt3": {
+    "file": "race-calls",
+    "text": "It's number three at the wire!",
+    "offset": 77.865,
+    "duration": 1.87
+  },
+  "winAlt4": {
+    "file": "race-calls",
+    "text": "It's number four at the wire!",
+    "offset": 79.705,
+    "duration": 1.87
+  },
+  "winAlt5": {
+    "file": "race-calls",
+    "text": "It's number five at the wire!",
+    "offset": 81.545,
+    "duration": 1.95
+  },
+  "winAlt6": {
+    "file": "race-calls",
+    "text": "It's number six at the wire!",
+    "offset": 83.53,
+    "duration": 1.805
+  },
+  "stretchAlt": {
+    "file": "race-calls",
+    "text": "Now the finish is in sight!",
+    "offset": 85.307,
+    "duration": 1.892
+  },
+  "stretchClose": {
+    "file": "race-calls",
+    "text": "Here comes the pressure!",
+    "offset": 87.285,
+    "duration": 1.18
+  },
+  "chanceAlt": {
+    "file": "race-calls",
+    "text": "This next roll could settle it!",
+    "offset": 88.427,
+    "duration": 1.892
+  },
+  "chanceClose": {
+    "file": "race-calls",
+    "text": "So close to the wire now!",
+    "offset": 90.427,
+    "duration": 1.797
+  },
+  "miss": {
+    "file": "race-calls",
+    "text": "Not this time!",
+    "offset": 92.187,
+    "duration": 1.158
+  },
+  "missAlt": {
+    "file": "race-calls",
+    "text": "They'll have to wait!",
+    "offset": 93.307,
+    "duration": 1.31
+  },
+  "jump": {
+    "file": "race-calls",
+    "text": "Up and over, beautifully!",
+    "offset": 94.725,
+    "duration": 1.839
+  },
+  "jumpAlt": {
+    "file": "race-calls",
+    "text": "Clears it cleanly!",
+    "offset": 96.72,
+    "duration": 1.201
+  },
+  "blocked": {
+    "file": "race-calls",
+    "text": "Still waiting on that pair.",
+    "offset": 98.027,
+    "duration": 1.798
+  },
+  "blockedAlt": {
+    "file": "race-calls",
+    "text": "Held at the hurdle.",
+    "offset": 99.787,
+    "duration": 1.23
+  },
+  "turn": {
+    "file": "race-calls",
+    "text": "Around the turn, heading home!",
+    "offset": 101.067,
+    "duration": 1.91
+  },
+  "turnAlt": {
+    "file": "race-calls",
+    "text": "Back towards home now!",
+    "offset": 103.387,
+    "duration": 1.19
+  },
+  "rain": {
+    "file": "race-calls",
+    "text": "The mud takes one away.",
+    "offset": 104.987,
+    "duration": 1.59
+  },
+  "rainAlt": {
+    "file": "race-calls",
+    "text": "One die lost to the rain.",
+    "offset": 107.067,
+    "duration": 1.83
+  },
+  "fog": {
+    "file": "race-calls",
+    "text": "A step back in the fog.",
+    "offset": 109.307,
+    "duration": 1.51
+  },
+  "fogAlt": {
+    "file": "race-calls",
+    "text": "The fog sends one backwards.",
+    "offset": 111.147,
+    "duration": 2.117
+  },
+  "level": {
+    "file": "race-calls",
+    "text": "They're level at the front!",
+    "offset": 113.227,
+    "duration": 1.47
+  },
+  "levelAlt": {
+    "file": "race-calls",
+    "text": "Nothing between the leaders!",
+    "offset": 114.987,
+    "duration": 1.55
+  },
+  "opensGap": {
+    "file": "race-calls",
+    "text": "The leader opens up daylight!",
+    "offset": 116.667,
+    "duration": 1.79
+  },
+  "closesGap": {
+    "file": "race-calls",
+    "text": "The chasing pack is closing!",
+    "offset": 118.588,
+    "duration": 2.123
+  },
+  "openAlt": {
+    "file": "race-calls",
+    "text": "The gates open, and we're racing!",
+    "offset": 120.735,
+    "duration": 2.123
+  },
+  "tiebreakAlt": {
+    "file": "race-calls",
+    "text": "Together at the wire! A tiebreak!",
+    "offset": 122.988,
+    "duration": 2.51
+  },
+  "alt21": {
+    "file": "race-calls",
+    "text": "One and two on the dice.",
+    "offset": 1.745,
+    "duration": 1.59
+  },
+  "alt31": {
+    "file": "race-calls",
+    "text": "It's one and three.",
+    "offset": 3.865,
+    "duration": 1.15
+  },
+  "alt41": {
+    "file": "race-calls",
+    "text": "One with a four.",
+    "offset": 5.751,
+    "duration": 1.024
+  },
+  "alt51": {
+    "file": "race-calls",
+    "text": "One and five on the dice.",
+    "offset": 7.522,
+    "duration": 1.413
+  },
+  "alt61": {
+    "file": "race-calls",
+    "text": "It's one and six.",
+    "offset": 9.385,
+    "duration": 1.31
+  },
+  "alt32": {
+    "file": "race-calls",
+    "text": "Two with a three.",
+    "offset": 12.817,
+    "duration": 1.718
+  },
+  "alt42": {
+    "file": "race-calls",
+    "text": "Two and four on the dice.",
+    "offset": 14.505,
+    "duration": 1.95
+  },
+  "alt52": {
+    "file": "race-calls",
+    "text": "It's two and five.",
+    "offset": 16.425,
+    "duration": 1.79
+  },
+  "alt62": {
+    "file": "race-calls",
+    "text": "Two with a six.",
+    "offset": 18.185,
+    "duration": 1.63
+  },
+  "alt43": {
+    "file": "race-calls",
+    "text": "It's three and four.",
+    "offset": 21.465,
+    "duration": 1.725
+  },
+  "alt53": {
+    "file": "race-calls",
+    "text": "Three with a five.",
+    "offset": 23.225,
+    "duration": 1.71
+  },
+  "alt63": {
+    "file": "race-calls",
+    "text": "Three and six on the dice.",
+    "offset": 24.905,
+    "duration": 2.03
+  },
+  "alt54": {
+    "file": "race-calls",
+    "text": "Four and five on the dice.",
+    "offset": 28.585,
+    "duration": 1.95
+  },
+  "alt64": {
+    "file": "race-calls",
+    "text": "It's four and six.",
+    "offset": 30.505,
+    "duration": 1.71
+  },
+  "alt65": {
+    "file": "race-calls",
+    "text": "Five with a six.",
+    "offset": 33.865,
+    "duration": 1.55
+  },
+  "urgent21": {
+    "file": "race-calls",
+    "text": "one and two!",
+    "offset": 38.505,
+    "duration": 1.15
+  },
+  "urgent31": {
+    "file": "race-calls",
+    "text": "one and three!",
+    "offset": 39.705,
+    "duration": 1.23
+  },
+  "urgent41": {
+    "file": "race-calls",
+    "text": "one and four!",
+    "offset": 40.905,
+    "duration": 1.31
+  },
+  "urgent51": {
+    "file": "race-calls",
+    "text": "one and five!",
+    "offset": 42.265,
+    "duration": 1.31
+  },
+  "urgent61": {
+    "file": "race-calls",
+    "text": "one and six!",
+    "offset": 43.625,
+    "duration": 1.31
+  },
+  "urgent32": {
+    "file": "race-calls",
+    "text": "two and three!",
+    "offset": 46.105,
+    "duration": 1.23
+  },
+  "urgent42": {
+    "file": "race-calls",
+    "text": "two and four!",
+    "offset": 47.305,
+    "duration": 1.23
+  },
+  "urgent52": {
+    "file": "race-calls",
+    "text": "two and five!",
+    "offset": 48.57,
+    "duration": 1.245
+  },
+  "urgent62": {
+    "file": "race-calls",
+    "text": "two and six!",
+    "offset": 49.785,
+    "duration": 1.31
+  },
+  "urgent43": {
+    "file": "race-calls",
+    "text": "three and four!",
+    "offset": 52.345,
+    "duration": 1.23
+  },
+  "urgent53": {
+    "file": "race-calls",
+    "text": "three and five!",
+    "offset": 53.545,
+    "duration": 1.23
+  },
+  "urgent63": {
+    "file": "race-calls",
+    "text": "three and six!",
+    "offset": 54.745,
+    "duration": 1.39
+  },
+  "urgent54": {
+    "file": "race-calls",
+    "text": "four and five!",
+    "offset": 57.385,
+    "duration": 1.23
+  },
+  "urgent64": {
+    "file": "race-calls",
+    "text": "four and six!",
+    "offset": 58.585,
+    "duration": 1.31
+  },
+  "urgent65": {
+    "file": "race-calls",
+    "text": "five and six!",
+    "offset": 61.145,
+    "duration": 1.23
+  }
+}

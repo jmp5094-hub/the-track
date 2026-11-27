@@ -1,6 +1,6 @@
 import {raceAudioPlan} from './audio-plan.mjs';
 import {raceAudio} from './audio-session';
-const files={crowd:'crowd.mp3',pulse:'pulse.mp3',hooves:'hooves.mp3',roar:'roar.mp3'};
+const files={crowd:'crowd.mp3',pulse:'pulse.mp3',hooves:'hooves.mp3',roar:'roar.mp3',rattle:'dice-rattle.mp3',land:'dice-land.mp3',cheer:'cheer.mp3',ooh:'ooh.mp3',victory:'victory.mp3'};
 const downloads=new Map();
 const getBytes=key=>{
   if(!downloads.has(key))downloads.set(key,fetch(import.meta.env.BASE_URL+'broadcast/audio/'+files[key]).then(r=>{if(!r.ok)throw Error('Audio unavailable');return r.arrayBuffer();}).catch(e=>{downloads.delete(key);throw e;}));
@@ -35,9 +35,11 @@ export function createRaceSoundscape(ctx){
     const source=ctx.createBufferSource(),gain=ctx.createGain(),panner=ctx.createStereoPanner();
     source.buffer=buffers[kind];source.playbackRate.value=speed;panner.pan.value=Math.max(-.7,Math.min(.7,pan));
     const seconds=Math.min(duration||source.buffer.duration,source.buffer.duration)/speed;
-    gain.gain.setValueAtTime(kind==='roar'?.48*level:.62*level,ctx.currentTime);
+    const baseLevel={roar:.75,cheer:.85,ooh:.75,victory:.9};
+    gain.gain.setValueAtTime((baseLevel[kind]??.62)*level,ctx.currentTime);
     gain.gain.setValueAtTime(gain.gain.value,ctx.currentTime+Math.max(0,seconds-.07));gain.gain.linearRampToValueAtTime(0,ctx.currentTime+seconds);
-    source.connect(gain).connect(panner).connect(raceAudio.output(kind==='roar'?'ambience':'effects'));shots.add(source);source.start(0,0,seconds*speed);
+    // Short reactions share the ducked effects bus; the continuous crowd stays on ambience.
+    source.connect(gain).connect(panner).connect(raceAudio.output('effects'));shots.add(source);source.start(0,0,seconds*speed);
     source.onended=()=>{shots.delete(source);source.disconnect();gain.disconnect();panner.disconnect();};return true;
   }
   function dispose(){disposed=true;stop();unregister();}

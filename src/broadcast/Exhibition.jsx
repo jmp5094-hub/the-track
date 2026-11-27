@@ -34,7 +34,6 @@ export default function Exhibition(){
       <button type="button" aria-label="Playback speed" onClick={()=>{const next=speed===1?2:1;control.current.speed=next;setSpeed(next);}}>{speed}×</button>
     </div>
     <Broadcast key={race.id} race={race} history={history} names={names} replay exhibition controlRef={control} followHorse={follow} onFollow={setFollow}
-      onFinish={finish}/>
-    {finished&&<section className="exhibition-result" aria-live="polite"><p>THE DECISIVE ROLL</p><h2>{names[history.winner]} wins the Brass Cup.</h2><p>{follow===history.winner?'You followed the winner.':`You followed #${follow+1} ${names[follow]}. #${history.winner+1} crossed first.`} This exhibition has no wagers or payouts.</p><button type="button" onClick={()=>go(playback.end-8)}>Replay the finish</button><a href="/">Enter The Track</a></section>}
+      onFinish={finish} onReplayWinningRoll={()=>go(playback.winningRollAt-.05)}/>
   </main>;
 }

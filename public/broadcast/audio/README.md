@@ -7,7 +7,13 @@ Custom assets generated with ElevenLabs for The Track on November 27, 2026.
 - `crowd.mp3`: outdoor race crowd atmosphere, looped quietly and raised in the home stretch.
 - `pulse.mp3`: 136 BPM sports percussion with short strings and brass accents, without vocals. Reduced before decisive rolls and under commentary; fades after the finish.
 - `hooves.mp3`: short packed-dirt gallop, triggered only for actual movement.
-- `roar.mp3`: finish cheer; quieter short accents after settled lead changes.
+- `roar.mp3`: the full finish cheer.
+- `race-calls.mp3`: 76 additional David Wolfe calls, including alternate basic dice phrases, urgent dice takes, lead/winner variations and short reactions to hurdles, turns, weather, gaps and missed chances. Eleven v4; -17 LUFS / -2 dBTP. Word-aligned offsets in `src/broadcast/voice-variety.json`. Basic calls remain on every eligible two-dice roll; selection uses current race facts and avoids consecutive identical phrasing. No real-time speech service is required.
+- `dice-rattle.mp3` / `dice-land.mp3`: short resin-dice and felt-tray foley, synchronized with roll and settle.
+- `cheer.mp3` / `ooh.mp3`: distinct lead/jump and missed-chance crowd reactions. Missed chances have a three-roll cooldown; finishes take priority.
+- `victory.mp3`: a compact warm-brass finish flourish beneath the caller. New effects use -20 LUFS / -3 dBTP and the shared ducking/mute controls.
+
+Polish asset source flow: https://elevenlabs.io/app/flows/eFk0tagdK02B5UTBZgJ9
 
 All stems are normalized with headroom. Browser playback remains opt-in. Pause, mute, replay jumps, hidden tabs and unmount stop current playback. Audio never changes race results or roll timing.
 

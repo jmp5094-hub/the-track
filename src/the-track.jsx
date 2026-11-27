@@ -9,7 +9,7 @@ import {RaceIntro} from "./broadcast/RaceIntro";
 import {AudioControls} from "./broadcast/AudioControls";
 import {raceAudio} from "./broadcast/audio-session";
 import {ODDS_SECONDS,auctionOddsSeconds,privateCountdownSeconds,privateStartAt,raceStartAt} from "../functions/race-timing.mjs";
-import { buildPlayback } from "./broadcast/playback.mjs";
+import { buildPlayback, FIRST_ROLL } from "./broadcast/playback.mjs";
 import broadcastVoice from "./broadcast/voice.json";
 import "./track-theme.css";
 import {LobbyView,RaceEntryView,RaceResultView} from "./site/RaceViews";
@@ -4227,7 +4227,7 @@ function RaceScreen(props) {
   return <UnifiedRaceScreen key={props.race.id} {...props}/>;
 }
 
-function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isReplay, replayRolls, replayWinner, replaySpeedRef,
+function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isReplay, replayRolls, replayWinner, replaySpeedRef, replayControlRef, onReplayWinningRoll,
   chatMsgs, setChatMsgs, chatOpen, setChatOpen, chatUnread, setChatUnread }) {
   const [saved,setSaved] = useState(null);
   const [invalid,setInvalid] = useState(false);
@@ -4255,7 +4255,7 @@ function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepla
   return <>
     <Broadcast {...{race,history,names,startTime}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
       tieSpaces={TIEBREAK_SPACES} clock={gameNow} replay={isReplay} speedRef={replaySpeedRef}
-      onFinish={onRaceEnd}
+      onFinish={onRaceEnd} controlRef={replayControlRef} onReplayWinningRoll={onReplayWinningRoll}
       effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners} bets={bets}/>
     {user && !isReplay && <RaceChat {...chatProps}/>}
   </>;
@@ -4266,6 +4266,7 @@ function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepla
 
 // ─── PRIVATE RACE PAYOUT SCREEN ──────────────────────────────────────────────
 function PrivatePayoutScreen({ race, winner, user, onLobby }) {
+  const [replaying,setReplaying]=useState(false);
   const pr = getPrivateRaces()[race?._privateCode];
   if(!pr) return <div style={{color:"#fff",padding:40,textAlign:"center"}}>Race data not found.<br/><button onClick={onLobby} style={{marginTop:20,padding:"10px 20px",background:"#e5b678",border:"none",borderRadius:8,cursor:"pointer",fontFamily:"var(--track-label)",fontWeight:700}}>LOBBY</button></div>;
 
@@ -4343,6 +4344,8 @@ function PrivatePayoutScreen({ race, winner, user, onLobby }) {
         })}
       </div>
 
+      <button className="track-secondary" onClick={()=>setReplaying(true)} style={{marginBottom:12}}>Watch the winning roll</button>
+      {replaying&&<RaceReplayScreen race={race} clip="finish" onClose={()=>setReplaying(false)}/>}
       <button onClick={onLobby} style={{padding:"14px 40px",borderRadius:12,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#e5b678,#a27342)",color:"#141614",fontFamily:"var(--track-label)",fontWeight:700,fontSize:14,letterSpacing:3,boxShadow:"none"}}>
         BACK TO LOBBY
       </button>
@@ -4381,11 +4384,11 @@ function ConfettiPieces({ color }) {
 
 // ─── PAYOUT SCREEN ────────────────────────────────────────────────────────────
 function PayoutScreen({ race, bets, totalPot, odds, winner, userBalance, onPlayAgain, onLobby }) {
-  const [replaying,setReplaying]=useState(false);
+  const [replaying,setReplaying]=useState(null);
   return <>
     <RaceResultView race={race} names={HORSES.map(h=>horseName(race,h.id))} winner={winner}
-      bets={bets} odds={odds} userBalance={userBalance} onReplay={()=>setReplaying(true)} onLobby={onLobby}/>
-    {replaying&&<RaceReplayScreen race={race} onClose={()=>setReplaying(false)}/>}
+      bets={bets} odds={odds} userBalance={userBalance} onReplay={()=>setReplaying('full')} onWatchWinningRoll={()=>setReplaying('finish')} onLobby={onLobby}/>
+    {replaying&&<RaceReplayScreen race={race} clip={replaying} onClose={()=>setReplaying(null)}/>}
   </>;
 }
 
@@ -4480,7 +4483,7 @@ function ProvablyFairBadge({ race, expanded=false }) {
 
 
 // ─── RACE REPLAY SCREEN ───────────────────────────────────────────────────────
-function RaceReplayScreen({ race, onClose }) {
+function RaceReplayScreen({ race, onClose, clip='full' }) {
   const [rolls,    setRolls]    = useState(null);
   const [unavailable,setUnavailable] = useState(false);
   const [winner,   setWinner]   = useState(null);
@@ -4488,6 +4491,7 @@ function RaceReplayScreen({ race, onClose }) {
   const [speed,    setSpeed]    = useState(1);
   const [finished, setFinished] = useState(false);
   const speedRef = useRef(1);
+  const replayControlRef=useRef({time:0,paused:false,speed:1,version:0});
 
   useEffect(()=>{
     let active=true;
@@ -4495,16 +4499,20 @@ function RaceReplayScreen({ race, onClose }) {
     fbGetRaceRoll(race.id).then(rd=>{
       if(!active)return;
       const result=rd||(Number.isFinite(race.seed)?simulateRaceWithHistory(race.type,race.condition||'sunny',race.seed,race.engineVersion):null);
-      if(result?.rolls?.length){setRolls(result.rolls);setWinner(result.winner);setReplayVersion(result.engineVersion??race.engineVersion??1);}
+      if(result?.rolls?.length){
+        replayControlRef.current={time:clip==='finish'?FIRST_ROLL+(result.rolls.length-1)*ROLL_INTERVAL/1000-.05:0,paused:false,speed:1,version:replayControlRef.current.version+1};
+        setRolls(result.rolls);setWinner(result.winner);setReplayVersion(result.engineVersion??race.engineVersion??1);
+      }
       else setUnavailable(true);
     }).catch(()=>{if(active)setUnavailable(true);});
     return()=>{active=false;};
-  },[race.id,race.type,race.condition,race.seed,race.engineVersion]);
+  },[race.id,race.type,race.condition,race.seed,race.engineVersion,clip]);
 
   const toggleSpeed = () => {
     const s = speed===1?2:1;
-    setSpeed(s); speedRef.current=s;
+    setSpeed(s); speedRef.current=s;replayControlRef.current.speed=s;
   };
+  const watchWinningRoll=()=>{if(!rolls?.length)return;replayControlRef.current.time=FIRST_ROLL+(rolls.length-1)*ROLL_INTERVAL/1000-.05;replayControlRef.current.paused=false;replayControlRef.current.version++;setFinished(false);};
 
   const rt = RACE_TYPES[race.type]||RACE_TYPES.standard;
 
@@ -4538,11 +4546,11 @@ function RaceReplayScreen({ race, onClose }) {
           <RaceScreen
             race={{...race,engineVersion:replayVersion, startTime: Date.now() + 1200, nowMs: Date.now()}}
             bets={{}} totalPot={0}
-            onRaceEnd={()=>setFinished(true)}
+            onRaceEnd={()=>{replayControlRef.current.paused=true;setFinished(true);}}
             user={null} chatMsgs={[]} setChatMsgs={()=>{}} chatOpen={false}
             setChatOpen={()=>{}} chatUnread={0} setChatUnread={()=>{}}
             auctionOwners={null}
-            replayRolls={rolls} replayWinner={winner} replaySpeed={speed} replaySpeedRef={speedRef}
+            replayRolls={rolls} replayWinner={winner} replaySpeed={speed} replaySpeedRef={speedRef} replayControlRef={replayControlRef} onReplayWinningRoll={watchWinningRoll}
             isReplay={true}
           />
         </div>

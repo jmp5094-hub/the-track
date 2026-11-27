@@ -60,18 +60,19 @@ export function RaceEntryView({race,names,typeLabel,description,post,canBet,conf
   </Container>;
 }
 
-export function RaceResultView({race,names,winner,bets={},odds={},userBalance,onReplay,onLobby,preview=false}){
+export function RaceResultView({race,names,winner,bets={},odds={},userBalance,onReplay,onWatchWinningRoll,onLobby,preview=false}){
   const hasTicket=Object.values(bets).some(v=>Number(v)>0),stake=Number(bets[winner]||0),payout=stake>0&&odds[winner]?stake*odds[winner]:0;
   return <main className="site-page site-results">
     <p className="track-kicker">{preview?'Sample result':'Race complete'} · {race.name}</p>
-    <div className="site-result-hero"><RunnerNumber id={winner}/><span>Across the wire</span><h1>{names[winner]}</h1><p>Wins {race.name}</p></div>
+    <div className="site-result-hero" style={{'--winner-silk':SILKS[winner],borderBottom:'3px solid var(--winner-silk)'}}><RunnerNumber id={winner}/><span>Across the wire</span><h1>{names[winner]}</h1><p>Wins {race.name}</p></div>
     <div className="site-results-grid"><section className="site-panel site-final-field"><div className="site-section-heading"><h2>The final field</h2><span>Final odds</span></div>
       {names.map((name,id)=><div className={'site-final-row '+(id===winner?'is-winner':'')} key={id}><RunnerNumber id={id}/><strong>{name}</strong>{id===winner&&<span className="site-winner-label">Winner</span>}<span>{odds[id]?`${Number(odds[id]).toFixed(2)}×`:'—'}</span>{Number(bets[id])>0&&<small>Bet {money(bets[id])}</small>}</div>)}
     </section><aside className="site-panel site-result-ticket"><p className="track-kicker">{hasTicket?'Your ticket':'From the rail'}</p><h2>{payout>0?'Winning ticket':hasTicket?'Ticket result':'You saw it happen.'}</h2>
       {payout>0?<><strong className="site-payout">{money(payout)}</strong><p>Payout on a {money(stake)} stake at {Number(odds[winner]).toFixed(2)}×.</p></>:<p>{hasTicket?'Your ticket did not pay out.':'You watched this race without a wager.'}</p>}
       {userBalance!=null&&<p className="site-result-balance">Balance <strong>{money(userBalance)}</strong></p>}
       {preview&&<p className="site-preview-note">Design preview · sample result.</p>}
-      <button className="track-primary" onClick={onReplay}>Replay the race</button><button className="track-secondary" onClick={onLobby}>Back to the lobby</button>
+      {onWatchWinningRoll&&<button className="track-primary" onClick={onWatchWinningRoll}>Watch the winning roll</button>}
+      <button className={onWatchWinningRoll?'track-secondary':'track-primary'} onClick={onReplay}>Replay the race</button><button className="track-secondary" onClick={onLobby}>Back to the lobby</button>
     </aside></div>
   </main>;
 }

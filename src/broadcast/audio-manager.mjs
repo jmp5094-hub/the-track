@@ -56,7 +56,7 @@ export function createAudioManager({storage,createContext,loadBuffer,visible=()=
   function prepare(){
     if(!voicePromise){
       voiceStatus='loading';emit();
-      voicePromise=Promise.all([load('announcer'),load('gate-intro')]).then(()=>{voiceStatus='ready';mix();emit();syncLobby();return true;},()=>{voicePromise=null;voiceStatus='error';mix();emit();return false;});
+      voicePromise=Promise.all([load('announcer'),load('gate-intro'),load('race-calls')]).then(()=>{voiceStatus='ready';mix();emit();syncLobby();return true;},()=>{voicePromise=null;voiceStatus='error';mix();emit();return false;});
     }
     return voicePromise;
   }

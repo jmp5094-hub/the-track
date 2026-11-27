@@ -1,6 +1,8 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {buildPlayback,describeRoll,rootingHint,raceMoment,LAND,MOVE,MOVE_END,PIPS,SILKS,HURDLE_SPACE} from './playback.mjs';
 import voice from './voice.json';
+import extraVoice from './voice-variety.json';
+import {WinnerRibbon} from './WinnerRibbon';
 import {playRaceEffect,stopRaceEffects} from './race-sound';
 import {createRaceSoundscape} from './soundscape';
 import {loadAnnouncer} from './announcer';
@@ -11,6 +13,7 @@ import './broadcast.css';
 
 const readPreference=(key,fallback)=>{try{return localStorage.getItem(key)||fallback;}catch{return fallback;}};
 const savePreference=(key,value)=>{try{localStorage.setItem(key,String(value));}catch{}};
+const commentary={...voice,...extraVoice};
 
 function Dice({value,rolling,revealed,weather,follow}){
   return <span aria-hidden="true" style={{'--die-silk':SILKS[value-1]||'#f4e3c1'}} className={'tv-die'+(rolling?' is-rolling':'')+(revealed?' is-landed':'')+(!rolling&&value===follow+1?' is-hit':'')+(weather?' '+weather:'')}>
@@ -38,8 +41,8 @@ export function RaceField({frame,names,follow,onFollow,flat=false}){
 
 export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,names,clock=Date.now,startTime=0,replay=false,
   speedRef,onFinish=()=>{},effects={},owners,bets={},
-  controlRef,followHorse,onFollow,onFrame,exhibition=false}){
-  const playback=useMemo(()=>buildPlayback(history,interval,spaces,tieSpaces,voice,race.type,race.condition),[history,interval,spaces,tieSpaces,race.type,race.condition]);
+  controlRef,followHorse,onFollow,onFrame,onReplayWinningRoll,exhibition=false}){
+  const playback=useMemo(()=>buildPlayback(history,interval,spaces,tieSpaces,commentary,race.type,race.condition),[history,interval,spaces,tieSpaces,race.type,race.condition]);
   const savedKey='track-follow-'+race.id;
   const backed=Object.keys(bets).map(Number).filter(id=>Number(bets[id])>0&&id>=0&&id<6);
   const [localFollow,setLocalFollow]=useState(()=>{
@@ -67,7 +70,8 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       if(audio.current.context&&audio.current.context!==ctx){stopVoice();audio.current.mix?.dispose();audio.current={};}
       audio.current.context=ctx;
       audio.current.mix??=createRaceSoundscape(ctx);
-      audio.current.promise??=loadAnnouncer(ctx).then(buffer=>{audio.current.buffer=buffer;}).catch(()=>{audio.current.promise=undefined;});
+      const session=audio.current;
+      session.promise??=Promise.all(['announcer','race-calls'].map(async file=>{const buffer=await loadAnnouncer(ctx,file);(session.buffers??={})[file]=buffer;})).catch(()=>{session.promise=undefined;});
     }catch{}
   }
   useEffect(()=>{
@@ -107,8 +111,8 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       if(!sound)stopVoice();
       if(!withEffects)stopRaceEffects(ctx);
       if(frame.launched&&!started){started=true;if(withEffects&&elapsed<1.1)playRaceEffect(ctx,'gate');}
-      if(frame.index>=0&&frame.index!==lastRoll){lastRoll=frame.index;if(withEffects&&frame.into<.2)playRaceEffect(ctx,'rattle');}
-      if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(withEffects&&frame.into<LAND+.18)playRaceEffect(ctx,'land');}
+      if(frame.index>=0&&frame.index!==lastRoll){lastRoll=frame.index;if(withEffects&&frame.into<.2&&!audio.current.mix?.effect('rattle',{speed}))playRaceEffect(ctx,'rattle');}
+      if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(withEffects&&frame.into<LAND+.18&&!audio.current.mix?.effect('land',{speed}))playRaceEffect(ctx,'land');}
       const step=frame.into>=MOVE&&frame.into<MOVE_END?frame.index:-1;
       if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){
         lastStep=step;
@@ -120,15 +124,16 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       }
       const landedJump=frame.jumping.some(Boolean)&&frame.settled;
       if(landedJump&&frame.index!==lastLanding){lastLanding=frame.index;if(withEffects&&frame.into<MOVE_END+.18)playRaceEffect(ctx,'touchdown');}
-      if(frame.done&&!atWire){atWire=true;if(withEffects&&elapsed<playback.end+.25){audio.current.mix?.effect('roar',{speed});}}
-      if((frame.leadChange||landedJump)&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(withEffects&&!frame.done&&frame.into<MOVE_END+.1)audio.current.mix?.effect('roar',{duration:1.15,level:(frame.leadChange ? .36 : .27)*(frame.cue ? .55 : 1),speed});}
+      if(frame.done&&!atWire){atWire=true;if(withEffects&&elapsed<playback.end+.25){audio.current.mix?.effect('roar',{speed});audio.current.mix?.effect('victory',{level:.8,speed});}}
+      if(frame.reaction&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(withEffects&&!frame.done&&frame.into<MOVE_END+.16)audio.current.mix?.effect(frame.reaction==='tie'?'cheer':frame.reaction,{level:frame.reaction==='ooh'?.8:.7,speed});}
       const cue=frame.cue,cueTag=cue?cue.key+'@'+cue.time:'';
       if(cue&&cueTag!==lastCue){
         const offset=frame.time-cue.time;
         if(offset>=.24)lastCue=cueTag;
-        if(sound&&offset<.24&&audio.current.buffer){
+        const buffer=audio.current.buffers?.[cue.file||'announcer'];
+        if(sound&&offset<.24&&buffer){
           stopVoice();lastCue=cueTag;
-          audio.current.source=raceAudio.playVoice(audio.current.buffer,{speed,offset:cue.offset+offset,duration:cue.duration-offset});
+          audio.current.source=raceAudio.playVoice(buffer,{speed,offset:cue.offset+offset,duration:cue.duration-offset});
         }
       }
       const faceTick=frame.rolling?Math.floor(frame.into*15):-1;
@@ -182,12 +187,13 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       {!flat&&<div className="tv-shot-label">{frame?.tiebreak?`${frame.tieSpaces}-space tiebreak`:frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
       {!flat&&!frame?.countdown&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
       {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>{frame.tieSpaces}-space tiebreak next</span></div>}
-      {!flat&&frame?.done&&<div className="tv-announcement"><span>{frame.historicalResult?'Official recorded result':'Across the wire'}</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
+      {!flat&&frame?.done&&<WinnerRibbon winner={frame.winner} name={names[frame.winner]} dice={frame.roll.dice} historical={frame.historicalResult} onReplay={onReplayWinningRoll}/>}
     </div>
     <div className="tv-sidebar">
-    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><span key={id} className="tv-die-slot">{magic&&<small>{id===0?'Horse':'Spaces'}</small>}<Dice follow={magic&&id===1?-1:follow} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/></span>)}</div></div>
-      <div className="tv-roll-copy" aria-live="polite"><p className="tv-call">{frame?.rolling?'Here come the dice…':frame?.cue?.text||(!history?'Loading the race…':frame?.done?names[frame.winner]+' wins.':roll?'The dice have landed.':'Pick your horse. Watch for its number.')}</p><p className="tv-effect">{frame?.rolling&&roll?'Last roll: ':''}{summary}</p></div></div>
+    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div className="tv-dice-tray">{(frame?.dice||[0,0]).map((value,id)=><span key={id} className="tv-die-slot" style={{'--die-tilt':(id%2?-4:4)+'deg','--die-delay':id*.035+'s'}}>{magic&&<small>{id===0?'Horse':'Spaces'}</small>}<Dice follow={magic&&id===1?-1:follow} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/></span>)}</div></div>
+      <div className="tv-roll-copy" aria-live="polite"><p className="tv-call">{frame?.cue?.text||(frame?.rolling?'Here come the dice…':!history?'Loading the race…':frame?.done?names[frame.winner]+' wins.':roll?'The dice have landed.':'Pick your horse. Watch for its number.')}</p><p className="tv-effect">{frame?.rolling&&roll?'Last roll: ':''}{summary}</p></div></div>
     {frame&&!flat&&<RaceField {...{frame,names,follow}} onFollow={choose}/>}
+    {flat&&frame?.done&&<WinnerRibbon winner={frame.winner} name={names[frame.winner]} dice={frame.roll.dice} historical={frame.historicalResult} onReplay={onReplayWinningRoll}/>}
     {frame?.historicalResult&&<p className="tv-history-note">Archived race: positions are shown as recorded. The official result is unchanged.</p>}
     <div className="tv-ticket">{exhibition?'Exhibition · no wagers or payouts':backed.length?<>Your ticket: {backed.map(id=>'#'+(id+1)+' $'+Number(bets[id]).toFixed(2)).join(' · ')}</>:'Following only · no ticket placed'}{owners?.[follow]?.username?' · Owner: '+owners[follow].username:''}</div>
     </div>

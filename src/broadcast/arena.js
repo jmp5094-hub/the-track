@@ -87,19 +87,41 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   }
   // The crowd is low-detail at this focal distance. Use instancing for consistent draw cost.
   const crowdGeo=new T.SphereGeometry(1,8,6), crowdMat=standard('#ffffff',{roughness:.95});
-  const dummy=new T.Object3D();
+  const dummy=new T.Object3D(),crowdSections=[];
   const clothes=['#29252a','#4e3b38','#6f6251','#493f44','#a68b6e','#383b44','#5b3031','#72604a'];
   for(let section=COURSE_MIN;section<COURSE_MAX;section+=40) {
-    const counts=Math.min(155,Math.floor((COURSE_MAX-section-2)/1.24)*5), fans=new T.InstancedMesh(crowdGeo,crowdMat,counts);
+    const counts=Math.min(155,Math.floor((COURSE_MAX-section-2)/1.24)*5), fans=new T.InstancedMesh(crowdGeo,crowdMat,counts),heads=new T.InstancedMesh(crowdGeo,crowdMat,counts),seats=[];
+    fans.instanceMatrix.setUsage(T.DynamicDrawUsage);heads.instanceMatrix.setUsage(T.DynamicDrawUsage);
     for(let i=0;i<counts;i++) {
       const row=i%5, x=section+Math.floor(i/5)*1.24+row*.46;
       dummy.position.set(x,2.58+row*.48+((i*73)%11)*.017,-10.42-row*.91);
       dummy.scale.set(.155+((i*37)%8)*.009,.25,.14);
       dummy.updateMatrix();fans.setMatrixAt(i,dummy.matrix);
       fans.setColorAt(i,new T.Color(clothes[(i*17+Math.floor(i/7))%clothes.length]));
+      seats.push({x,y:dummy.position.y,z:dummy.position.z,width:dummy.scale.x});
+      dummy.position.y+=.3;dummy.scale.set(.105,.12,.1);dummy.updateMatrix();heads.setMatrixAt(i,dummy.matrix);
+      heads.setColorAt(i,new T.Color(['#c59a78','#92694f','#61483b','#b38567'][i%4]));
     }
-    fans.instanceMatrix.needsUpdate=true;fans.computeBoundingSphere();scene.add(fans);
+    fans.instanceMatrix.needsUpdate=true;fans.computeBoundingSphere();heads.computeBoundingSphere();scene.add(fans,heads);crowdSections.push({fans,heads,seats});
   }
+  // A handful of low-poly cloth flags and instanced spectators keep the grandstand alive.
+  const flags=[];
+  for(let i=0;i<5;i++){
+    const x=COURSE_MIN+7+i*22;
+    block(scene,brass,x,2.95,-9.4,.065,5.9,.065);
+    ball(scene,brass,x,5.93,-9.4,.12,.12,.12);
+    const fabric=new T.PlaneGeometry(2.2,.95,8,2);shape(scene,fabric,standard(i%2?'#e0c796':'#527962',{side:T.DoubleSide,roughness:.82}),x+1.1,5.3,-9.4);
+    flags.push({fabric,phase:i*1.3});
+  }
+  const puddles=new T.Group();scene.add(puddles);
+  const wet=standard('#5e6862',{metalness:.35,roughness:.13,transparent:true,opacity:.28,depthWrite:false});
+  const sheen=simple('#dfc69d',{transparent:true,opacity:.12,depthWrite:false});
+  for(let i=0;i<28;i++){
+    const x=COURSE_MIN+3+(i*13.71)%(length-6),z=(i%2?1:-1)*(5.1+(i%4)*.36);
+    const puddle=shape(puddles,new T.CircleGeometry(1,12),wet,x,.018,z,1.4+(i%3)*.7,.22+(i%5)*.055,1);puddle.rotation.x=-Math.PI/2;puddle.rotation.z=i*.7;
+    const glint=shape(puddles,geo.plane,sheen,x+.2,.021,z,.07,.7+(i%4)*.2,1);glint.rotation.x=-Math.PI/2;glint.rotation.z=-.3;
+  }
+  let lastAtmosphere=-1;
   for(let x=COURSE_MIN+11;x<COURSE_MAX;x+=25) {
     const placard = shape(scene,geo.plane,simple('#ffffff',{map:paint('THE TRACK','#242524','#d6b782',400,84)}),x,1.45,-8.97,4.5,.94,1);
     placard.rotation.z = 0;
@@ -209,6 +231,25 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   dust.frustumCulled = false;scene.add(dust);
   function pose(frame, live, reduced) {
     const elapsed = frame.time;
+    const standing=frame.goal-Math.max(...frame.active.map(id=>frame.exact[id]))<=3||frame.done;
+    const atmosphereTick=reduced?(standing?1:0):Math.floor(elapsed*12);
+    if(atmosphereTick!==lastAtmosphere){
+      lastAtmosphere=atmosphereTick;
+      for(const {fans,heads,seats} of crowdSections){
+        seats.forEach((seat,i)=>{
+          const rise=standing?.2+(reduced?0:.025*Math.sin(elapsed*3+i*1.7)):0;
+          const lean=reduced?0:.025*Math.sin(elapsed*1.1+i*2.3);
+          dummy.position.set(seat.x+lean,seat.y+rise,seat.z);dummy.scale.set(seat.width,standing?.36:.25,.14);dummy.updateMatrix();fans.setMatrixAt(i,dummy.matrix);
+          dummy.position.y+=standing?.42:.3;dummy.scale.set(.105,.12,.1);dummy.updateMatrix();heads.setMatrixAt(i,dummy.matrix);
+        });
+        fans.instanceMatrix.needsUpdate=true;heads.instanceMatrix.needsUpdate=true;
+      }
+      for(const {fabric,phase} of flags){
+        const positions=fabric.attributes.position;
+        for(let j=0;j<positions.count;j++){const reach=(positions.getX(j)+1.1)/2.2;positions.setZ(j,reach*.22*Math.sin((reduced?0:elapsed*2.4)+reach*5+phase));}
+        positions.needsUpdate=true;fabric.computeVertexNormals();
+      }
+    }
     finishGroup.position.x=frame.finishX-TRACK_FINISH;
     gateGroup.position.x=frame.startX-LEADER_START;
     gateGroup.visible=!frame.roundTrip||frame.shot!=='wire';
@@ -224,6 +265,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
       scene.fog.color.set(weather==='fog'?'#89938a':weather==='rain'?'#40575a':'#3a3839');
       scene.fog.density=weather==='fog'?.013:weather==='rain'?.006:.003;
       ground.color.set(weather==='rain'?'#877365':'#e0b294');ground.roughness=weather==='rain'?.48:1;
+      puddles.visible=weather==='rain';
       warm.intensity=weather==='sunny'?2.35:1.2;sky.intensity=weather==='fog'?2.4:2.08;
     }
     rainfall.visible=weather==='rain'&&!reduced;
