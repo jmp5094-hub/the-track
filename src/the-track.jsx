@@ -1901,11 +1901,12 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
   const [selCond,  setSelCond]  = useState("sunny");
   const [flash,    setFlash]  = useState(null);
   const [refresh,  setRefresh]= useState(0);
+  const [roomsLoaded,setRoomsLoaded]=useState(false);
 
-  useEffect(()=>onSnapshot(doc(db,'global','privateRaces'),snap=>{savePrivateRaces(snap.exists()?snap.data().races||{}:{});setRefresh(n=>n+1);}),[]);
+  useEffect(()=>onSnapshot(doc(db,'global','privateRaces'),snap=>{savePrivateRaces(snap.exists()?snap.data().races||{}:{});setRoomsLoaded(true);setRefresh(n=>n+1);}),[]);
   const allRaces = getPrivateRaces();
   // My races = hosted or member
-  const myRaces = Object.values(allRaces).filter(r=>r.hostUsername===user.username||r.members?.[user.username]);
+  const myRaces = roomsLoaded?Object.values(allRaces).filter(r=>r.hostUsername===user.username||r.members?.[user.username]):[];
   const tick = ()=>setRefresh(r=>r+1);
 
   const showFlash=(msg,ok=true)=>{setFlash({msg,ok});setTimeout(()=>setFlash(null),3000);};
@@ -1961,7 +1962,8 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
         {/* BROWSE — my races */}
         {tab==="browse"&&(
           <div>
-            {myRaces.length===0&&(
+            {!roomsLoaded&&<p>Loading your private races…</p>}
+            {roomsLoaded&&myRaces.length===0&&(
               <div style={{textAlign:"center",padding:"40px 0"}}>
                 <div style={{fontSize:40,marginBottom:12}}>🔒</div>
                 <p style={{color:"#c4cbb7",fontSize:13,marginBottom:16}}>No private races yet.</p>
@@ -1990,7 +1992,7 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
               <label style={{color:"#c4cbb7",fontSize:11,letterSpacing:2}}>RACE TYPE</label>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}}>
                 {Object.entries(RACE_TYPES).map(([k,rt])=>(
-                  <button key={k} onClick={()=>setRaceType(k)} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${raceType===k?rt.color+"88":rt.color+"22"}`,background:raceType===k?`${rt.color}18`:"rgba(255,255,255,0.03)",color:raceType===k?rt.color:"#c4cbb7",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
+                  <button key={k} onClick={()=>{setRaceType(k);if(k==='magic_dice')setSelCond('sunny');}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${raceType===k?rt.color+"88":rt.color+"22"}`,background:raceType===k?`${rt.color}18`:"rgba(255,255,255,0.03)",color:raceType===k?rt.color:"#c4cbb7",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
                     {rt.icon} {rt.label}
                   </button>
                 ))}
@@ -2081,7 +2083,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
       if(rem2<=0){ clearInterval(t); onLaunch(race); onClose(); }
     },1000);
     return ()=>clearInterval(t);
-  },[race.started, race.startedAt]);
+  },[race.started, race.startedAt, race.finished]);
 
   const saveBet=(hid,val)=>{
     const n=parseFloat(val); const b={...localBets};
@@ -2217,7 +2219,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
               <span style={{fontSize:11}}>{getProfile(uname).avatar||"🏇"}</span>
               <span style={{color:m.confirmed?"#97bd88":"#c4cbb7",fontSize:11,fontWeight:600}}>{uname}</span>
               {uname===race.hostUsername&&<span style={{color:"#e4c48b",fontSize:9}}>★</span>}
-              {m.confirmed&&<span style={{color:"#39ff10",fontSize:9}}>✓</span>}
+              {m.confirmed&&<span style={{color:"#97bd88",fontSize:9}}>✓</span>}
             </div>
           ))}
         </div>
@@ -2258,6 +2260,7 @@ function PrivateRaceCard({ race, user, onUpdate, onLaunch, onClose }) {
       )}
 
       {/* My bets */}
+      {race.finished&&<button className="track-primary" onClick={()=>onLaunch(race)}>View private race result</button>}
       {!race.started&&(
         <div>
           {!betting&&(
