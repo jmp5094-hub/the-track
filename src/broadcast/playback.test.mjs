@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH,RUN_OUT,RUN_OUT_TIME} from './playback.mjs';
+import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,shotAt,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH,RUN_OUT,RUN_OUT_TIME} from './playback.mjs';
 const fixture=JSON.parse(readFileSync(new URL('./exhibition.json',import.meta.url),'utf8'));
 const voice=JSON.parse(readFileSync(new URL('./voice.json',import.meta.url),'utf8'));
 const source=readFileSync(new URL('../the-track.jsx',import.meta.url),'utf8');
@@ -12,6 +12,22 @@ const engine=vm.createContext({TRACK_SPACES:12,TIEBREAK_SPACES:3,HURDLE_CELL:5})
 vm.runInContext(rng+'\n'+simulator,engine);
 const playback=buildPlayback(fixture,3500,12,3,voice);
 const roll=(dice,positions,extra={})=>({dice,positions,phase:'main',...extra});
+
+test('announcer calls finish before the next call and fit the recorded reel',()=>{
+  for(const cue of Object.values(voice)){
+    assert.ok(cue.offset>=0&&cue.duration>0);
+    assert.ok(cue.offset+cue.duration<=63.52,`clip beyond reel: ${cue.text}`);
+  }
+  for(let seed=0;seed<100;seed++){
+    const history=JSON.parse(JSON.stringify(engine.simulateRaceWithHistory('standard','sunny',seed)));
+    const run=buildPlayback(history,3500,12,3,voice);
+    if(!run)continue;
+    const cues=run.cues.toSorted((a,b)=>a.time-b.time);
+    for(let i=1;i<cues.length;i++)assert.ok(cues[i-1].time+cues[i-1].duration<=cues[i].time,`${cues[i-1].key} overlaps ${cues[i].key}`);
+  }
+  assert.ok(playback.cues.some(c=>c.key==='stretch'));
+  assert.ok(playback.cues.some(c=>c.key==='chance'));
+});
 
 test('the fixed exhibition is exactly the existing engine result',()=>{
   const original=JSON.parse(JSON.stringify(engine.simulateRaceWithHistory('standard','sunny',fixture.seed)));
@@ -80,6 +96,15 @@ test('tied finishers are introduced then reset to the three-space tiebreak',()=>
 test('the wire camera follows remaining spaces before the final playback percentage',()=>{
   const frame=playback.sample(FIRST_ROLL+16*3.5+.1);
   assert.equal(frame.shot,'wire');assert.ok(frame.time/playback.end<.75);assert.equal(frame.winner,null);
+});
+test('home stretch camera holds its position across rolls until a horse actually finishes',()=>{
+  const reference=shotAt(playback.sample(FIRST_ROLL+16*3.5+.1),1.8);
+  for(let t=FIRST_ROLL+16*3.5;t<playback.end;t+=.043){
+    const frame=playback.sample(t);
+    assert.equal(frame.runOut,0,'ordinary settled rolls never trigger a finish pan');
+    assert.deepEqual(shotAt(frame,1.8),reference);
+  }
+  assert.ok(shotAt(playback.sample(playback.end+RUN_OUT_TIME),1.8).at[0]>reference.at[0]);
 });
 test('rooting cues use current positions and respect weather',()=>{
   const frame=playback.sample(FIRST_ROLL+20*3.5+2.7);

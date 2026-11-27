@@ -29,7 +29,7 @@ export default function Exhibition(){
   const setAudio=value=>{setSound(value);try{localStorage.setItem('track-demo-sound',String(value));}catch{}};
   const effects={gate:()=>playRaceEffect(getRaceAudioContext(),'gate'),land:()=>playRaceEffect(getRaceAudioContext(),'land'),wire:()=>playRaceEffect(getRaceAudioContext(),'finish')};
   return <main className="track-exhibition">
-    <nav className="exhibition-nav"><a href="?demo=1" aria-label="The Track exhibition"><span className="track-mark" aria-hidden="true"><i/><i/><i/></span> THE TRACK <small>PREVIEW</small></a><a href="?preview=site">Explore the site</a></nav>
+    <nav className="exhibition-nav"><a href="?demo=1" aria-label="The Track exhibition"><span className="track-mark" aria-hidden="true"><i/><i/><i/></span> THE TRACK <small>DEMO</small></a><a href="/">Enter The Track</a></nav>
     <div className="exhibition-intro"><p>Pick a runner below. Watch for its number.</p><span>Standard exhibition · no account needed</span></div>
     <div className="exhibition-controls" aria-label="Exhibition playback">
       <button className="exhibition-play" type="button" onClick={toggle}>{finished?'Replay race':paused?(control.current.time>0?'Resume race':'Watch demo race'):'Pause race'}</button>
@@ -40,6 +40,6 @@ export default function Exhibition(){
     </div>
     <Broadcast race={race} history={exhibition} names={names} replay exhibition controlRef={control} followHorse={follow} onFollow={id=>{followed.current=id;setFollow(id);save();}}
       onFrame={onFrame} onFinish={onFinish} soundOn={sound} onSound={setAudio} getAudioContext={getRaceAudioContext} effects={effects}/>
-    {finished&&<section className="exhibition-result" aria-live="polite"><p>THE DECISIVE ROLL</p><h2>{names[frame?.winner??exhibition.winner]} wins the Brass Cup.</h2><p>{follow===exhibition.winner?'You followed the winner.':`You followed #${follow+1} ${names[follow]}. #${exhibition.winner+1} crossed first.`} This exhibition has no wagers or payouts.</p><button type="button" onClick={()=>go(FIRST_ROLL+(exhibition.rolls.length-3)*3.5-.05)}>Replay the finish</button><a href="?preview=site">Explore the race lobby</a></section>}
+    {finished&&<section className="exhibition-result" aria-live="polite"><p>THE DECISIVE ROLL</p><h2>{names[frame?.winner??exhibition.winner]} wins the Brass Cup.</h2><p>{follow===exhibition.winner?'You followed the winner.':`You followed #${follow+1} ${names[follow]}. #${exhibition.winner+1} crossed first.`} This exhibition has no wagers or payouts.</p><button type="button" onClick={()=>go(FIRST_ROLL+(exhibition.rolls.length-3)*3.5-.05)}>Replay the finish</button><a href="/">Enter The Track</a></section>}
   </main>;
 }

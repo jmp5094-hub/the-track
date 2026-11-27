@@ -23,7 +23,7 @@ The exhibition fixture is the existing frontend Standard engine's sunny seed 33,
 
 An existing engine edge case is preserved and flagged: Standard fog seed 3 records horse 5 as the winner after a +1/-1 roll, but its final recorded position is 11/12. The preview rejects that contradictory final snapshot and uses the legacy renderer. No winning space is invented. This needs a separate rules/engine decision before a broader release.
 
-Browser checks cover desktop/mobile exhibition, board and 3D modes, follow selection, finish replay and refresh. Account and wagering flows require a separate authenticated regression pass before production. No production deployment is part of this preview.
+Browser checks cover desktop/mobile exhibition, board and 3D modes, follow selection, finish replay and refresh. Authenticated end-to-end wagering has not been exercised. The original account, bank, bet-confirmation and payout logic is retained; source preservation checks compare it with the production baseline.
 
 ## Landscape and living-room revision
 
@@ -33,4 +33,10 @@ Presentation highlights the selected number, doubles, and settled lead changes. 
 
 All races remain automatic. The exhibition still plays its saved engine history and has no wagers or payouts.
 
-The suite now has 15 passing tests, including no premature dramatic callouts. Casting to physical TV hardware has not been tested.
+The suite now has 22 passing tests, including no premature dramatic callouts, camera stability across home-stretch rolls, audio preferences, and non-overlapping announcer cues. Casting to physical TV hardware has not been tested.
+
+## November 27 audio and rollout revision
+
+The finish-camera pan now runs only when a horse actually reaches the finish. The music is replaced with a short driving percussion bed, real crowd and hoofbeat stems, and more expressive calls from the existing David Wolfe voice. The mix responds to current revealed positions, ducks around commentary and decisive rolls, and supports crowd-plus-music, crowd-only and caller-only modes. Existing site music preferences still apply.
+
+Protected race data is subscribed to only after authentication. The public demo links back to the full account app rather than the limited design fixture. Auctions, private races, bank, active bets, profile and rules remain in the real navigation. All races remain automatic; non-Standard formats and inconsistent saved histories retain the legacy renderer.

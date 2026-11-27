@@ -11,7 +11,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "node --test src/broadcast/playback.test.mjs"
+    "test": "node --test src/broadcast/*.test.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

@@ -93,3 +93,4 @@
 @media(prefers-reduced-motion:reduce){.tv-die.is-landed{animation:none}}
 .is-paused .tv-die{animation-play-state:paused}
 .is-paused .tv-moment,.is-paused .tv-die.is-landed{animation:none}
+@media(max-width:760px) and (orientation:portrait){.tv-heading{flex-wrap:wrap}.tv-heading>div:first-child{width:100%}.tv-tools{width:100%;justify-content:flex-start}.tv-tools select{max-width:none}}

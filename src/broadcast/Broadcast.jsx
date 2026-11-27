@@ -1,10 +1,11 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {buildPlayback,describeRoll,rootingHint,raceMoment,LAND,MOVE,MOVE_END,PIPS,SILKS} from './playback.mjs';
 import voice from './voice.json';
-import {playRaceEffect} from './race-sound';
+import {playRaceEffect,stopRaceEffects} from './race-sound';
+import {createRaceSoundscape} from './soundscape';
 import './broadcast.css';
 
-const audioUrl=import.meta.env.BASE_URL+'broadcast/david-wolfe.mp3';
+const audioUrl=import.meta.env.BASE_URL+'broadcast/audio/announcer.mp3';
 let voiceBytes;
 const loadVoice=()=>voiceBytes??=(fetch(audioUrl).then(r=>{if(!r.ok)throw Error('Voice unavailable');return r.arrayBuffer();}).catch(e=>{voiceBytes=undefined;throw e;}));
 const readPreference=(key,fallback)=>{try{return localStorage.getItem(key)||fallback;}catch{return fallback;}};
@@ -35,7 +36,7 @@ export function RaceField({frame,names,follow,onFollow,flat=false}){
 
 export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,names,clock=Date.now,startTime=0,replay=false,
   speedRef,onFinish=()=>{},soundOn=false,onSound=()=>{},getAudioContext,effects={},owners,bets={},
-  controlRef,followHorse,onFollow,onFrame,exhibition=false}){
+  controlRef,followHorse,onFollow,onFrame,exhibition=false,musicAllowed=true}){
   const playback=useMemo(()=>buildPlayback(history,interval,spaces,tieSpaces,voice),[history,interval,spaces,tieSpaces]);
   const savedKey='track-follow-'+race.id;
   const backed=Object.keys(bets).map(Number).filter(id=>Number(bets[id])>0&&id>=0&&id<6);
@@ -46,6 +47,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
   const choose=id=>{setLocalFollow(id);savePreference(savedKey,id);onFollow?.(id);};
   const [viewMode,setViewMode]=useState(()=>readPreference('track-view',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'board':'trackside'));
   const [viewStatus,setViewStatus]=useState('loading');
+  const [audioMix,setAudioMix]=useState(()=>readPreference('track-race-mix','stadium'));
   const [display,setDisplay]=useState(null);
   const [fullscreen,setFullscreen]=useState(Boolean(document.fullscreenElement));
   const [fullscreenError,setFullscreenError]=useState('');
@@ -55,21 +57,22 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
     catch{setFullscreenError('Fullscreen is unavailable in this browser. Use its full-screen control.');}
   }
   const container=useRef(null),view=useRef(null),audio=useRef({}),settings=useRef({});
-  settings.current={onFinish,soundOn,clock,effects,follow,viewMode,onFrame};
+  settings.current={onFinish,soundOn,clock,effects,follow,viewMode,onFrame,audioMix,musicAllowed};
   function stopVoice(){const source=audio.current.source;if(source){try{source.stop();}catch{}audio.current.source=null;}}
   function unlock(){
     try{
       const ctx=getAudioContext?.();if(!ctx)return;
       ctx.resume().catch(()=>{});audio.current.context=ctx;
+      audio.current.mix??=createRaceSoundscape(ctx);
       audio.current.promise??=loadVoice().then(bytes=>ctx.decodeAudioData(bytes.slice(0))).then(buffer=>{audio.current.buffer=buffer;}).catch(()=>{audio.current.promise=undefined;});
     }catch{}
   }
   useEffect(()=>{
-    if(!soundOn){stopVoice();return;}
+    if(!soundOn){stopVoice();stopRaceEffects(audio.current.context);audio.current.mix?.stop();return;}
     unlock();window.addEventListener('pointerdown',unlock,{passive:true});window.addEventListener('keydown',unlock);
     return()=>{window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);};
   },[soundOn]);
-  useEffect(()=>()=>stopVoice(),[]);
+  useEffect(()=>()=>{stopVoice();stopRaceEffects(audio.current.context);audio.current.mix?.dispose();audio.current.mix=null;},[]);
   useEffect(()=>{
     if(viewMode==='board'){setViewStatus('board');return;}
     let cancelled=false;setViewStatus('loading');
@@ -88,7 +91,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const speed=replay?(control?.speed??speedRef?.current??1):1;
       const version=control?.version??0;
       const changed=version!==lastVersion;
-      if(changed){lastVersion=version;finished=false;lastCue='';lastRoll=-2;lastMove=-2;lastStep=-2;lastCrowd=-2;started=false;atWire=false;stopVoice();}
+      if(changed){lastVersion=version;finished=false;lastCue='';lastRoll=-2;lastMove=-2;lastStep=-2;lastCrowd=-2;started=false;atWire=false;stopVoice();stopRaceEffects(audio.current.context);audio.current.mix?.stop();}
       const delta=lastTimestamp===undefined||changed?0:(timestamp-lastTimestamp)/1000;
       lastTimestamp=timestamp;
       if(replay){if(control){if(!control.paused)control.time+=delta*speed;replayTime=control.time;}else replayTime+=delta*speed;}
@@ -96,15 +99,18 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const frame={...playback.sample(elapsed),follow:s.follow,steady:s.viewMode==='steady'};
       const paused=Boolean(control?.paused);
       const ctx=audio.current.context;
-      const sound=s.soundOn&&!paused&&ctx?.state==='running';
-      if(paused)stopVoice();
-      if(frame.launched&&!started){started=true;if(sound&&elapsed<1.1)s.effects.gate?.();}
-      if(frame.index>=0&&frame.index!==lastRoll){lastRoll=frame.index;if(sound&&frame.into<.2)playRaceEffect(ctx,'rattle');}
-      if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(sound&&frame.into<LAND+.18){s.effects.land?.();if(!s.effects.land)playRaceEffect(ctx,'land');}}
-      const step=frame.into>=MOVE&&frame.into<MOVE_END?frame.index*2+(frame.into>MOVE+(MOVE_END-MOVE)*.56?1:0):-1;
-      if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){lastStep=step;if(sound)playRaceEffect(ctx,'hooves');}
-      if(frame.done&&!atWire){atWire=true;if(sound&&elapsed<playback.end+.25){s.effects.wire?.();if(!s.effects.wire)playRaceEffect(ctx,'finish');}}
-      if(frame.leadChange&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(sound&&frame.into<MOVE_END+.1)playRaceEffect(ctx,'crowd');}
+      const sound=s.soundOn&&!paused&&document.visibilityState!=='hidden'&&ctx?.state==='running';
+      const withEffects=sound&&s.audioMix!=='caller';
+      audio.current.mix?.sync(frame,{enabled:sound,paused,mix:s.audioMix,musicAllowed:s.musicAllowed},speed);
+      if(!sound)stopVoice();
+      if(!withEffects)stopRaceEffects(ctx);
+      if(frame.launched&&!started){started=true;if(withEffects&&elapsed<1.1)playRaceEffect(ctx,'gate');}
+      if(frame.index>=0&&frame.index!==lastRoll){lastRoll=frame.index;if(withEffects&&frame.into<.2)playRaceEffect(ctx,'rattle');}
+      if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(withEffects&&frame.into<LAND+.18)playRaceEffect(ctx,'land');}
+      const step=frame.into>=MOVE&&frame.into<MOVE_END?frame.index:-1;
+      if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){lastStep=step;if(withEffects){const moving=frame.active.filter(id=>frame.moving[id]);audio.current.mix?.effect('hooves',{duration:MOVE_END-frame.into,speed,pan:moving.length===1?(moving[0]-2.5)*.13:0});}}
+      if(frame.done&&!atWire){atWire=true;if(withEffects&&elapsed<playback.end+.25){audio.current.mix?.effect('roar',{speed});audio.current.mix?.effect('hooves',{duration:.8,speed,level:.65});}}
+      if(frame.leadChange&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(withEffects&&!frame.done&&frame.into<MOVE_END+.1)audio.current.mix?.effect('roar',{duration:1.15,level:.36,speed});}
       const cue=frame.cue,cueTag=cue?cue.key+'@'+cue.time:'';
       if(cue&&cueTag!==lastCue){
         lastCue=cueTag;const offset=frame.time-cue.time;
@@ -149,6 +155,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
     <header className="tv-heading"><div><p>{exhibition?'Exhibition replay':replay?'Replay':frame?.tiebreak?'Tiebreak':'Live at The Track'} · {race.condition==='rain'?'Rain':race.condition==='fog'?'Fog':'Standard'}</p><h1>{race.name}</h1></div>
       <div className="tv-tools"><select aria-label="Race view" value={viewMode} onChange={e=>{setViewMode(e.target.value);savePreference('track-view',e.target.value);}}><option value="trackside">Trackside 3D</option><option value="steady">Steady 3D</option><option value="board">Board view</option></select>
         <button type="button" aria-pressed={soundOn} onClick={()=>{if(!soundOn)unlock();onSound(!soundOn);}}>{soundOn?'Sound on':'Sound off'}</button>
+        <select aria-label="Audio mix" value={audioMix} onChange={e=>{setAudioMix(e.target.value);savePreference('track-race-mix',e.target.value);}}><option value="stadium">Crowd + music</option><option value="trackside">Crowd only</option><option value="caller">Caller only</option></select>
         {document.fullscreenEnabled&&<button className="tv-fullscreen" type="button" onClick={toggleFullscreen}>{fullscreen?'Exit fullscreen':'Fullscreen'}</button>}</div>
     </header>
     <div className="tv-race-layout">

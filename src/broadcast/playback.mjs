@@ -43,19 +43,25 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
   const end=FIRST_ROLL+(rolls.length-1)*cycle+MOVE_END;
   const call=(key,time)=>voice[key]?{key,time,...voice[key]}:null;
   const cues=[call('open',GO+.04)].filter(Boolean);
-  let previous=GATE,priorLeaders=SEATS;
+  let previous=GATE,priorLeaders=SEATS,stretchCalled=false,chanceCalled=false;
   rolls.forEach((roll,index)=>{
     const start=FIRST_ROLL+index*cycle;
     const active=index>=tieStart&&tieStart>0?tieActive:SEATS;
     const primary=call(roll.dice.join(''),start+VOICE);
     if(primary)cues.push(primary);
     const leaders=leadersOf(roll.positions,active);
+    const remaining=(index>=tieStart&&tieStart>0?tieSpaces:raceSpaces)-Math.max(...active.map(id=>roll.positions[id]));
+    const beatTime=start+Math.max(MOVE_END,VOICE+(primary?.duration||0)+.08);
+    const fits=cue=>cue&&cue.time+cue.duration<start+cycle+VOICE-.08;
     if(index===tieStart-1){
       const cue=call('tiebreak',start+MOVE_END);
       if(cue&&cue.time+cue.duration<start+cycle+VOICE-.06)cues.push(cue);
-    }else if(leaders.length===1&&(priorLeaders.length>1||!priorLeaders.includes(leaders[0]))&&index>0&&index<rolls.length-1&&index!==tieStart&&roll.positions[leaders[0]]>previous[leaders[0]]){
-      const cue=call('lead'+(leaders[0]+1),start+Math.max(MOVE_END,VOICE+(primary?.duration||0)+.08));
-      if(cue&&cue.time+cue.duration<start+cycle+VOICE-.08)cues.push(cue);
+    }else if(remaining>0){
+      const stretch=!stretchCalled&&remaining<=3?call('stretch',beatTime):null;
+      const chance=!chanceCalled&&remaining===1?call('chance',beatTime):null;
+      const lead=leaders.length===1&&(priorLeaders.length>1||!priorLeaders.includes(leaders[0]))&&index>0&&index!==tieStart&&roll.positions[leaders[0]]>previous[leaders[0]]?call('lead'+(leaders[0]+1),beatTime):null;
+      const cue=[stretch,lead,chance].find(fits);
+      if(cue){cues.push(cue);if(cue===stretch)stretchCalled=true;if(cue===chance)chanceCalled=true;}
     }
     previous=roll.positions;priorLeaders=leaders;
   });
@@ -79,8 +85,8 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
       if(to-from!==2)return mix(from,to,smooth(amount));
       return from+smooth(clamp(amount/.43))+smooth(clamp((amount-.56)/.44));
     });
-    const runOut=source&&settled?smooth(clamp((into-MOVE_END)/RUN_OUT_TIME)):0;
     const finishers=source?active.filter(id=>source.positions[id]>=goal):[];
+    const runOut=finishers.length&&settled?smooth(clamp((into-MOVE_END)/RUN_OUT_TIME)):0;
     const world=progress.map((p,id)=>worldAt(p,goal)+(finishers.includes(id)?RUN_OUT*runOut:0));
     const leaders=leadersOf(exact,active);
     const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&source.positions[id]!==previous[id])||Boolean(finishers.includes(id)&&settled&&runOut<1));

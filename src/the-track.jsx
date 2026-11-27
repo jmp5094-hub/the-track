@@ -574,9 +574,9 @@ function _getBugle() {
 // them all together on the first user tap.
 
 const MUSIC_TRACKS = {
-  lobby:     { src:"/Lobby_music.mp3",                            targetVol:0.05 },
-  countdown: { src:"/The_Final_Furlong_2026-03-19T020327.mp3",    targetVol:0.05 },
-  race:      { src:"/Race_Day.mp3",                               targetVol:0.03 },
+  lobby:     { src:"/broadcast/audio/pulse.mp3", targetVol:0.06 },
+  countdown: { src:"/broadcast/audio/pulse.mp3", targetVol:0.10 },
+  race:      { src:"/broadcast/audio/pulse.mp3", targetVol:0.12 },
 };
 const _aud = {};       // name → Audio element
 let _audUnlocked = false;
@@ -956,6 +956,7 @@ let musicEnabled = getMusicEnabled(); // sync with localStorage on startup
 function setMusicEnabledGlobal(v) {
   musicEnabled = v;
   setMusicEnabled(v);
+  window.dispatchEvent(new Event("track-music"));
   if(!v) {
     // Mute — fade all playing tracks to 0 but keep them running
     Object.keys(MUSIC_TRACKS).forEach(n=>{
@@ -5064,6 +5065,7 @@ function StandardRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepl
   const [saved,setSaved] = useState(null);
   const [invalid,setInvalid] = useState(false);
   const [soundOn,setSoundOn] = useState(getSoundEnabled);
+  const [musicAllowed,setMusicAllowed] = useState(getMusicEnabled);
   const names = HORSES.map((_, id) => horseName(race,id));
   const startTime = isReplay ? 0 : race.startTime + (race.isAuction ? 30000 : 0);
   const history = useMemo(() => isReplay ? {rolls:replayRolls,winner:replayWinner} : saved,[isReplay,replayRolls,replayWinner,saved]);
@@ -5083,20 +5085,19 @@ function StandardRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepl
   },[isReplay,race.id,race.type,race.condition,race.seed,race._privateCode]);
 
   useEffect(() => {
-    if (!isReplay) {
-      stopLobbyMusic(350);
-      stopBgMusic(350);
-    }
-    const sync = () => setSoundOn(getSoundEnabled());
+    stopLobbyMusic(350);
+    stopBgMusic(350);
+    const sync = () => {setSoundOn(getSoundEnabled());setMusicAllowed(getMusicEnabled());};
     window.addEventListener("track-sound",sync);
+    window.addEventListener("track-music",sync);
     window.addEventListener("storage",sync);
-    return () => { window.removeEventListener("track-sound",sync); window.removeEventListener("storage",sync); };
+    return () => { window.removeEventListener("track-sound",sync); window.removeEventListener("track-music",sync); window.removeEventListener("storage",sync); };
   },[isReplay]);
 
   const chatProps = { raceId:race.id,user,msgs:chatMsgs,setMsgs:setChatMsgs,open:chatOpen,setOpen:setChatOpen,unread:chatUnread,setUnread:setChatUnread };
   if (invalid || (isReplay && history && !buildPlayback(history,ROLL_INTERVAL,TRACK_SPACES,TIEBREAK_SPACES,broadcastVoice))) return <LegacyRaceScreen {...legacyProps} {...{race,user,bets,auctionOwners,onRaceEnd,isReplay,replayRolls,replayWinner,replaySpeedRef,chatMsgs,setChatMsgs,chatOpen,setChatOpen,chatUnread,setChatUnread}}/>;
   return <>
-    <Broadcast {...{race,history,names,startTime,soundOn}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
+    <Broadcast {...{race,history,names,startTime,soundOn,musicAllowed}} interval={ROLL_INTERVAL} spaces={TRACK_SPACES}
       tieSpaces={TIEBREAK_SPACES} clock={gameNow} replay={isReplay} speedRef={replaySpeedRef}
       onFinish={onRaceEnd} onSound={setCommentaryEnabled} getAudioContext={getAudioCtx}
       effects={{gate:sfx.gunshot,land:sfx.diceSettle,wire:sfx.finishLine}} owners={auctionOwners} bets={bets}/>
@@ -6827,18 +6828,20 @@ function App() {
 
   // Keep race results cache fresh — use a ref so clock interval always sees latest value
   useEffect(()=>{
+    if(!user?.uid) {_cachedRaceResultsRef.current={};return;}
+    let active=true;
     const refresh = async () => {
       const r = await fbGetRaceRolls();
       const results = {};
       Object.entries(r).forEach(([id,data])=>{
         results[id] = { winner: data.winner, visualFinishAt: data.visualFinishAt, finishedAt: data.computedAt };
       });
-      _cachedRaceResultsRef.current = results;
+      if(active) _cachedRaceResultsRef.current = results;
     };
     refresh();
     const t = setInterval(refresh, 5000);
-    return ()=>clearInterval(t);
-  },[]);
+    return ()=>{active=false;clearInterval(t);};
+  },[user?.uid]);
 
   // Clock tick — also mark finished races based on bg results
   useEffect(()=>{
@@ -6868,6 +6871,7 @@ function App() {
   // ── Background race runner ────────────────────────────────────────────────
   // Runs all scheduled races silently at their start time, stores results
   useEffect(()=>{
+    if(!user?.uid) return;
     const runPending = async () => {
       const results = await fbGetRaceResults();
       const now2 = gameNow();
@@ -6916,7 +6920,7 @@ function App() {
     runPending(); // run immediately
     const t = setInterval(runPending, 5000); // check every 5s
     return () => clearInterval(t);
-  }, [schedule, auctionSchedule]);
+  }, [schedule, auctionSchedule, user?.uid]);
 
   // Fire AI name generation for auction races too
   useEffect(()=>{
@@ -6967,6 +6971,7 @@ function App() {
 
   // Real-time schedule listener — all users see the same races instantly
   useEffect(()=>{
+    if(!user?.uid) return;
     const now2 = gameNow();
     // Subscribe to schedule changes in real-time
     const unsubSched = onSnapshot(doc(db,"global","schedule"), async (snap) => {
@@ -6998,7 +7003,7 @@ function App() {
     });
 
     return () => { unsubSched(); unsubAuction(); unsubPots(); };
-  },[]);
+  },[user?.uid]);
 
   // Sync pending bets to state so navbar badge updates
   const refreshPending=async()=>{
