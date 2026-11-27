@@ -8,34 +8,35 @@ export function RunnerNumber({id}){
 export function SiteBrand(){
   return <span className="track-wordmark"><span className="track-mark" aria-hidden="true"><i/><i/><i/></span>The Track</span>;
 }
-export function LobbyView({races,onEnterRace,demoHref='?demo=1',preview=false}){
-  const groups=[['Live now',['racing','locked']],['Betting open',['betting']],['Up next',['upcoming']]];
-  const featured=races.find(r=>r.status==='racing')||races.find(r=>r.status==='locked')||races[0];
+export function LobbyView({races,onEnterRace,demoHref='?demo=1',preview=false,auction=false,onRegularLobby}){
+  const groups=auction?[['Auction live',['auction']],['At the start',['locked']],['Racing now',['racing']],['Upcoming auctions',['upcoming']]]:[['Live now',['racing','locked']],['Betting open',['betting']],['Up next',['upcoming']]];
+  const featured=(auction&&races.find(r=>r.status==='auction'))||races.find(r=>r.status==='racing')||races.find(r=>r.status==='locked')||races[0];
   return <main className="track-lobby site-lobby">
     <header className="site-lobby-hero">
-      <div><p className="track-kicker">Six horses. Every roll. One winner.</p><h1>Meet you<br/>at the rail.</h1><p>Pick your runner. Watch for its number.<br/>Every roll can change the race.</p>
-        <div className="site-actions">{featured&&<button className="track-primary" onClick={()=>onEnterRace(featured)}>{featured.status==='racing'?'Watch live':'View next race'} <span aria-hidden="true">↗</span></button>}<a className="track-secondary" href={demoHref}>Watch a demo</a></div>
+      <div><p className="track-kicker">{auction?'Auction races · Six horses. One owner each.':'Six horses. Every roll. One winner.'}</p><h1>{auction?<>Your horse.<br/>Your moment.</>:<>Meet you<br/>at the rail.</>}</h1><p>{auction?<>Bid for your runner. Back your winner.<br/>Then follow every roll to the wire.</>:<>Pick your runner. Watch for its number.<br/>Every roll can change the race.</>}</p>
+        <div className="site-actions">{featured&&<button className="track-primary" onClick={()=>onEnterRace(featured)}>{featured.status==='auction'?'Join live auction':featured.status==='racing'?'Watch live':featured.status==='locked'?'Watch the start':auction?'View next auction':'View next race'} <span aria-hidden="true">↗</span></button>}{auction&&onRegularLobby?<button className="track-secondary" onClick={onRegularLobby}>Regular race card</button>:<a className="track-secondary" href={demoHref}>Watch a demo</a>}</div>
       </div>
-      <div className="site-hero-caption"><span>Automatic races</span><strong>All eyes on the next roll.</strong></div>
+      <div className="site-hero-caption"><span>{auction?'The auction ring':'Automatic races'}</span><strong>{auction?'Win the bid. Feel the race.':'All eyes on the next roll.'}</strong></div>
     </header>
-    <div className="site-card-heading"><div><p className="track-kicker">{preview?'Sample race card':'Today at The Track'}</p><h2>The race card</h2></div><p>Races start automatically at post time.</p></div>
+    <div className="site-card-heading"><div><p className="track-kicker">{preview?'Sample race card':'Today at The Track'}</p><h2>{auction?'The auction card':'The race card'}</h2></div><p>{auction?'Six 30-second lots. A $5 opening bid. Automatic races.':'Races start automatically at post time.'}</p></div>
     {groups.map(([title,statuses])=>{const list=races.filter(r=>statuses.includes(r.status));return list.length>0&&<section className="site-race-section" key={title} aria-label={title}>
-      <h3><span className={'site-status-dot '+(title==='Live now'?'is-live':'')}/>{title}<span>{list.length}</span></h3>
+      <h3><span className={'site-status-dot '+(statuses.includes('racing')||statuses.includes('auction')?'is-live':'')}/>{title}<span>{list.length}</span></h3>
       <div>{list.map(race=><button className="site-race-row" key={race.id} onClick={()=>onEnterRace(race)}>
-        <span className="site-post"><small>{race.status==='racing'?'ON TRACK':'POST TIME'}</small><strong>{race.post}</strong></span>
-        <span className="site-race-name"><strong>{race.name}</strong><span>{race.typeLabel} · {race.conditionLabel||'Clear track'}{race.friends>0?` · ${race.friends} friends`:''}</span></span>
+        <span className="site-post"><small>{race.status==='racing'?'ON TRACK':auction?'RACE TIME':'POST TIME'}</small><strong>{race.post}</strong></span>
+        <span className="site-race-name"><strong>{race.name}</strong><span>{race.typeLabel} · {race.conditionLabel||'Clear track'}{race.friends>0?` · ${race.friends} friends`:''}</span>{auction&&<span className="site-auction-ownership">{race.ownedCount}/6 owned{race.status==='auction'?` · Lot ${race.lot} of 6`:''}</span>}</span>
         <span className="site-race-pot"><small>POOL</small><strong>{money(race.pot)}</strong>{race.ticket>0&&<small>{race.confirmed?'Ticket':'Draft'} {money(race.ticket)}</small>}</span>
-        <span className={'site-race-status '+(race.status==='racing'?'is-live':'')}><strong>{race.status==='racing'?'Live':race.countdown}</strong><small>{race.status==='racing'?'Watch race':race.status==='locked'?'To the start':race.status==='betting'?'Bets close':'To post'}</small></span><span aria-hidden="true">↗</span>
+        <span className={'site-race-status '+(['racing','auction'].includes(race.status)?'is-live':'')}><strong>{race.status==='racing'?'Live':race.countdown}</strong><small>{race.status==='racing'?'Watch race':race.status==='auction'?'Auction closes':race.status==='locked'?'To the start':auction?'Auction opens':race.status==='betting'?'Bets close':'To post'}</small></span><span aria-hidden="true">↗</span>
       </button>)}</div>
     </section>;})}
     {!races.length&&<p className="site-empty">The next race card is being prepared. You can watch a demo while you wait.</p>}
   </main>;
 }
 
-export function RaceEntryView({race,names,typeLabel,description,post,canBet,confirmed,bets={},totalBet,pot,availableBalance,overBalance,countdown,openCountdown,onBack,onBet,onConfirm,preview=false,onWatch}){
-  return <main className="site-page site-entry">
-    <button className="site-back" onClick={onBack}>← Race lobby</button>
-    <header className="site-page-header"><div><p className="track-kicker">{typeLabel} · Post {post}</p><h1>{race.name}</h1><p>{description}</p></div><span className="site-status">{canBet?(confirmed?'Ticket confirmed':'Betting open'):'Coming up'}</span></header>
+export function RaceEntryView({race,names,typeLabel,description,post,canBet,confirmed,bets={},totalBet,pot,availableBalance,overBalance,countdown,openCountdown,onBack,onBet,onConfirm,preview=false,onWatch,embedded=false}){
+  const Container=embedded?'section':'main';
+  return <Container className={embedded?'site-entry':'site-page site-entry'}>
+    {!embedded&&<><button className="site-back" onClick={onBack}>← Race lobby</button>
+    <header className="site-page-header"><div><p className="track-kicker">{typeLabel} · Post {post}</p><h1>{race.name}</h1><p>{description}</p></div><span className="site-status">{canBet?(confirmed?'Ticket confirmed':'Betting open'):'Coming up'}</span></header></>}
     {!canBet?<section className="site-panel site-upcoming"><p className="track-kicker">Betting opens in</p><strong>{openCountdown}</strong><p>The race will start automatically at post time.</p></section>:<div className="site-entry-grid">
       <section className="site-panel site-field"><div className="site-section-heading"><div><p className="track-kicker">The field</p><h2>Choose your numbers.</h2></div><span>6 runners</span></div>
         <p className="site-field-help">{preview?'Sample field and ticket layout. Explore the race with the demo below.':'Enter an amount beside each horse you want to back.'}</p>
@@ -54,7 +55,7 @@ export function RaceEntryView({race,names,typeLabel,description,post,canBet,conf
         <div className="site-rules"><span className="site-dice-mark" aria-hidden="true">{[4,5].map(n=><span key={n}>{Array.from({length:9},(_,i)=><i key={i} className={[0,2,6,8,...(n===5?[4]:[])].includes(i)?'is-pip':''}/>)}</span>)}</span><h3>Root for your number.</h3><p>{race.type==='magic_dice'?'The first die picks the horse. The second sets its distance. Race out and back to win.':race.type==='triple_dice'?'Three dice move their matching horses. Repeated numbers move the same horse again.':race.type==='hurdle'?'Matching dice move your horse. At the hurdle, matching doubles are needed to jump.':race.type==='down_back'?'Matching dice move your horse to the far end, then back home to win.':'Matching dice move the horses. Watch the whole field as each roll changes the race.'}</p></div>
       </aside>
     </div>}
-  </main>;
+  </Container>;
 }
 
 export function RaceResultView({race,names,winner,bets={},odds={},userBalance,onReplay,onLobby,preview=false}){

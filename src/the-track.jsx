@@ -9,6 +9,7 @@ import { buildPlayback } from "./broadcast/playback.mjs";
 import broadcastVoice from "./broadcast/voice.json";
 import "./track-theme.css";
 import {LobbyView,RaceEntryView,RaceResultView} from "./site/RaceViews";
+import {AuctionView} from "./site/AuctionView";
 import { getCoatIndex, getCoatName } from "./data/horse-coats.mjs";
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
@@ -2974,7 +2975,7 @@ const AUCTION_BID_SECS  = 30;       // 30s per horse
 const AUCTION_SOLD_SECS = 2.5;      // sold animation hold
 const AUCTION_MIN_BID   = 5;        // $5 starting bid
 
-function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets, confirmedPot, onConfirmBets }) {
+function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets, confirmedPot, onConfirmBets, sharedPool={} }) {
   const rt = RACE_TYPES[race.type]||RACE_TYPES.standard;
 
   // ── Pure timing derived from race.startTime ─────────────────────────────────
@@ -2998,12 +2999,13 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const slotElapsed    = inAuction ? elapsedSecs % AUCTION_BID_SECS : 0;
   const slotTimeLeft   = Math.max(0, AUCTION_BID_SECS - slotElapsed);
   const currentHorseId = race.horseOrder?.[currentSlot] ?? currentSlot;
-  const currentHorse   = HORSES[currentHorseId] || HORSES[0];
 
   // ── Auction data — real-time from Firestore ──────────────────────────────
   const [aData, setAData] = useState({owners:{},bids:{},pot:0});
   const [tab, setTab]     = useState("auction");
   const [bidAmount, setBidAmount] = useState("");
+  const [bidPending, setBidPending] = useState(false);
+  const [bidError, setBidError] = useState('');
   const [soldAnim, setSoldAnim]   = useState(null);
   const soldAnimTimer   = useRef(null);
 
@@ -3050,7 +3052,7 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
       while(shownUpToSlot.current < liveSlot && shownUpToSlot.current < 6){
         const ended = shownUpToSlot.current;
         shownUpToSlot.current = ended + 1;
-        fireAnim(ended, aData);
+        if(ended>=0) fireAnim(ended, aData);
       }
     };
 
@@ -3078,12 +3080,13 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   const auctionPot   = aData.pot||0;
   const myMinBid     = Math.max(AUCTION_MIN_BID, (topBid?.[1]||0)+1);
   const canBid       = inAuction && !iOwn && topBid?.[0]!==user.username && currentSlot < 6;
-  const timerPct     = slotTimeLeft / AUCTION_BID_SECS;
-  const timerColor   = slotTimeLeft<=5?"#d48d80":slotTimeLeft<=10?"#e4c48b":"#e5b678";
 
   const doBid = async () => {
+    if(bidPending)return;
+    setBidPending(true);setBidError('');
     try{await raceStore.bid(user,race,currentHorseId,Number(bidAmount));setBidAmount('');sfx.betConfirm();}
-    catch(e){window.alert(e.message||'Bid was not accepted');sfx.error();}
+    catch(e){setBidError(e.message||'Bid was not accepted');sfx.error();}
+    finally{setBidPending(false);}
   };
 
   // Regular bets — restore from confirmed store if already placed
@@ -3110,7 +3113,6 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
   // ── Odds/owners reveal (same 30s window as regular races) ───────────────────
   // oddsRevealSecs: 0 when auction ends, grows to PRESENT_SECS as race approaches
   const oddsRevealSecs = Math.min(PRESENT_SECS, Math.max(0, -secsToAuctionEnd));
-  const timerColorOdds = oddsRevealSecs>20?"#d48d80":oddsRevealSecs>10?"#e4c48b":"#e5b678";
   const revealCount    = Math.min(6, Math.floor(oddsRevealSecs/5)+1);
 
   // Auto-fire race — only once, guarded by ref
@@ -3139,430 +3141,37 @@ function AuctionRaceScreen({ race, user, now, onBack, onRaceStart, confirmedBets
     }
   },[secsToRaceFire, inOdds, raceStarted]);
 
-  return (
-    <div style={{minHeight:"100vh",background:"var(--track-bg)",paddingTop:68,paddingBottom:40}}>
-      <div style={{maxWidth:600,margin:"0 auto",padding:"0 16px"}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#c4cbb7",cursor:"pointer",fontSize:13,margin:"12px 0",display:"flex",alignItems:"center",gap:6}}>← Back</button>
-
-        {/* Header */}
-        <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:28}}>{rt.icon}</div>
-          <h2 style={{fontFamily:"var(--track-label)",color:"#fff",fontSize:16,letterSpacing:3,marginBottom:2}}>{race.name}</h2>
-          <div style={{color:"#e4c48b",fontSize:11,letterSpacing:2,fontWeight:700}}>🔨 AUCTION RACE</div>
-        </div>
-
-        {/* Tabs */}
-        <div style={{display:"flex",gap:8,marginBottom:16}}>
-          {["auction","bets"].map(t=>(
-            <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${tab===t?"#e4c48b66":"#ffffff15"}`,background:tab===t?"rgba(228,196,139,0.08)":"transparent",color:tab===t?"#e4c48b":"#c4cbb7",cursor:"pointer",fontFamily:"var(--track-label)",fontSize:10,letterSpacing:0,fontWeight:700}}>
-              {t==="auction"?"🔨 AUCTION":"💰 BETTING"}
-            </button>
-          ))}
-        </div>
-
-        {/* ── ODDS/OWNERS REVEAL after auction ends ── */}
-        {(inOdds||raceStarted) && (
-          <div style={{padding:"20px 0 28px"}}>
-            <div style={{position:"relative",width:120,height:120,margin:"0 auto 16px",textAlign:"center"}}>
-              <svg width="120" height="120" style={{position:"absolute",top:0,left:0,transform:"rotate(-90deg)"}}>
-                <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6"/>
-                <circle cx="60" cy="60" r="52" fill="none" stroke={timerColorOdds} strokeWidth="6" strokeLinecap="round"
-                  strokeDasharray={`${2*Math.PI*52}`}
-                  strokeDashoffset={`${2*Math.PI*52*(Math.max(0,secsToRaceFire)/PRESENT_SECS)}`}
-                  style={{transition:"stroke-dashoffset 1s linear",filter:"none"}}/>
-              </svg>
-              <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-                <div style={{fontFamily:"var(--track-label)",color:timerColorOdds,fontSize:32,fontWeight:900,lineHeight:1}}>{Math.max(0,Math.ceil(secsToRaceFire))}</div>
-                <div style={{color:"#c4cbb7",fontSize:9,letterSpacing:2,marginTop:2}}>SECONDS</div>
-              </div>
-            </div>
-            <div style={{fontFamily:"var(--track-label)",color:"#c4cbb7",fontSize:11,letterSpacing:3,marginBottom:20,animation:"racingBlink 1s infinite",textAlign:"center"}}>RACE STARTING</div>
-            {/* Both pots */}
-            <div style={{display:"flex",gap:8,marginBottom:16}}>
-              <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(228,196,139,0.06)",border:"1px solid #e4c48b33",borderRadius:10}}>
-                <span style={{color:"#c4cbb7",fontSize:10,letterSpacing:1}}>🔨 AUCTION</span>
-                <span style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:15,fontWeight:900}}>${fmt2(auctionPot)}</span>
-              </div>
-              {confirmedPot>0&&(
-                <div style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(229,182,120,0.06)",border:"1px solid #e5b67833",borderRadius:10}}>
-                  <span style={{color:"#c4cbb7",fontSize:10,letterSpacing:1}}>💰 BETS</span>
-                  <span style={{fontFamily:"var(--track-label)",color:"#e5b678",fontSize:15,fontWeight:900}}>${fmt2(confirmedPot)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Owners reveal — stage swipe then drop into list */}
-            <div style={{width:"100%"}}>
-              <div style={{color:"#c4cbb7",fontSize:10,letterSpacing:2,marginBottom:10,textAlign:"left"}}>HORSE OWNERS</div>
-              {/* Stage — newest card swipes in */}
-              <div style={{position:"relative",height:60,marginBottom:8,overflow:"hidden"}}>
-                {HORSES.map((h,hi)=>{
-                  const isNewest = hi === revealCount - 1;
-                  const owner = aData.owners?.[hi];
-                  if(!isNewest || revealCount===0) return null;
-                  return (
-                    <div key={hi+"-stage"} style={{position:"absolute",inset:0,animation:"oddsSwipeAcross 1.4s cubic-bezier(0.22,1,0.36,1) forwards"}}>
-                      {(()=>{
-                        const confirmedData=getConfirmed()[race.id];
-                        const pot=confirmedData?.pot||0;
-                        const horseBets=confirmedData?.bets||{};
-                        const betAmt=parseFloat(horseBets[h.id]||0);
-                        const odds=betAmt>0&&pot>0?parseFloat((pot/betAmt).toFixed(2)):null;
-                        return (
-                          <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:`${h.color}12`,border:`1px solid ${h.color}88`,borderRadius:10,boxShadow:"none"}}>
-                            <div style={{width:28,height:28,borderRadius:"50%",background:`${h.color}18`,border:`1.5px solid ${h.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>🐴</div>
-                            <div style={{flex:1}}>
-                              <div style={{color:h.color,fontWeight:700,fontSize:13}}>{race.horses?.[hi]||h.name}</div>
-                              {owner
-                                ? <div style={{color:owner.username===user.username?"#97bd88":"#c4cbb7",fontSize:11,marginTop:1}}>🔨 {owner.username} · <span style={{color:"#e4c48b"}}>${fmt2(owner.amount)}</span></div>
-                                : <div style={{color:"#d48d80",fontSize:11,marginTop:1}}>🏚 HOUSE</div>
-                              }
-                            </div>
-                            {odds&&<div style={{textAlign:"right",flexShrink:0}}>
-                              <div style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:16,fontWeight:900}}>{odds.toFixed(2)}x</div>
-                              <div style={{color:"#e5b678",fontSize:10,marginTop:1}}>💰${fmt2(betAmt)}</div>
-                            </div>}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* List — previous cards dropped in */}
-              {HORSES.map((h,hi)=>{
-                const inList = hi < revealCount - 1;
-                const owner = aData.owners?.[hi];
-                if(!inList) return null;
-                return (
-                  <div key={hi+"-list"} style={{marginBottom:5,animation:"oddsDropDown 0.4s ease-out forwards"}}>
-                    {(()=>{
-                      const confirmedData=getConfirmed()[race.id];
-                      const pot=confirmedData?.pot||0;
-                      const horseBets=confirmedData?.bets||{};
-                      const betAmt=parseFloat(horseBets[h.id]||0);
-                      const odds=betAmt>0&&pot>0?parseFloat((pot/betAmt).toFixed(2)):null;
-                      return (
-                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:`${h.color}0d`,border:`1px solid ${h.color}22`,borderRadius:8}}>
-                          <div style={{width:20,height:20,borderRadius:"50%",background:`${h.color}18`,border:`1.5px solid ${h.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,flexShrink:0}}>🐴</div>
-                          <div style={{flex:1}}>
-                            <div style={{color:h.color,fontWeight:700,fontSize:11}}>{race.horses?.[hi]||h.name}</div>
-                            {owner
-                              ? <div style={{color:owner.username===user.username?"#97bd88":"#c4cbb7",fontSize:10}}>🔨 {owner.username}</div>
-                              : <div style={{color:"#d48d80",fontSize:10}}>🏚 HOUSE</div>
-                            }
-                          </div>
-                          {odds&&<span style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:12,fontWeight:900}}>{odds.toFixed(2)}x</span>}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── AUCTION TAB ── */}
-        {tab==="auction" && !inOdds && !raceStarted && (
-          <div>
-            {/* Pot */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",background:"rgba(228,196,139,0.06)",border:"1px solid #e4c48b33",borderRadius:10,marginBottom:16}}>
-              <span style={{color:"#c4cbb7",fontSize:11,letterSpacing:2}}>AUCTION POT</span>
-              <span style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:18,fontWeight:900}}>${fmt2(auctionPot)}</span>
-            </div>
-
-            {/* Pre-auction countdown */}
-            {preAuction && (
-              <div style={{textAlign:"center",padding:"40px 20px"}}>
-                <div style={{fontSize:40,marginBottom:12}}>🔨</div>
-                <div style={{fontFamily:"var(--track-label)",fontSize:12,letterSpacing:2,color:"#c4cbb7",marginBottom:8}}>AUCTION OPENS IN</div>
-                <div style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:36,fontWeight:900}}>{fmtCD(Math.abs(elapsedSecs))}</div>
-                <div style={{color:"#c4cbb7",fontSize:11,marginTop:12}}>6 horses · $5 starting bid · 30s each</div>
-                <div style={{marginTop:24}}>
-                  <div style={{color:"#c4cbb7",fontSize:10,letterSpacing:2,marginBottom:8}}>AUCTION ORDER</div>
-                  {(race.horseOrder||[0,1,2,3,4,5]).map((hi,i)=>{
-                    const h=HORSES[hi];
-                    return (
-                      <div key={hi} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:"rgba(255,255,255,0.02)",border:"1px solid #ffffff08",borderRadius:7,marginBottom:4}}>
-                        <span style={{color:"#c4cbb7",fontSize:11,width:14}}>{i+1}</span>
-                        <div style={{width:8,height:8,borderRadius:"50%",background:h.color}}/>
-                        <span style={{color:"#c4cbb7",fontSize:12,flex:1}}>{race.horses?.[hi]||h.name}</span>
-                        <span style={{color:"#c4cbb7",fontSize:11}}>min ${AUCTION_MIN_BID}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* SOLD animation */}
-            {soldAnim && (
-              <div style={{textAlign:"center",padding:"20px",marginBottom:16,background:"rgba(0,0,0,0.7)",borderRadius:16,border:`1px solid ${soldAnim.winner?"#e4c48b44":"#d48d8044"}`,animation:"tieFlash 2.5s ease-out forwards"}}>
-                <div style={{fontSize:44,marginBottom:4}}>{soldAnim.winner?"🔨":"🏚"}</div>
-                <div style={{fontFamily:"var(--track-label)",fontSize:32,fontWeight:900,letterSpacing:4,color:soldAnim.winner?"#e4c48b":"#d48d80",textShadow:"none",marginBottom:8}}>
-                  {soldAnim.winner?"SOLD!":"NO SALE"}
-                </div>
-                {soldAnim.winner?(
-                  <>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:6}}>
-                      <div style={{width:12,height:12,borderRadius:"50%",background:HORSES[soldAnim.hi]?.color,boxShadow:"none"}}/>
-                      <span style={{color:"#fff",fontSize:14}}>{race.horses?.[soldAnim.hi]||HORSES[soldAnim.hi]?.name}</span>
-                    </div>
-                    <div style={{color:"#c4cbb7",fontSize:13,marginBottom:4}}>🏇 {soldAnim.winner}</div>
-                    <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:24,fontWeight:900}}>${fmt2(soldAnim.winAmt)}</div>
-                  </>
-                ):(
-                  <div style={{color:"#c4cbb7",fontSize:12}}>Goes to the house if this horse wins</div>
-                )}
-              </div>
-            )}
-
-            {/* Active bidding */}
-            {inAuction && currentSlot < 6 && !soldAnim && (
-              <div>
-                {/* Progress bar */}
-                <div style={{display:"flex",gap:3,marginBottom:14}}>
-                  {Array.from({length:6}).map((_,i)=>{
-                    const hid=race.horseOrder?.[i]??i;
-                    const owned=aData.owners?.[hid];
-                    return <div key={i} style={{flex:1,height:4,borderRadius:2,background:
-                      i<currentSlot?(owned?"#97bd88":"#d48d8044"):
-                      i===currentSlot?currentHorse.color:"#ffffff11"}}/>;
-                  })}
-                </div>
-                <div style={{textAlign:"center",color:"#c4cbb7",fontSize:10,letterSpacing:2,marginBottom:12}}>HORSE {currentSlot+1} OF 6</div>
-
-                {/* Horse card */}
-                <div style={{padding:"20px",background:`${currentHorse.color}0d`,border:`2px solid ${currentHorse.color}55`,borderRadius:16,marginBottom:14,textAlign:"center",position:"relative"}}>
-                  {/* Timer */}
-                  <div style={{position:"absolute",top:12,right:12}}>
-                    <svg width="44" height="44" style={{transform:"rotate(-90deg)"}}>
-                      <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4"/>
-                      <circle cx="22" cy="22" r="18" fill="none" stroke={timerColor} strokeWidth="4"
-                        strokeDasharray={`${2*Math.PI*18}`}
-                        strokeDashoffset={`${2*Math.PI*18*(1-timerPct)}`}
-                        style={{transition:"stroke-dashoffset 0.5s linear",filter:"none"}}/>
-                    </svg>
-                    <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--track-label)",color:timerColor,fontSize:12,fontWeight:900}}>{Math.ceil(slotTimeLeft)}</div>
-                  </div>
-
-                  <div style={{marginBottom:8}}><RunnerSilk horseId={currentHorseId} width={80} height={64}/></div>
-                  <div style={{color:currentHorse.color,fontWeight:700,fontSize:18,marginBottom:12}}>{race.horses?.[currentHorseId]||currentHorse.name}</div>
-
-                  {/* High bid */}
-                  {topBid?(
-                    <>
-                      <div style={{color:"#c4cbb7",fontSize:10,letterSpacing:2,marginBottom:2}}>CURRENT BID</div>
-                      <div style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:28,fontWeight:900,textShadow:"none"}}>${fmt2(topBid[1])}</div>
-                      <div style={{color:topBid[0]===user.username?"#97bd88":"#c4cbb7",fontSize:12,marginTop:2,marginBottom:12}}>
-                        {topBid[0]===user.username?"✓ YOU — HIGH BIDDER":topBid[0]}
-                      </div>
-                    </>
-                  ):(
-                    <>
-                      <div style={{color:"#c4cbb7",fontSize:10,letterSpacing:2,marginBottom:2}}>STARTING BID</div>
-                      <div style={{fontFamily:"var(--track-label)",color:"#c4cbb7",fontSize:28,fontWeight:900,marginBottom:12}}>${fmt2(AUCTION_MIN_BID)}</div>
-                    </>
-                  )}
-
-                  {/* Bid input */}
-                  {canBid&&(
-                    <div style={{display:"flex",gap:8}}>
-                      <div style={{flex:1,position:"relative"}}>
-                        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#e4c48b",fontSize:14,pointerEvents:"none"}}>$</span>
-                        <input type="number" min={myMinBid} placeholder={`min $${myMinBid}`} value={bidAmount}
-                          onChange={e=>setBidAmount(e.target.value)}
-                          onKeyDown={e=>e.key==="Enter"&&doBid()}
-                          style={{width:"100%",padding:"10px 10px 10px 24px",background:"rgba(255,255,255,0.07)",border:"1px solid #e4c48b33",borderRadius:8,color:"#fff",fontSize:16,outline:"none",boxSizing:"border-box"}}/>
-                      </div>
-                      <button onClick={doBid} style={{padding:"10px 18px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#e4c48b,#b77d58)",color:"#000",fontFamily:"var(--track-label)",fontWeight:900,fontSize:13,cursor:"pointer"}}>BID</button>
-                    </div>
-                  )}
-                  {iOwn&&<div style={{color:"#97bd88",fontSize:13,fontWeight:700,marginTop:8}}>✓ You own a horse — watching only</div>}
-                  {!canBid&&!iOwn&&topBid?.[0]===user.username&&<div style={{color:"#e4c48b",fontSize:12,marginTop:8}}>You are the high bidder</div>}
-                </div>
-
-                {/* Bids list */}
-                {bidEntries.length>0&&(
-                  <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid #ffffff0d",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
-                    <div style={{color:"#c4cbb7",fontSize:10,letterSpacing:2,marginBottom:8}}>ALL BIDS</div>
-                    {bidEntries.map(([uname,amt],i)=>(
-                      <div key={uname} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<bidEntries.length-1?"1px solid #ffffff08":"none"}}>
-                        <span style={{color:uname===user.username?"#97bd88":"#c4cbb7",fontSize:13}}>{i===0?"👑 ":""}{uname}</span>
-                        <span style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:13}}>${fmt2(amt)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── BETTING TAB ── */}
-        {tab==="bets" && !inOdds && !raceStarted && (()=>{
-          const totalBetAmt = Object.values(localBets).reduce((s,v)=>s+(parseFloat(v)||0),0);
-          const overBalance = totalBetAmt > user.balance;
-          // Bets close when race starts (secsToAuctionEnd counts down to 0 at race startTime)
-          const betsCloseIn = Math.max(0, secsToAuctionEnd);
-          const bettingPct  = Math.min(100, (betsCloseIn / (30*60)) * 100);
-          return (
-            <div>
-              {/* BETS CLOSE timer bar */}
-              <div style={{marginBottom:16}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                  <span style={{color:"#c4cbb7",fontSize:12,letterSpacing:2}}>BETS CLOSE IN</span>
-                  <span style={{fontFamily:"var(--track-label)",color:betsCloseIn<120?"#d48d80":"#e4c48b",fontSize:15,textShadow:"none"}}>{fmtCD(betsCloseIn)}</span>
-                </div>
-                <div style={{height:7,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:4,width:`${bettingPct}%`,background:betsCloseIn<120?"linear-gradient(90deg,#d48d80,#b77d58)":"linear-gradient(90deg,#e5b678,#97bd88)",boxShadow:"none",transition:"width 1s linear"}}/>
-                </div>
-              </div>
-
-              {/* Total bet */}
-              <div style={{textAlign:"center",marginBottom:14,padding:"10px",background:"rgba(228,196,139,0.05)",border:"1px solid #e4c48b22",borderRadius:10}}>
-                <span style={{color:"#c4cbb7",fontSize:12,letterSpacing:2}}>TOTAL BET </span>
-                <span style={{color:"#e4c48b",fontFamily:"var(--track-label)",fontSize:20}}>${fmt2(totalBetAmt)}</span>
-              </div>
-
-              {/* Horse cards */}
-              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-                {HORSES.map((h,i)=>{
-                  const val = localBets[h.id]||"";
-                  const betNum = parseFloat(val)||0;
-                  return (
-                    <div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"rgba(255,255,255,0.03)",borderRadius:12,border:`1px solid ${betNum>0?h.color+"55":"rgba(255,255,255,0.06)"}`,boxShadow:"none",transition:"all 0.2s"}}>
-                      <div style={{width:38,height:38,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,background:`${h.color}15`,border:`2px solid ${h.color}`,boxShadow:"none",flexShrink:0}}><RunnerSilk horseId={h.id} width={28} height={28}/></div>
-                      <div style={{flex:1}}>
-                        <div style={{color:h.color,fontWeight:700,fontSize:14,letterSpacing:1}}>{race.horses?.[i]||h.name}</div>
-                      </div>
-                      <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                        <div style={{position:"relative"}}>
-                          <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:"#e4c48b",fontSize:13,pointerEvents:"none"}}>$</span>
-                          <input type="number" min="0" placeholder="0" value={val}
-                            onChange={e=>{ saveBet(h.id,e.target.value); setBetsConfirmed(false); }}
-                            style={{width:86,padding:"7px 7px 7px 20px",background:"rgba(255,255,255,0.06)",border:`1px solid ${betNum>0?h.color+"55":"#ffffff15"}`,borderRadius:7,color:"#fff",fontSize:16,outline:"none"}}/>
-                        </div>
-                        <button onClick={()=>saveBet(h.id, val?"":"50")} style={{padding:"7px 11px",borderRadius:7,border:`1px solid ${h.color}44`,background:betNum>0?`${h.color}18`:"transparent",color:betNum>0?h.color:"#c4cbb7",cursor:"pointer",fontSize:11,fontWeight:700}}>{betNum>0?"✓":"+"}</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Confirm / confirmed state */}
-              {overBalance && <p style={{color:"#d48d80",marginBottom:8,fontSize:13,textAlign:"center"}}>⚠ Exceeds available balance (${fmt2(user.balance)})</p>}
-              {betsConfirmed ? (
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-                  <div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"10px 22px",background:"rgba(229,182,120,0.07)",border:"1px solid #e5b67844",borderRadius:10}}>
-                    <span style={{fontSize:18}}>✅</span>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{color:"#e5b678",fontWeight:700,fontSize:13}}>Bets Confirmed!</div>
-                      <div style={{color:"#c4cbb7",fontSize:11,marginTop:2}}>${fmt2(totalBetAmt)} reserved</div>
-                    </div>
-                  </div>
-                  <button onClick={()=>setBetsConfirmed(false)} style={{padding:"8px 24px",borderRadius:8,border:"1px solid #ffffff22",background:"transparent",color:"#c4cbb7",cursor:"pointer",fontSize:12}}>✏️ Edit Bets</button>
-                </div>
-              ) : (
-                <button onClick={confirmBets} disabled={overBalance||totalBetAmt===0}
-                  style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:overBalance||totalBetAmt===0?"rgba(255,255,255,0.06)":"linear-gradient(135deg,#e5b678,#97bd88)",color:overBalance||totalBetAmt===0?"#c4cbb7":"#141614",cursor:overBalance||totalBetAmt===0?"not-allowed":"pointer",fontFamily:"var(--track-label)",fontWeight:700,fontSize:13,letterSpacing:1}}>
-                  🔒 CONFIRM BETS
-                </button>
-              )}
-            </div>
-          );
-        })()}
-      </div>
-    </div>
-  );
+  const totalBet = Object.values(localBets).reduce((sum,value)=>sum+(parseFloat(value)||0),0);
+  return <AuctionView race={race} names={HORSES.map((h,id)=>race.horses?.[id]||h.name)}
+    typeLabel={rt.label} conditionLabel={TRACK_CONDITIONS[race.condition]?.label||'Clear track'}
+    post={fmtTime(new Date(raceFiresAt))} phase={raceStarted?'racing':inOdds?'reveal':inAuction?'auction':'upcoming'}
+    tab={tab} onTab={setTab} onBack={onBack} username={user.username}
+    auction={{currentSlot,currentHorseId,seconds:slotTimeLeft,opensIn:fmtCD(Math.max(0,-elapsedSecs)),
+      endsIn:fmtCD(Math.max(0,secsToAuctionEnd)),firesIn:fmtCD(Math.max(0,secsToRaceFire)),
+      topBid,bidEntries,canBid,iOwn,minBid:myMinBid,amount:bidAmount,pending:bidPending,error:bidError,
+      onAmount:value=>{setBidAmount(value);setBidError('');},onBid:doBid,sold:soldAnim,
+      owners:aData.owners||{},pot:auctionPot,order:race.horseOrder||[0,1,2,3,4,5],revealCount}}
+    ticket={{bets:localBets,confirmed:betsConfirmed,total:totalBet,pool:sharedPool.totalPot||0,poolBets:sharedPool.betsPerHorse||{},
+      availableBalance:user.balance+(confirmedPot||0),cashBalance:user.balance,confirmedPot:confirmedPot||0,
+      onBet:(id,value)=>{saveBet(id,value);setBetsConfirmed(false);},onConfirm:confirmBets}}/>;
 }
 
-function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={} }) {
-  const AUCTION_OPEN_SECS = 3 * 60; // auction opens 3 min before race
-  const withStatus = schedule.map(r=>({...r, _st:raceStatus(r,now)})).filter(r=>r._st!=="finished");
-
-  return (
-    <div style={{minHeight:"100vh",background:"var(--track-bg)",paddingTop:72,paddingBottom:40}}>
-      <div style={{maxWidth:700,margin:"0 auto",padding:"16px"}}>
-        <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:36,marginBottom:6}}>🔨</div>
-          <h2 style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:20,letterSpacing:3,marginBottom:4}}>AUCTION RACES</h2>
-          <div style={{color:"#c4cbb7",fontSize:12,letterSpacing:2}}>OWN A HORSE. BACK YOUR WINNER.</div>
-        </div>
-        {withStatus.map(race=>{
-          const rt = RACE_TYPES[race.type]||RACE_TYPES.standard;
-          const cond = TRACK_CONDITIONS[race.condition]||TRACK_CONDITIONS.sunny;
-          const secs = (race.startTime - now)/1000;
-          const auctionSecs = secs - AUCTION_OPEN_SECS;
-          const isAuctionLive = auctionSecs <= 0 && secs > 0;
-          const isRacing = secs <= 0;
-          const auctions = getAuctions();
-          const aData = auctions[race.id]||{};
-          const ownedCount = Object.values(aData.owners||{}).filter(Boolean).length;
-
-          return (
-            <div key={race.id} onClick={()=>onEnterRace(race)}
-              style={{marginBottom:10,padding:"13px 18px",background:"rgba(255,255,255,0.03)",border:`1px solid ${isAuctionLive?"#e4c48b55":"#ffffff0d"}`,borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:14,transition:"all 0.15s",boxShadow:"none"}}
-              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"}
-              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}
-            >
-              <div style={{width:44,height:44,borderRadius:10,background:`${rt.color}15`,border:`2px solid ${rt.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,position:"relative"}}>
-                {rt.icon}
-                {race.condition&&race.condition!=="sunny"&&(
-                  <span style={{position:"absolute",bottom:-6,right:-6,fontSize:14,filter:"none"}}>
-                    {cond.icon}
-                  </span>
-                )}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                  <span style={{color:"#fff",fontWeight:700,fontSize:15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{race.name}</span>
-                  {isAuctionLive && <span style={{background:"#e4c48b22",border:"1px solid #e4c48b66",borderRadius:20,padding:"1px 8px",color:"#e4c48b",fontSize:10,fontWeight:700,letterSpacing:1,animation:"racingBlink 0.8s infinite"}}>🔨 LIVE</span>}
-                </div>
-                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                  <span style={{color:rt.color,fontSize:12,fontWeight:600}}>{rt.label}</span>
-                  {race.condition&&race.condition!=="sunny"&&(
-                    <span style={{color:cond.color,fontSize:11,fontWeight:600,background:`${cond.color}18`,border:`1px solid ${cond.color}44`,borderRadius:10,padding:"1px 7px"}}>{cond.icon} {cond.label}</span>
-                  )}
-                  <span style={{color:"#c4cbb7"}}>·</span>
-                  <span style={{color:"#c4cbb7",fontSize:11}}>{ownedCount}/6 sold</span>
-{(sharedPot[race.id]?.totalPot||0)>0&&<><span style={{color:"#c4cbb7"}}>·</span><span style={{background:"rgba(151,189,136,0.08)",border:"1px solid #97bd8833",borderRadius:10,padding:"1px 8px",color:"#97bd88",fontSize:11,fontFamily:"var(--track-label)"}}>🌐 ${fmt2(sharedPot[race.id]?.totalPot||0)}</span></>}
-                </div>
-              </div>
-              <div style={{textAlign:"right",flexShrink:0,display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
-                {isRacing ? (
-                  <div style={{color:"#d48d80",fontSize:11,fontWeight:700,fontFamily:"var(--track-label)"}}>RACING</div>
-                ) : isAuctionLive ? (
-                  <>
-                    <div>
-                      <div style={{fontFamily:"var(--track-label)",color:"#e4c48b",fontSize:14,fontWeight:900,lineHeight:1,animation:"racingBlink 0.8s infinite"}}>🔨 LIVE</div>
-                      <div style={{color:"#e4c48b",fontSize:10,letterSpacing:1,marginTop:2}}>AUCTION</div>
-                    </div>
-                    <div>
-                      <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
-                      <div style={{color:"#97bd88",fontSize:10,letterSpacing:1,marginTop:2}}>RACE STARTS</div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <div style={{fontFamily:"var(--track-label)",color:auctionSecs<120?"#e4c48b":"#c4cbb7",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(auctionSecs)}</div>
-                      <div style={{color:auctionSecs<120?"#e4c48b":"#c4cbb7",fontSize:10,letterSpacing:1,marginTop:2}}>🔨 AUCTION OPENS</div>
-                    </div>
-                    <div>
-                      <div style={{fontFamily:"var(--track-label)",color:"#97bd88",fontSize:13,fontWeight:700,lineHeight:1}}>{fmtCD(secs)}</div>
-                      <div style={{color:"#97bd88",fontSize:10,letterSpacing:1,marginTop:2}}>BETS CLOSE</div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+function AuctionLobbyScreen({ schedule, now, onEnterRace, sharedPot={}, onBack }) {
+  const [auctions,setAuctions]=useState(getAuctions);
+  useEffect(()=>onSnapshot(doc(db,'global','auctions'),snap=>setAuctions(snap.data()?.data||{})),[]);
+  const confirmed=getConfirmed();
+  const races=schedule.filter(r=>raceStatus(r,now)!=='finished').map(race=>{
+    const opensAt=race.startTime-180000,firesAt=race.startTime+30000;
+    const status=now<opensAt?'upcoming':now<race.startTime?'auction':now<firesAt?'locked':'racing';
+    const deadline=status==='upcoming'?opensAt:status==='auction'?race.startTime:firesAt;
+    return {...race,status,typeLabel:(RACE_TYPES[race.type]||RACE_TYPES.standard).label,
+      conditionLabel:race.condition&&race.condition!=='sunny'?TRACK_CONDITIONS[race.condition]?.label:'Clear track',
+      post:fmtTime(new Date(firesAt)),pot:sharedPot[race.id]?.totalPot||0,
+      ownedCount:Object.values(auctions[race.id]?.owners||{}).filter(Boolean).length,
+      lot:Math.min(6,Math.floor((now-opensAt)/30000)+1),ticket:confirmed[race.id]?.pot||0,confirmed:!!confirmed[race.id],
+      countdown:fmtCD(Math.max(0,(deadline-now)/1000))};
+  });
+  return <LobbyView auction races={races} onRegularLobby={onBack} onEnterRace={row=>onEnterRace(schedule.find(r=>r.id===row.id))}/>;
 }
 
 function LobbyScreen({ schedule, now, onEnterRace, userBets, friendRaces={}, sharedPot={} }) {
@@ -5855,8 +5464,7 @@ function App() {
       )}
       {showAuction && !selectedAuctionRace && (
         <div style={{position:"fixed",inset:0,zIndex:50,background:"var(--track-bg)",overflowY:"auto"}}>
-          <AuctionLobbyScreen schedule={auctionSchedule} now={now} onEnterRace={race=>{setSelectedAuctionRace(race);}} sharedPot={sharedPot}/>
-          <button onClick={()=>setShowAuction(false)} style={{position:"fixed",top:16,left:16,zIndex:60,background:"none",border:"none",color:"#c4cbb7",cursor:"pointer",fontSize:13}}>← Close</button>
+          <AuctionLobbyScreen schedule={auctionSchedule} now={now} onBack={()=>setShowAuction(false)} onEnterRace={race=>{setSelectedAuctionRace(race);}} sharedPot={sharedPot}/>
         </div>
       )}
       {showAuction && selectedAuctionRace && screen!=="race" && (
@@ -5877,11 +5485,12 @@ function App() {
             }}
             confirmedBets={userBets[selectedAuctionRace?.id]?.bets||{}}
             confirmedPot={userBets[selectedAuctionRace?.id]?.pot||0}
+            sharedPool={sharedPot[selectedAuctionRace?.id]||{}}
             onConfirmBets={handleAuctionBetsConfirm}
           />
         </div>
       )}
-      {screen==="lobby"  && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets} friendRaces={friendRaces} sharedPot={sharedPot}/>}
+      {screen==="lobby" && !showAuction && <LobbyScreen schedule={schedule} now={now} onEnterRace={handleEnterRace} userBets={userBets} friendRaces={friendRaces} sharedPot={sharedPot}/>}
       {screen==="detail" && liveSelectedRace && <RaceDetailScreen race={liveSelectedRace} user={user} now={now} onBack={goLobby} onConfirmBets={handleBetsConfirm} confirmedBets={bets} confirmedPot={totalPot} sharedPot={sharedPot[liveSelectedRace?.id]||null} onRaceStart={handleRaceStart} devForceStart={false} onDevForceStart={()=>{}} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread}/>}
       {screen==="race"   && liveSelectedRace && <RaceScreen key={liveSelectedRace.id} race={{...liveSelectedRace, nowMs:now}} bets={bets} totalPot={sharedPot[liveSelectedRace?.id]?.totalPot||totalPot} onRaceEnd={handleRaceEnd} user={user} chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} chatOpen={chatOpen} setChatOpen={setChatOpen} chatUnread={chatUnread} setChatUnread={setChatUnread} auctionOwners={auctionOwners}/>}
       {screen==="payout"         && liveSelectedRace && winner!==null && <PayoutScreen race={liveSelectedRace} bets={bets} totalPot={totalPot} odds={odds} winner={winner} userBalance={user.balance} onPlayAgain={()=>setShowRaceReplay(liveSelectedRace)} onLobby={goLobby}/>}

@@ -2,6 +2,10 @@
 
 All public, auction, private and replay races use the same broadcast renderer. The old race-screen fallback is removed. The green, ivory and brass theme covers the existing menus, bank, auctions, tickets, profiles and help; horse silk colors remain identifying colors.
 
+The auction lobby now shares the regular lobby's full-width hero, typography and grouped race rows. Live auctions, the 30-second presentation, live races and upcoming auctions have distinct labels and accurate timers. Ownership counts subscribe to live auction data. Auction entry uses the same field/ticket components as regular races, with a two-column bidding ring, auction order and owner-reveal countdown. The underlying regular lobby is unmounted while auctions are open so it does not remain an extra accessible page behind the overlay.
+
+Auction layout verification covered desktop 1366×900, phone 390×844 and landscape 844×390; all had no horizontal overflow. Isolated browser checks placed a $10 ownership bid, confirmed a $25 race ticket, edited it to $10 with a $15 refund, reopened the auction, observed the ownership count and owner reveal, and retained the confirmed ticket during the automatic race countdown. Backend transaction semantics and the deployed functions are unchanged by this presentation update.
+
 ## Race coverage
 
 | Format | Conditions | Visual behavior |
