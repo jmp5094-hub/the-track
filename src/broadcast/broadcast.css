@@ -46,3 +46,50 @@
 @media(prefers-reduced-motion:reduce){.tv-die.is-rolling{animation:none}}
 .tv-announcement{left:12px;top:auto;bottom:12px;transform:none;min-width:0;max-width:70%;padding:10px 14px;text-align:left;gap:3px}.tv-announcement b{font-size:1.35rem}.tv-announcement span{font-size:.76rem}
 @media(max-width:760px){.tv-announcement{left:8px;bottom:8px;padding:7px 10px}.tv-announcement b{font-size:1.05rem}.tv-announcement span{font-size:.68rem}}
+/* Race beats stay readable without relying on sound. */
+.tv-race-layout,.tv-sidebar,.tv-situation{min-width:0}
+.tv-moment{position:absolute;left:20px;bottom:22px;display:grid;gap:5px;max-width:85%;pointer-events:none;color:#fff0cd;text-shadow:0 2px 8px #000;background:linear-gradient(100deg,#101c18e8,#101c1890);border-left:4px solid var(--moment-silk);padding:11px 16px;border-radius:0 6px 6px 0}
+.tv-moment span{font-size:.8rem;color:#e2d7bd}.tv-moment strong{font:650 clamp(1.2rem,2.8vw,3.1rem)/1.05 var(--track-display)}
+.tv-moment.is-double,.tv-moment.is-lead{animation:tv-impact .22s ease-out}.tv-moment.is-double strong{color:var(--moment-silk)}
+.tv-moment.is-quiet{opacity:.85}.tv-die.is-hit{outline:3px solid var(--die-silk);outline-offset:4px}.tv-lane.is-advancing{background:#e9c88b30}
+@keyframes tv-impact{from{transform:translateY(8px) scale(.97);opacity:.2}to{transform:none;opacity:1}}
+.is-paused .tv-die,.is-paused .tv-moment{animation-play-state:paused}
+@media(max-width:760px){.tv-moment{left:8px;bottom:8px;padding:6px 9px;gap:3px}.tv-moment span{font-size:.65rem}.tv-moment strong{font-size:1.1rem}}
+/* A wide screen is a stage with a score rail, not a tall mobile page. */
+@media (min-width:900px) and (min-aspect-ratio:6/5), (min-width:640px) and (orientation:landscape) and (max-height:600px){
+ .track-broadcast{width:calc(100% - 40px);height:calc(100dvh - 70px);padding:8px 0 0;display:grid;grid-template-rows:auto minmax(0,1fr) 20px;gap:10px;min-height:0}
+ .track-broadcast.is-replay{padding-top:8px}.tv-heading{margin:0}.tv-heading h1{font-size:clamp(1.5rem,2.2vw,2.6rem)}.tv-heading p{font-size:.8rem}
+ .tv-race-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,28vw,440px);grid-template-rows:minmax(0,1fr) auto;gap:0 16px;min-height:0}
+ .tv-video{grid-column:1;grid-row:1;height:auto;min-height:0;max-height:none;border-radius:10px 10px 0 0}
+ .tv-situation{grid-column:1;grid-row:2}.tv-focus{border-radius:0;padding:12px 18px;gap:18px}.tv-focus strong{font-size:clamp(1rem,1.3vw,1.5rem)}.tv-focus em{font-size:1rem}.tv-focus span{font-size:.8rem}
+ .tv-stakes{border:1px solid #59664f;border-top:0;border-radius:0 0 10px 10px;font-size:clamp(.95rem,1.1vw,1.3rem);min-height:0;padding:9px 18px}
+ .tv-sidebar{grid-column:2;grid-row:1 / 3;display:flex;flex-direction:column;min-height:0;border-radius:10px;overflow:hidden;background:#1a2a20}
+ .tv-roll-panel{display:flex;flex-direction:column;gap:16px;text-align:center;flex:0 0 auto;padding:20px 16px;border-top:1px solid #59664f;border-radius:10px 10px 0 0;min-height:0}
+ .tv-dice>span{font-size:.85rem;margin-bottom:12px}.tv-dice>div{justify-content:center;gap:18px}.tv-die{width:clamp(64px,5.5vw,106px);height:clamp(64px,5.5vw,106px);padding:15%;gap:5px;border-radius:10px}.tv-dice>div .tv-die{padding:12px}
+ .tv-call{font-size:clamp(1rem,1.3vw,1.5rem);margin-bottom:6px}.tv-effect{font-size:clamp(.875rem,1vw,1.15rem);line-height:1.4;min-height:2.8em}
+ .tv-sidebar>.tv-field{flex:1;min-height:0;display:grid;grid-template-rows:auto repeat(6,minmax(0,1fr));padding:12px 14px;gap:3px}
+ .tv-field-axis,.tv-lane{grid-template-columns:104px minmax(0,1fr) 48px;gap:10px}.tv-field-axis{font-size:.75rem;margin:0 0 4px}.tv-field-axis>span:nth-child(2)>i:nth-child(2){display:none}
+ .tv-lane{min-height:29px}.tv-runner{font-size:.875rem;gap:7px}.tv-runner>b{min-width:24px;height:24px;font-size:.9rem}.tv-distance{font-size:.875rem}.tv-lane-track{height:22px}.tv-token{width:20px;height:20px;font-size:12px}
+ .tv-ticket{font-size:.8rem;padding:10px 14px;flex:0 0 auto}.tv-credit{font-size:.75rem;margin:0;text-align:right;align-self:center}
+ .tv-board-scene{padding:24px}.tv-board-scene .tv-field{display:grid;grid-template-rows:auto repeat(6,1fr);gap:8px;height:80%;max-height:550px}.tv-board-scene .tv-field-axis{display:grid}.tv-board-scene .tv-lane{min-height:36px}
+ .tv-board-scene .tv-field-axis,.tv-board-scene .tv-lane{grid-template-columns:130px minmax(0,1fr) 58px}.is-board .tv-sidebar{justify-content:center;border:1px solid #59664f}.is-board .tv-roll-panel,.is-board .tv-ticket{border:0}
+ .tv-announcement{left:24px;bottom:24px;padding:18px 24px}.tv-announcement b{font-size:clamp(1.6rem,3vw,3.6rem)}.tv-announcement span{font-size:1rem}
+}
+@media (min-width:640px) and (orientation:landscape) and (max-height:600px){
+ .track-broadcast{width:calc(100% - 16px);height:calc(100dvh - 44px);gap:5px;grid-template-rows:32px minmax(0,1fr);padding:0}.tv-heading h1{font-size:1.1rem}.tv-heading p{font-size:.65rem}.tv-heading .tv-tools button,.tv-heading .tv-tools select{font-size:.75rem;min-height:30px;padding:5px 8px}.tv-heading .tv-tools select{padding-right:24px}
+ .tv-race-layout{grid-template-columns:minmax(0,1fr) 300px;gap:0 8px}.tv-focus{padding:5px 9px;gap:8px}.tv-focus>div{gap:2px}.tv-focus>div+div{padding-left:8px}.tv-focus span{font-size:.6rem}.tv-focus strong{font-size:.8rem;min-height:18px;gap:5px}.tv-focus b{height:18px;min-width:18px;font-size:.7rem}.tv-focus em{font-size:.75rem}.tv-stakes{padding:5px 9px;font-size:.75rem;line-height:1.2}
+ .tv-roll-panel{display:grid;grid-template-columns:102px minmax(0,1fr);padding:8px 10px;gap:8px;text-align:left}.tv-dice>span{font-size:.6rem;margin-bottom:5px}.tv-dice>div{gap:9px}.tv-dice>div .tv-die{width:40px;height:40px;padding:8px;gap:3px;border-radius:6px}.tv-call{font-size:.8rem;line-height:1.2;margin:0 0 4px}.tv-effect{font-size:.7rem;line-height:1.3;min-height:0}.tv-die.is-hit{outline-width:2px;outline-offset:2px}
+ .tv-sidebar>.tv-field{padding:6px 10px;gap:0}.tv-field-axis,.tv-lane{grid-template-columns:90px minmax(0,1fr) 39px;gap:8px}.tv-field-axis{font-size:.6rem;margin:0 0 4px}.tv-lane{min-height:23px;padding:2px 0}.tv-runner{font-size:.72rem;gap:5px}.tv-runner>b{min-width:18px;height:18px;font-size:.7rem}.tv-distance{font-size:.7rem}.tv-lane-track{height:18px}.tv-token{width:16px;height:16px;top:1px;font-size:10px}
+ .tv-ticket{font-size:.65rem;padding:5px 10px}.tv-credit{display:none}.tv-shot-label{top:8px;left:8px;font-size:.65rem;padding:4px 6px}.tv-moment{left:10px;bottom:10px;padding:6px 10px;gap:2px}.tv-moment strong{font-size:1.3rem}.tv-moment span{font-size:.65rem}.tv-announcement{left:10px;bottom:10px;padding:8px 12px}.tv-announcement b{font-size:1.4rem}.tv-announcement span{font-size:.7rem}
+ .tv-board-scene{padding:10px}.tv-board-scene .tv-field{height:100%;gap:0}.tv-board-scene .tv-lane{min-height:22px}.tv-board-scene .tv-field-axis{display:none}
+}
+@media (prefers-reduced-motion:reduce){.tv-moment.is-double,.tv-moment.is-lead{animation:none}}
+@media(min-width:1500px) and (min-height:800px) and (min-aspect-ratio:6/5){
+ .tv-race-layout{grid-template-columns:minmax(0,1fr) clamp(430px,27vw,540px);gap:0 20px}.tv-sidebar>.tv-field{padding:18px 20px;gap:5px}.tv-field-axis,.tv-lane{grid-template-columns:148px minmax(0,1fr) 68px;gap:14px}.tv-field-axis{font-size:.95rem}.tv-runner,.tv-distance{font-size:1.2rem}.tv-runner>b{min-width:32px;height:32px;font-size:1.1rem}.tv-lane-track{height:28px}.tv-token{width:26px;height:26px;font-size:16px}.tv-dice>span{font-size:1rem}.tv-dice>div .tv-die{padding:18px;gap:7px}.tv-tools button,.tv-tools select{font-size:1rem;min-height:42px}.tv-roll-panel{padding:26px 20px;gap:20px}.tv-ticket{font-size:1rem}.tv-focus strong{font-size:1.6rem}.tv-focus em{font-size:1.2rem}.tv-focus span{font-size:.9rem}
+}
+@media(max-width:760px) and (orientation:portrait){.tv-fullscreen{display:none}}
+.tv-die.is-landed{animation:tv-dice-land .2s ease-out}.tv-die.is-landed:nth-child(2){animation-delay:.04s}
+@keyframes tv-dice-land{0%{transform:translateY(-5px) scale(1.07)}65%{transform:translateY(2px) scale(.98)}100%{transform:none}}
+@media(prefers-reduced-motion:reduce){.tv-die.is-landed{animation:none}}
+.is-paused .tv-die{animation-play-state:paused}
+.is-paused .tv-moment,.is-paused .tv-die.is-landed{animation:none}

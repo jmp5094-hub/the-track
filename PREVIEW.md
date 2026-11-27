@@ -24,3 +24,13 @@ The exhibition fixture is the existing frontend Standard engine's sunny seed 33,
 An existing engine edge case is preserved and flagged: Standard fog seed 3 records horse 5 as the winner after a +1/-1 roll, but its final recorded position is 11/12. The preview rejects that contradictory final snapshot and uses the legacy renderer. No winning space is invented. This needs a separate rules/engine decision before a broader release.
 
 Browser checks cover desktop/mobile exhibition, board and 3D modes, follow selection, finish replay and refresh. Account and wagering flows require a separate authenticated regression pass before production. No production deployment is part of this preview.
+
+## Landscape and living-room revision
+
+Wide screens now use a viewport-sized race stage with the dice and six runners alongside it. Short phone landscapes use the same arrangement with compact controls; full desktop and 1080p displays get larger dice, numbers and labels. A fullscreen control is available in supporting browsers. Portrait keeps its vertical layout.
+
+Presentation highlights the selected number, doubles, and settled lead changes. Finish anticipation uses current positions and weather. These captions do not expose an unrevealed roll or change the race result. Pausing also freezes dice animation.
+
+All races remain automatic. The exhibition still plays its saved engine history and has no wagers or payouts.
+
+The suite now has 15 passing tests, including no premature dramatic callouts. Casting to physical TV hardware has not been tested.

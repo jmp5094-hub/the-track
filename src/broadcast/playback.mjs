@@ -121,6 +121,22 @@ export function rootingHint(frame,follow,condition='sunny'){
   }
   return left===2?`Double ${follow+1}s can reach the wire.`:`Root for ${follow+1}. Each matching die moves your horse one space.`;
 }
+// Story beats read only revealed dice and current positions, never a future result.
+export function raceMoment(frame,follow,condition='sunny'){
+  if(!frame)return {kind:'ready',title:'Pick your runner',detail:'Every matching die moves one space.'};
+  if(frame.done)return {kind:'winner',horse:frame.winner,title:`#${frame.winner+1} takes it`,detail:'Across the wire'};
+  if(frame.tiePending)return {kind:'tie',title:'Tied at the wire',detail:'Three-space tiebreak next'};
+  if(frame.rolling)return {kind:'rolling',horse:follow,title:`Come on, ${follow+1}`,detail:'The dice are in the air'};
+  if(frame.revealed&&frame.roll){
+    const double=frame.roll.positions.findIndex((p,id)=>p-frame.previous[id]===2&&frame.roll.dice.every(d=>d===id+1));
+    if(double>=0)return {kind:'double',horse:double,title:`Double ${double+1}`,detail:'Two dice. Two spaces.'};
+    if(frame.settled&&frame.leadChange)return {kind:'lead',horse:frame.leaders[0],title:`#${frame.leaders[0]+1} takes the lead`,detail:'The race changes here'};
+  }
+  const left=frame.goal-frame.exact[follow];
+  if(frame.active.includes(follow)&&(condition==='sunny'||frame.tiebreak)&&left===1)return {kind:'chance',horse:follow,title:`One ${follow+1} to the wire`,detail:'Watch for your number'};
+  if(frame.active.includes(follow)&&(condition==='sunny'||frame.tiebreak)&&left===2)return {kind:'chance',horse:follow,title:`Double ${follow+1}s can finish`,detail:'Two spaces to go'};
+  return {kind:'quiet',horse:follow,title:`Root for ${follow+1}`,detail:frame.index<0?'Choose your runner below':'Every roll can change the lead'};
+}
 export function shotAt(frame,aspect,reduced=false){
   const narrow=aspect<1.5;
   if(frame.shot==='wire'&&!frame.steady)return {from:[TRACK_FINISH-8,10,narrow?22:18],at:[TRACK_FINISH-8,.5,0],fov:narrow?51:44};

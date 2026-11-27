@@ -115,8 +115,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const gateTrim=standard('#c3bfaf',{roughness:.63});
   const doorX=LEADER_START+1.60;
   const gates=[];
-  block(scene,steel,doorX-.96,2.60,0,2.44,.18,9.76);
-  block(scene,gatePaint,doorX-.88,2.70,0,2.14,.11,9.44);
+  // Open canopy keeps all six horses visible from the elevated landscape camera.
   block(scene,steel,doorX,2.47,0,.13,.18,9.6);
   for(let i=0;i<=6;i++){
     const z=(i-3)*1.56;

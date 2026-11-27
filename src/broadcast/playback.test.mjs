@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPlayback,worldAt,rootingHint,describeRoll,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH} from './playback.mjs';
+import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH} from './playback.mjs';
 const fixture=JSON.parse(readFileSync(new URL('./exhibition.json',import.meta.url),'utf8'));
 const voice=JSON.parse(readFileSync(new URL('./voice.json',import.meta.url),'utf8'));
 const source=readFileSync(new URL('../the-track.jsx',import.meta.url),'utf8');
@@ -99,4 +99,21 @@ test('existing fog seed 3 uses fallback rather than inventing a winning space',(
 test('invalid histories fail closed to the existing fallback',()=>{
   assert.equal(buildPlayback({winner:0,rolls:[roll([9,2],[12,0,0,0,0,0])]},3500,12,3),null);
   assert.equal(buildPlayback({winner:0,rolls:[roll([1,2],[1,1,0,0,0,0])]},3500,12,3),null);
+});
+test('dramatic doubles wait for revealed dice and lead calls wait for the move',()=>{
+  const doubleStart=FIRST_ROLL+12*3.5;
+  assert.equal(raceMoment(playback.sample(doubleStart+LAND-.01),3).kind,'rolling');
+  assert.equal(raceMoment(playback.sample(doubleStart+LAND+.01),3).title,'Double 4');
+  for(let i=0;i<fixture.rolls.length;i++){
+    const before=playback.sample(FIRST_ROLL+i*3.5+MOVE-.01);
+    assert.notEqual(raceMoment(before,3).kind,'lead');
+  }
+});
+test('finish anticipation is based on current spaces and weather, not the eventual winner',()=>{
+  const f=playback.sample(FIRST_ROLL+21*3.5+MOVE_END+.01);
+  assert.equal(raceMoment(f,3).title,'One 4 to the wire');
+  assert.notEqual(raceMoment(f,3,'rain').kind,'chance');
+  assert.notEqual(raceMoment(f,3,'fog').kind,'chance');
+  assert.equal(raceMoment(playback.sample(playback.end-.01),3).kind==='winner',false);
+  assert.equal(raceMoment(playback.sample(playback.end+.01),3).kind,'winner');
 });

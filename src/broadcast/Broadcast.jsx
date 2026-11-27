@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {buildPlayback,describeRoll,rootingHint,LAND,MOVE,MOVE_END,PIPS,SILKS} from './playback.mjs';
+import {buildPlayback,describeRoll,rootingHint,raceMoment,LAND,MOVE,MOVE_END,PIPS,SILKS} from './playback.mjs';
 import voice from './voice.json';
 import {playRaceEffect} from './race-sound';
 import './broadcast.css';
@@ -10,8 +10,8 @@ const loadVoice=()=>voiceBytes??=(fetch(audioUrl).then(r=>{if(!r.ok)throw Error(
 const readPreference=(key,fallback)=>{try{return localStorage.getItem(key)||fallback;}catch{return fallback;}};
 const savePreference=(key,value)=>{try{localStorage.setItem(key,String(value));}catch{}};
 
-function Dice({value,rolling,weather}){
-  return <span aria-hidden="true" className={'tv-die'+(rolling?' is-rolling':'')+(weather?' '+weather:'')}>
+function Dice({value,rolling,revealed,weather,follow}){
+  return <span aria-hidden="true" style={{'--die-silk':SILKS[value-1]||'#f4e3c1'}} className={'tv-die'+(rolling?' is-rolling':'')+(revealed?' is-landed':'')+(!rolling&&value===follow+1?' is-hit':'')+(weather?' '+weather:'')}>
     {Array.from({length:9},(_,i)=><i key={i} className={PIPS[value]?.includes(i)?'is-pip':''}/>)}
     {weather&&<small>{weather==='is-mud'?'×':'−'}</small>}
   </span>;
@@ -22,7 +22,7 @@ export function RaceField({frame,names,follow,onFollow,flat=false}){
     <div className="tv-field-axis"><span>Follow a runner</span><span><i>{frame.tiebreak?'Tiebreak start':'Start'}</i><i>{frame.goal} spaces</i><b>Finish</b></span><span>To finish</span></div>
     {names.map((name,id)=>{
       const eligible=frame.active.includes(id),left=Math.max(0,frame.goal-frame.exact[id]);
-      return <button type="button" key={id} className={'tv-lane'+(follow===id?' is-followed':'')+(!eligible?' is-out':'')}
+      return <button type="button" key={id} className={'tv-lane'+(follow===id?' is-followed':'')+(frame.moving[id]?' is-advancing':'')+(!eligible?' is-out':'')}
         aria-pressed={follow===id} aria-label={`Follow #${id+1} ${name}, ${eligible?left+' spaces to finish':'out of tiebreak'}${frame.leaders.includes(id)?', leading':''}`}
         onClick={()=>onFollow(id)}>
         <span className="tv-runner"><b style={{'--silk':SILKS[id]}}>{id+1}</b><span title={name}>{name}</span></span>
@@ -47,6 +47,13 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
   const [viewMode,setViewMode]=useState(()=>readPreference('track-view',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'board':'trackside'));
   const [viewStatus,setViewStatus]=useState('loading');
   const [display,setDisplay]=useState(null);
+  const [fullscreen,setFullscreen]=useState(Boolean(document.fullscreenElement));
+  const [fullscreenError,setFullscreenError]=useState('');
+  useEffect(()=>{const sync=()=>setFullscreen(Boolean(document.fullscreenElement));document.addEventListener('fullscreenchange',sync);return()=>document.removeEventListener('fullscreenchange',sync);},[]);
+  async function toggleFullscreen(){
+    try{setFullscreenError('');if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}
+    catch{setFullscreenError('Fullscreen is unavailable in this browser. Use its full-screen control.');}
+  }
   const container=useRef(null),view=useRef(null),audio=useRef({}),settings=useRef({});
   settings.current={onFinish,soundOn,clock,effects,follow,viewMode,onFrame};
   function stopVoice(){const source=audio.current.source;if(source){try{source.stop();}catch{}audio.current.source=null;}}
@@ -112,7 +119,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const dice=frame.rolling?[(faceTick*3+frame.index)%6+1,(faceTick*5+frame.index+2)%6+1]:frame.roll?.dice||frame.lastRoll?.dice||[0,0];
       const contextLost=container.current?.dataset.contextLost==='true';
       const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
-      if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost});}
+      if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost,paused});}
       if(timestamp>=nextDraw){
         try{view.current?.draw(frame);}catch{setViewStatus('fallback');view.current?.dispose();view.current=null;}
         nextDraw=timestamp+30;
@@ -137,25 +144,34 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
   const leaderLeft=frame?frame.goal-Math.max(...frame.active.map(id=>frame.exact[id])):spaces;
   const followLeft=frame?frame.goal-frame.exact[follow]:spaces;
   const flat=viewMode==='board'||viewStatus!=='ready'||frame?.contextLost;
-  return <section className={'track-broadcast'+(replay?' is-replay':'')+(exhibition?' is-exhibition':'')} aria-label="Race broadcast">
+  const moment=raceMoment(frame,follow,race.condition||'sunny');
+  return <section className={'track-broadcast'+(replay?' is-replay':'')+(exhibition?' is-exhibition':'')+(frame?.paused?' is-paused':'')+(flat?' is-board':'')} aria-label="Race broadcast">
     <header className="tv-heading"><div><p>{exhibition?'Exhibition replay':replay?'Replay':frame?.tiebreak?'Tiebreak':'Live at The Track'} · {race.condition==='rain'?'Rain':race.condition==='fog'?'Fog':'Standard'}</p><h1>{race.name}</h1></div>
       <div className="tv-tools"><select aria-label="Race view" value={viewMode} onChange={e=>{setViewMode(e.target.value);savePreference('track-view',e.target.value);}}><option value="trackside">Trackside 3D</option><option value="steady">Steady 3D</option><option value="board">Board view</option></select>
-        <button type="button" aria-pressed={soundOn} onClick={()=>{if(!soundOn)unlock();onSound(!soundOn);}}>{soundOn?'Sound on':'Sound off'}</button></div>
+        <button type="button" aria-pressed={soundOn} onClick={()=>{if(!soundOn)unlock();onSound(!soundOn);}}>{soundOn?'Sound on':'Sound off'}</button>
+        {document.fullscreenEnabled&&<button className="tv-fullscreen" type="button" onClick={toggleFullscreen}>{fullscreen?'Exit fullscreen':'Fullscreen'}</button>}</div>
     </header>
+    <div className="tv-race-layout">
+    <div className="tv-situation">
     <div className="tv-focus" aria-live="polite"><div><span>Following</span><strong><b style={{'--silk':SILKS[follow]}}>{follow+1}</b>{names[follow]}</strong><em>{frame?.done&&frame.winner===follow?'Winner':followLeft+' '+(followLeft===1?'space':'spaces')+' to finish'}</em></div>
       <div><span>{leaders.length>1?'Tied leaders':'Leader'}</span><strong>{leadLabel}</strong><em>{frame?.done?'Across the wire':leaderLeft+' '+(leaderLeft===1?'space':'spaces')+' to finish'}</em></div></div>
     <p className="tv-stakes" aria-live="polite">{rootingHint(frame,follow,race.condition||'sunny')}</p>
+    </div>
     <div className="tv-video">
       <div ref={container} className="tv-viewport" aria-hidden="true"/>
       {frame&&flat&&<div className="tv-board-scene"><span>{viewStatus==='loading'&&viewMode!=='board'?'Preparing trackside view':'The course'} · {frame.goal} fixed spaces</span><RaceField {...{frame,names,follow}} onFollow={choose} flat/></div>}
       {!flat&&<div className="tv-shot-label">{frame?.tiebreak?'Three-space tiebreak':frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
+      {!flat&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
       {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>Three-space tiebreak next</span></div>}
       {!flat&&frame?.done&&<div className="tv-announcement"><span>Across the wire</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
     </div>
-    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><Dice key={id} value={value} rolling={frame?.rolling} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/>)}</div></div>
+    <div className="tv-sidebar">
+    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><Dice key={id} {...{follow}} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/>)}</div></div>
       <div className="tv-roll-copy" aria-live="polite"><p className="tv-call">{frame?.rolling?'Here come the dice…':frame?.cue?.text||(!history?'Loading the race…':frame?.done?names[frame.winner]+' wins.':roll?'The dice have landed.':'Pick your horse. Watch for its number.')}</p><p className="tv-effect">{frame?.rolling&&roll?'Last roll: ':''}{summary}</p></div></div>
     {frame&&!flat&&<RaceField {...{frame,names,follow}} onFollow={choose}/>}
     <div className="tv-ticket">{exhibition?'Exhibition · no wagers or payouts':backed.length?<>Your ticket: {backed.map(id=>'#'+(id+1)+' $'+Number(bets[id]).toFixed(2)).join(' · ')}</>:'Following only · no ticket placed'}{owners?.[follow]?.username?' · Owner: '+owners[follow].username:''}</div>
-    <p className="tv-credit">David Wolfe on commentary · Horses by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></p>
+    </div>
+    </div>
+    <p className="tv-credit">{fullscreenError||<>David Wolfe on commentary · Horses by <a href="https://vinish.dev/free-3d-models/horses">vinish.dev</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></>}</p>
   </section>;
 }
