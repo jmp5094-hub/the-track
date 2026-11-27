@@ -24,5 +24,7 @@ export function playRaceEffect(ctx,kind){
   if(kind==='hooves'){noise(now,.08,.11,460);noise(now+.13,.08,.085,370);}
   if(kind==='crowd')noise(now,.7,.035,650);
   if(kind==='gate'){noise(now,.16,.28,1800);noise(now+.035,.21,.15,650);tone(now,94,.11,.12);}
+  if(kind==='takeoff'){noise(now,.09,.10,700);noise(now+.06,.16,.055,1200);}
+  if(kind==='touchdown'){noise(now,.16,.21,520);noise(now+.06,.1,.09,1100);tone(now,86,.14,.07);}
   if(kind==='finish'){[523,659,784].forEach((hz,i)=>tone(now+i*.13,hz,.55,.055));noise(now,.8,.045,850);}
 }

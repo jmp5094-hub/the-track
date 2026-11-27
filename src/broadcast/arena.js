@@ -117,12 +117,14 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   finishSign.rotation.y = Math.PI / 18;
 
   const turnSign=shape(scene,geo.plane,simple('#ffffff',{map:paint('TURN FOR HOME','#233c31','#ffe2a7',400,112),side:T.DoubleSide}),69,2.93,-7.16,3.34,.94,1);
-  const hurdleGroup=new T.Group();scene.add(hurdleGroup);
+  const hurdleGroup=new T.Group(),hurdleReady=[];scene.add(hurdleGroup);
   for(let i=0;i<6;i++){
     const z=lane(i);
-    block(hurdleGroup,cream,36,.67,z,.16,.17,1.44);
-    block(hurdleGroup,brass,36,.85,z,.18,.12,1.44);
-    for(const side of [-1,1])block(hurdleGroup,cream,36,.42,z+side*.69,.13,.84,.13);
+    block(hurdleGroup,cream,0,.67,z,.16,.17,1.44);
+    block(hurdleGroup,brass,0,.85,z,.18,.12,1.44);
+    for(const side of [-1,1])block(hurdleGroup,cream,0,.42,z+side*.69,.13,.84,.13);
+    const waiting=shape(hurdleGroup,geo.plane,simple('#e4c48b',{transparent:true,opacity:.2,depthWrite:false}),-SPACE,.038,z,SPACE*.88,1.35,1);
+    waiting.rotation.x=-Math.PI/2;hurdleReady.push(waiting);
   }
   const rainPositions=new Float32Array(240*6),rainGeometry=new T.BufferGeometry();
   rainGeometry.setAttribute('position',new T.BufferAttribute(rainPositions,3).setUsage(T.DynamicDrawUsage));
@@ -194,7 +196,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
     const shadow = shape(root,geo.plane,shadowMat,-.16,.026,0,3.7,1.44,1);shadow.rotation.x = -Math.PI/2;
     const pin=new T.Sprite(new T.SpriteMaterial({map:paint(String(id+1),SILKS[id],'#162019',96,96),depthTest:false}));
     pin.position.set(0,3.03,0);pin.scale.set(.65,.65,1);root.add(pin);
-    const followRing=new T.Mesh(new T.RingGeometry(.68,.82,40),simple('#fff0c8',{side:T.DoubleSide}));
+    const followRing=new T.Mesh(new T.RingGeometry(.68,.82,40),simple('#fff0c8',{side:T.DoubleSide,transparent:true}));
     followRing.rotation.x=-Math.PI/2;followRing.position.set(-.05,.05,0);followRing.scale.set(1.7,1,1);root.add(followRing);
     return {root,jockey,rig,shadow,pin,followRing};
   }
@@ -214,6 +216,8 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
     turnSign.visible=Boolean(frame.roundTrip);
     farMarkers.forEach(marker=>{marker.visible=!frame.roundTrip;});
     hurdleGroup.visible=frame.type==='hurdle'&&!frame.tiebreak;
+    hurdleGroup.position.x=frame.hurdleX;
+    hurdleReady.forEach((pad,id)=>{pad.visible=Boolean(frame.waiting?.[id]);});
     if(weather!==frame.condition){
       weather=frame.condition;
       scene.background.set(weather==='sunny'?'#252730':weather==='rain'?'#263a3e':'#616c67');
@@ -228,20 +232,26 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
     for(const {hinge,direction} of gates)hinge.rotation.y=-direction*open*Math.PI*.53;
     horses.forEach((animal,i) => {
       animal.root.visible = frame.active.includes(i);
-      animal.followRing.visible=frame.follow===i;
-      animal.pin.scale.setScalar(frame.follow===i ? .96 : .65);
+      const matched=frame.matched?.[i]&&!frame.settled;
+      const jump=frame.jumps?.[i]||0;
+      animal.followRing.visible=frame.follow===i||matched;
+      animal.followRing.material.opacity=frame.follow===i?1:.7;
+      // Ground markers stay on the course when the horse is airborne.
+      animal.shadow.position.y=.026-jump;
+      animal.followRing.position.y=.05-jump;
+      animal.pin.scale.setScalar(frame.follow===i ? .96 : matched ? .87 : .65);
       const energy = frame.surge[i];
       const tuck = Math.sin(elapsed * 10.4 + i * 1.8);
-      animal.root.position.set(frame.world[i],.015+(frame.jumps?.[i]||0),lane(i));
+      animal.root.position.set(frame.world[i],.015+jump,lane(i));
       animal.root.rotation.y = (frame.directions?.[i]<0?Math.PI:0)+Math.sin(elapsed*1.45+i)*.014;
       animal.jockey.rotation.z = reduced ? 0 : .027*tuck - .10*energy;
       animal.rig.sample(elapsed,frame.progress[i],animal.jockey,Boolean(frame.moving?.[i])&&!reduced);
     });
     dust.material.opacity=weather==='rain'?.12:.29;
-    dust.visible = live && frame.moving?.some(Boolean) && !reduced;
+    const groundMoving=frame.active.filter(id=>frame.moving?.[id]&&!frame.jumping?.[id]);
+    dust.visible = live && groundMoving.length>0 && !reduced;
     if(dust.visible) for(let i=0;i<maxDust;i++) {
-      const moving=frame.active.filter(id=>frame.moving[id]);
-      const id = moving[i%moving.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];
+      const id = groundMoving[i%groundMoving.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];
       const n=i*3;
       dustPositions[n] = frame.world[id] - (frame.directions?.[id]||1)*(.8 + life*(3.55+energy) + (i%5)*.08);
       dustPositions[n+1] = .09 + Math.sin(life*Math.PI)*(.14+(i%11)*.033+energy*.13);

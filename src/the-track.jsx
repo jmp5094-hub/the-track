@@ -4975,7 +4975,7 @@ function HowItWorksPanel({ onClose }) {
           mechanics="Horses advance to space 12, then reverse direction. Once a horse turns, it heads back toward 0. First to reach 0 on the return wins."/>
         <RaceTypeCard icon="🚧" name="HURDLES" color="#97bd88" tag="2 dice · obstacles"
           desc="A hurdle sits at space 6. Horses stop at space 5 and must roll doubles to jump to space 7. A well-timed doubles roll can leap over the field."
-          mechanics="Any horse reaching the hurdle stops unless doubles were rolled. On doubles, the horse clears the hurdle and lands 2 ahead. Horses pile up, then burst through."/>
+          mechanics="Arriving at space 5 always stops the horse, even on doubles. Only a later roll of that horse's matching doubles, while it starts at space 5, clears the hurdle to space 7. A pair affected by rain or fog does not qualify."/>
       </div>
     );
 

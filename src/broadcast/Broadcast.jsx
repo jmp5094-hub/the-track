@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {buildPlayback,describeRoll,rootingHint,raceMoment,LAND,MOVE,MOVE_END,PIPS,SILKS} from './playback.mjs';
+import {buildPlayback,describeRoll,rootingHint,raceMoment,LAND,MOVE,MOVE_END,PIPS,SILKS,HURDLE_SPACE} from './playback.mjs';
 import voice from './voice.json';
 import {playRaceEffect,stopRaceEffects} from './race-sound';
 import {createRaceSoundscape} from './soundscape';
@@ -22,12 +22,13 @@ export function RaceField({frame,names,follow,onFollow,flat=false}){
     <div className="tv-field-axis"><span>Follow a runner</span><span><i>{frame.tiebreak?'Tiebreak start':'Start'}</i><i>{frame.goal} spaces</i><b>{frame.roundTrip?'Home':'Finish'}</b></span><span>To finish</span></div>
     {names.map((name,id)=>{
       const eligible=frame.active.includes(id),left=Math.max(0,frame.goal-frame.exact[id]);
-      return <button type="button" key={id} className={'tv-lane'+(follow===id?' is-followed':'')+(frame.moving[id]?' is-advancing':'')+(!eligible?' is-out':'')}
-        aria-pressed={follow===id} aria-label={`Follow #${id+1} ${name}, ${eligible?left+' spaces to finish':'out of tiebreak'}${frame.leaders.includes(id)?', leading':''}`}
+      const waiting=frame.waiting?.[id],jumping=frame.jumping?.[id]&&!frame.settled,matched=frame.matched?.[id]&&!frame.settled;
+      return <button type="button" key={id} className={'tv-lane'+(follow===id?' is-followed':'')+(frame.moving[id]?' is-advancing':'')+(matched?' is-matched':'')+(waiting?' is-at-hurdle':'')+(!eligible?' is-out':'')}
+        aria-pressed={follow===id} aria-label={`Follow #${id+1} ${name}, ${eligible?left+' spaces to finish':'out of tiebreak'}${waiting?', at the hurdle, needs double '+(id+1)+'s':''}${frame.leaders.includes(id)?', leading':''}`}
         onClick={()=>onFollow(id)}>
         <span className="tv-runner"><b style={{'--silk':SILKS[id]}}>{id+1}</b><span title={name}>{name}</span></span>
-        <span className="tv-lane-track" style={{'--spaces':frame.goal+1,'--wire':(frame.goal/(frame.goal+1)*100)+'%'}} aria-hidden="true"><i className="tv-token" style={{left:((Math.min(frame.goal,frame.progress[id])+.5)/(frame.goal+1)*100)+'%','--silk':SILKS[id]}}>{id+1}</i></span>
-        <span className="tv-distance">{!eligible?'Out':frame.done&&frame.winner===id?'Winner':left+' left'}</span>
+        <span className="tv-lane-track" style={{'--spaces':frame.goal+1,'--wire':(frame.goal/(frame.goal+1)*100)+'%'}} aria-hidden="true">{frame.type==='hurdle'&&!frame.tiebreak&&<i className="tv-hurdle-marker" style={{left:((HURDLE_SPACE+.5)/(frame.goal+1)*100)+'%'}}/>}<i className="tv-token" style={{left:((Math.min(frame.goal,frame.progress[id])+.5)/(frame.goal+1)*100)+'%','--silk':SILKS[id]}}>{id+1}</i></span>
+        <span className="tv-distance">{!eligible?'Out':frame.done&&frame.winner===id?'Winner':jumping?<><b>Jump</b><small>to 7</small></>:waiting?<><b>{id+1}+{id+1}</b><small>to jump</small></>:left+' left'}</span>
       </button>;
     })}
   </div>;
@@ -83,14 +84,14 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
 
   useEffect(()=>{
     if(!playback)return;
-    let timer,lastTimestamp,lastPaint='',lastCue='',lastRoll=-2,lastMove=-2,lastStep=-2,lastCrowd=-2,lastFrameKey='',lastVersion=-1;
+    let timer,lastTimestamp,lastPaint='',lastCue='',lastRoll=-2,lastMove=-2,lastStep=-2,lastLanding=-2,lastCrowd=-2,lastFrameKey='',lastVersion=-1;
     let replayTime=0,nextDraw=0,finished=false,started=false,atWire=false,slowFrames=0;
     const draw=timestamp=>{
       const s=settings.current,control=controlRef?.current;
       const speed=replay?(control?.speed??speedRef?.current??1):1;
       const version=control?.version??0;
       const changed=version!==lastVersion;
-      if(changed){lastVersion=version;finished=false;lastCue='';lastRoll=-2;lastMove=-2;lastStep=-2;lastCrowd=-2;started=false;atWire=false;stopVoice();stopRaceEffects(audio.current.context);audio.current.mix?.stop();}
+      if(changed){lastVersion=version;finished=false;lastCue='';lastRoll=-2;lastMove=-2;lastStep=-2;lastLanding=-2;lastCrowd=-2;started=false;atWire=false;stopVoice();stopRaceEffects(audio.current.context);audio.current.mix?.stop();}
       const delta=lastTimestamp===undefined||changed?0:(timestamp-lastTimestamp)/1000;
       lastTimestamp=timestamp;
       if(replay){if(control){if(!control.paused)control.time+=delta*speed;replayTime=control.time;}else replayTime+=delta*speed;}
@@ -107,9 +108,18 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       if(frame.index>=0&&frame.index!==lastRoll){lastRoll=frame.index;if(withEffects&&frame.into<.2)playRaceEffect(ctx,'rattle');}
       if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(withEffects&&frame.into<LAND+.18)playRaceEffect(ctx,'land');}
       const step=frame.into>=MOVE&&frame.into<MOVE_END?frame.index:-1;
-      if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){lastStep=step;if(withEffects){const moving=frame.active.filter(id=>frame.moving[id]);audio.current.mix?.effect('hooves',{duration:MOVE_END-frame.into,speed,pan:moving.length===1?(moving[0]-2.5)*.13:0});}}
+      if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){
+        lastStep=step;
+        if(withEffects&&frame.into<MOVE+.2){
+          const moving=frame.active.filter(id=>frame.moving[id]&&!frame.jumping[id]);
+          if(moving.length)audio.current.mix?.effect('hooves',{duration:MOVE_END-frame.into,speed,pan:moving.length===1?(moving[0]-2.5)*.13:0});
+          if(frame.jumping.some(Boolean))playRaceEffect(ctx,'takeoff');
+        }
+      }
+      const landedJump=frame.jumping.some(Boolean)&&frame.settled;
+      if(landedJump&&frame.index!==lastLanding){lastLanding=frame.index;if(withEffects&&frame.into<MOVE_END+.18)playRaceEffect(ctx,'touchdown');}
       if(frame.done&&!atWire){atWire=true;if(withEffects&&elapsed<playback.end+.25){audio.current.mix?.effect('roar',{speed});}}
-      if(frame.leadChange&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(withEffects&&!frame.done&&frame.into<MOVE_END+.1)audio.current.mix?.effect('roar',{duration:1.15,level:.36,speed});}
+      if((frame.leadChange||landedJump)&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(withEffects&&!frame.done&&frame.into<MOVE_END+.1)audio.current.mix?.effect('roar',{duration:1.15,level:(frame.leadChange ? .36 : .27)*(frame.cue ? .55 : 1),speed});}
       const cue=frame.cue,cueTag=cue?cue.key+'@'+cue.time:'';
       if(cue&&cueTag!==lastCue){
         lastCue=cueTag;const offset=frame.time-cue.time;

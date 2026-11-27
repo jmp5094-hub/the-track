@@ -93,6 +93,11 @@
 @media(prefers-reduced-motion:reduce){.tv-die.is-landed{animation:none}}
 .is-paused .tv-die{animation-play-state:paused}
 .is-paused .tv-moment,.is-paused .tv-die.is-landed{animation:none}
+.tv-hurdle-marker{position:absolute;z-index:2;top:-3px;bottom:-3px;width:5px;transform:translateX(-50%);background:repeating-linear-gradient(to bottom,#ead7aa 0,#ead7aa 4px,#5c4b30 4px,#5c4b30 7px);box-shadow:0 0 0 1px #17271d;pointer-events:none}
+.tv-lane.is-at-hurdle{background:#e4c48b14}.tv-lane.is-at-hurdle .tv-distance{color:#e4c48b}.tv-distance>b{font-size:.85em;letter-spacing:.03em}.tv-distance>small{display:block;font-size:.65em;line-height:1.05}
+.tv-lane.is-matched{box-shadow:inset 3px 0 #f4dfad;background:#e4c48b24}.tv-lane.is-matched .tv-runner>b{outline:2px solid #fff0cd;outline-offset:2px}
+.tv-moment.is-hurdle{border-left-color:#e4c48b}.tv-moment.is-jump{animation:tv-impact .22s ease-out}.tv-moment.is-jump strong{color:#f4dfad}
+@media(prefers-reduced-motion:reduce){.tv-moment.is-jump{animation:none}}
 @media(max-width:760px) and (orientation:portrait){.tv-heading{flex-wrap:wrap}.tv-heading>div:first-child{width:100%}.tv-tools{width:100%;justify-content:flex-start}.tv-tools select{max-width:none}}
 
 .tv-die-slot{display:flex;flex-direction:column;align-items:center;gap:4px}.tv-die-slot>small{font:700 .65rem var(--track-ui);letter-spacing:.08em;text-transform:uppercase;color:#c4cbb7}

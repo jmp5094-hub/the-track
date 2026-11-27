@@ -14,6 +14,13 @@ export const LAND = .64;
 export const VOICE = .76;
 export const MOVE = 1.38;
 export const MOVE_END = 2.52;
+export const HURDLE_WAIT = 5;
+export const HURDLE_SPACE = 6;
+export const HURDLE_LAND = 7;
+export function earnedHurdleJump(roll,previous,horse,type='hurdle') {
+  return type==='hurdle'&&roll?.phase!=='tiebreak'&&previous[horse]===HURDLE_WAIT&&roll.positions[horse]===HURDLE_LAND&&
+    roll.isDoubles===true&&roll.dice.length===2&&roll.dice.every(d=>d===horse+1)&&roll.mudDieIdx==null&&roll.fogDieIdx==null;
+}
 // The final cell is beyond the wire. All translation is earned by recorded dice.
 const SEATS = [0,1,2,3,4,5];
 const GATE = [0,0,0,0,0,0];
@@ -87,20 +94,24 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     const settled=Boolean(source&&into>=MOVE_END-1e-8);
     const target=positions[index]||previous;
     const exact=settled?target:previous;
+    const jumping=SEATS.map(id=>Boolean(source&&earnedHurdleJump(source,previous,id,type)));
     const progress=previous.map((from,id)=>{
       const to=target[id]??from;
-      if(to-from!==2)return mix(from,to,smooth(amount));
+      // A hurdle is one continuous leap; ordinary doubles keep their two beats.
+      if(jumping[id]||to-from!==2)return mix(from,to,smooth(amount));
       return from+smooth(clamp(amount/.43))+smooth(clamp((amount-.56)/.44));
     });
     const homeFinish=roundTrip&&!tiebreak;
     const directions=progress.map(p=>homeFinish&&p>=raceSpaces?-1:1);
     const physical=progress.map(p=>homeFinish?(p<=raceSpaces?p:2*raceSpaces-p):p);
     const world=physical.map(p=>homeFinish?clamp(p,homeSpace,raceSpaces)*SPACE-SPACE/2:worldAt(clamp(p,0,goal),goal));
-    const jumps=progress.map((p,id)=>type==='hurdle'&&!tiebreak&&previous[id]===5&&target[id]===7?Math.sin(Math.PI*amount)*1.15:0);
+    const jumps=jumping.map(yes=>yes&&amount>0&&amount<1?Math.sin(Math.PI*amount)*1.3:0);
     const leaders=leadersOf(exact,active);
     const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&target[id]!==previous[id]));
     const surge=moving.map((yes,id)=>yes?Math.sin(Math.PI*amount)*Math.min(1,Math.abs((target[id]??0)-previous[id])):0);
     const revealed=Boolean(source&&into>=LAND);
+    const matched=SEATS.map(id=>Boolean(revealed&&active.includes(id)&&source.moves?.some(m=>m.horse===id)));
+    const waiting=SEATS.map(id=>type==='hurdle'&&!tiebreak&&exact[id]===HURDLE_WAIT&&!(revealed&&jumping[id]));
     const nextLeaders=source?leadersOf(target,active):leaders;
     const prior=leadersOf(previous,active);
     const leadChange=revealed&&nextLeaders.length===1&&(prior.length>1||!prior.includes(nextLeaders[0]));
@@ -111,9 +122,9 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     const lastRoll=lastIndex>=0?rolls[lastIndex]:null;
     const cue=cues.findLast(c=>c.time<=time&&time<c.time+c.duration);
     return {time,sceneTime:time,index,into,rolling:Boolean(source&&into<LAND),revealed,
-      roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,
+      roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,matched,waiting,
       active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,tieSpaces,
-      type,condition,roundTrip:homeFinish,directions,jumps,physical,historicalResult,formatLabel:RACE_FORMATS[type],finishX:homeFinish?homeSpace*SPACE:TRACK_FINISH,startX:homeFinish?-SPACE/2:worldAt(0,goal),
+      type,condition,roundTrip:homeFinish,directions,jumps,jumping:jumping.map(yes=>revealed&&yes),hurdleX:worldAt(HURDLE_SPACE,goal),physical,historicalResult,formatLabel:RACE_FORMATS[type],finishX:homeFinish?homeSpace*SPACE:TRACK_FINISH,startX:homeFinish?-SPACE/2:worldAt(0,goal),
       done,winner:done?winner:null,leaderX:Math.max(...active.map(id=>world[id])),
       launched:time>=GO,cue};
   }
@@ -135,9 +146,10 @@ export function rootingHint(frame,follow,condition='sunny'){
   if(frame.tiePending)return `Tied at the wire: ${frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}. ${frame.tieSpaces}-space tiebreak next.`;
   if(!frame.active.includes(follow))return 'Your horse is out of the tiebreak. Follow one of the remaining runners.';
   const left=frame.goal-frame.exact[follow];
+  if(frame.jumping?.[follow]&&!frame.settled)return frame.into<MOVE?`Double ${follow+1}s. Your horse has earned the jump.`:'Clearing the hurdle. Landing at space 7.';
+  if(frame.type==='hurdle'&&!frame.tiebreak&&frame.exact[follow]===HURDLE_WAIT)return `At the hurdle: double ${follow+1}s are needed to jump.${condition!=='sunny'?' Both dice must survive the weather.':''}`;
   if(condition!=='sunny'&&!frame.tiebreak)return `Root for ${follow+1}. ${condition==='rain'?'Rain can cancel a die.':'Fog can reverse a die.'}`;
   if(frame.type==='magic_dice'&&!frame.tiebreak)return `Root for ${follow+1} on the first die. The second die sets the distance. ${left} spaces to home.`;
-  if(frame.type==='hurdle'&&!frame.tiebreak&&frame.exact[follow]===5)return `Double ${follow+1}s clear your hurdle.`;
   if(frame.type==='triple_dice'&&left===3)return `Triple ${follow+1}s can reach the wire.`;
   if(left<=1){
     const rivals=frame.active.filter(i=>i!==follow&&frame.goal-frame.exact[i]<=2);
@@ -151,11 +163,13 @@ export function raceMoment(frame,follow,condition='sunny'){
   if(!frame)return {kind:'ready',title:'Pick your runner',detail:'Every matching die moves one space.'};
   if(frame.done)return {kind:'winner',horse:frame.winner,title:`#${frame.winner+1} takes it`,detail:'Across the wire'};
   if(frame.tiePending)return {kind:'tie',title:'Tied at the wire',detail:`${frame.tieSpaces}-space tiebreak next`};
-  if(frame.rolling)return {kind:'rolling',horse:follow,title:`Come on, ${follow+1}`,detail:'The dice are in the air'};
+  if(frame.rolling)return frame.waiting?.[follow]?{kind:'hurdle',horse:follow,title:`Double ${follow+1}s to jump`,detail:'Waiting right before the hurdle'}:{kind:'rolling',horse:follow,title:`Come on, ${follow+1}`,detail:'The dice are in the air'};
   if(frame.revealed&&frame.roll){
     if(frame.type==='magic_dice'&&!frame.tiebreak)return {kind:'double',horse:frame.roll.dice[0]-1,title:`#${frame.roll.dice[0]} takes ${frame.roll.dice[1]}`,detail:'First die: horse · Second die: distance'};
-    const event=frame.roll.events?.find(e=>e.kind==='jump'||e.kind==='turn');
-    if(event)return {kind:'lead',horse:event.horse,title:`#${event.horse+1} ${event.kind==='jump'?'clears it':'turns for home'}`,detail:event.kind==='jump'?'Over the hurdle':'The return leg'};
+    const event=frame.roll.events?.find(e=>(e.kind==='jump'&&earnedHurdleJump(frame.roll,frame.previous,e.horse,frame.type))||e.kind==='turn');
+    if(event)return {kind:event.kind==='jump'?'jump':'lead',horse:event.horse,title:`#${event.horse+1} ${event.kind==='jump'?(frame.settled?'clears it':frame.into>=MOVE?'over the hurdle':'double '+(event.horse+1)+'s!'):'turns for home'}`,detail:event.kind==='jump'?(frame.settled?'Landed. Back in the race.':'A matching pair from the waiting space'):'The return leg'};
+    const blocked=frame.roll.events?.find(e=>e.kind==='blocked'&&e.horse===follow)||frame.roll.events?.find(e=>e.kind==='blocked');
+    if(blocked)return {kind:'hurdle',horse:blocked.horse,title:`#${blocked.horse+1} needs double ${blocked.horse+1}s`,detail:'Held at the hurdle'};
     const double=frame.roll.positions.findIndex((p,id)=>raceDistance(p,frame.roll.legDone?.[id],frame.type,frame.roll.phase)-frame.previous[id]===2&&frame.roll.dice.every(d=>d===id+1));
     if(double>=0)return {kind:'double',horse:double,title:`Double ${double+1}`,detail:'Two dice. Two spaces.'};
     if(frame.settled&&frame.leadChange)return {kind:'lead',horse:frame.leaders[0],title:`#${frame.leaders[0]+1} takes the lead`,detail:'The race changes here'};

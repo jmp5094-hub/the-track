@@ -24,3 +24,9 @@ test('pause, mute and audio preferences are respected',()=>{
 test('the music resolves after the finish while the crowd remains',()=>{
   const plan=raceAudioPlan({...frame,done:true,into:5});assert.equal(plan.music,0);assert.ok(plan.crowd>0);
 });
+test('waiting at a hurdle creates space for the dice without changing the underlying race mix',()=>{
+  const waiting={...frame,type:'hurdle',waiting:[true,false,false,false,false,false]};
+  assert.ok(raceAudioPlan({...waiting,rolling:true}).music<raceAudioPlan(waiting).music);
+  assert.equal(raceAudioPlan({...waiting,rolling:true,tiebreak:true}).music,raceAudioPlan({...frame,rolling:true}).music);
+  assert.equal(raceAudioPlan({...waiting,rolling:true},{mix:'caller'}).effects,false);
+});
