@@ -30,13 +30,14 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
 
   scene.background = new T.Color('#252730');
   scene.fog = new T.FogExp2('#3a3839',.003);
-  scene.add(new T.HemisphereLight('#ffedcc','#6f5146',2.08));
+  const sky=new T.HemisphereLight('#ffedcc','#6f5146',2.08);scene.add(sky);
   const warm = new T.DirectionalLight('#ffd29a',2.35); warm.position.set(9,13,12); scene.add(warm);
   const rim = new T.DirectionalLight('#ccdef1',1.7); rim.position.set(-8,5,-10); scene.add(rim);
 
   const dirt = tex(dirtCanvas); dirt.wrapS = dirt.wrapT = T.RepeatWrapping; dirt.repeat.set(20,3); dirt.anisotropy = 6;
   const length=COURSE_MAX-COURSE_MIN, middle=(COURSE_MAX+COURSE_MIN)/2;
-  block(scene,standard('#e0b294',{map:dirt,roughness:1}),middle,-.11,0,length,.21,15.4);
+  const ground=standard('#e0b294',{map:dirt,roughness:1});
+  block(scene,ground,middle,-.11,0,length,.21,15.4);
   const dark = standard('#262329'), stone = standard('#4b4849'), concrete = standard('#726b5f');
   const cream = standard('#d4c5a4'), brass = standard('#a87b40',{metalness:.53,roughness:.32}), backlit = simple('#ffd093');
   const glass = standard('#3a4652',{emissive:'#705037',emissiveIntensity:.37,roughness:.52});
@@ -44,6 +45,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   // The board never drifts: one line per logical space, six fixed lanes.
   const chalk=standard('#e4d9bd',{transparent:true,opacity:.55,roughness:1});
   for(let i=0;i<=6;i++)block(scene,chalk,36,.025,(i-3)*1.56,72,.025,.035);
+  const farMarkers=[];
   for(let step=0;step<=12;step++){
     block(scene,chalk,step*SPACE,.03,0,step>=9?.12:.07,.026,9.4);
     if(step>0&&step<12){
@@ -51,7 +53,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
       label.rotation.x=-Math.PI/2;
     }
     if(step>=9&&step<12){
-      shape(scene,geo.plane,simple('#ffffff',{map:paint((12-step)+' TO GO','#233c31','#ffe2a7',280,112),side:T.DoubleSide}),step*SPACE,1.15,-6.25,2.35,.94,1);
+      farMarkers.push(shape(scene,geo.plane,simple('#ffffff',{map:paint((12-step)+' TO GO','#233c31','#ffe2a7',280,112),side:T.DoubleSide}),step*SPACE,1.15,-6.25,2.35,.94,1));
     }
   }
   for (const side of [-1,1]) {
@@ -99,17 +101,30 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
     const placard = shape(scene,geo.plane,simple('#ffffff',{map:paint('THE TRACK','#242524','#d6b782',400,84)}),x,1.45,-8.97,4.5,.94,1);
     placard.rotation.z = 0;
   }
+  const finishGroup=new T.Group();scene.add(finishGroup);
   for (let row=0;row<3;row++) for(let j=0;j<20;j++) {
-    block(scene,(j+row)%2?dark:cream,TRACK_FINISH + (row-1)*.19,.025,(j-9.5)*.715,.191,.028,.715);
+    block(finishGroup,(j+row)%2?dark:cream,TRACK_FINISH + (row-1)*.19,.025,(j-9.5)*.715,.191,.028,.715);
   }
   for(const z of [-7.13,7.13]) {
-    block(scene,dark,TRACK_FINISH,1.14,z,.29,2.28,.28);
-    block(scene,brass,TRACK_FINISH,2.28,z,.44,.2,.41);
-    for(let n=0;n<6;n++)block(scene,n%2?dark:cream,TRACK_FINISH,1.43+n*.115,z,.32,.115,.3);
+    block(finishGroup,dark,TRACK_FINISH,1.14,z,.29,2.28,.28);
+    block(finishGroup,brass,TRACK_FINISH,2.28,z,.44,.2,.41);
+    for(let n=0;n<6;n++)block(finishGroup,n%2?dark:cream,TRACK_FINISH,1.43+n*.115,z,.32,.115,.3);
   }
-  const finishSign = shape(scene,geo.plane,simple('#ffffff',{map:paint('FINISH','#292624','#f7dab0',260,84),side:T.DoubleSide}),TRACK_FINISH,2.93,-7.16,2.17,.70,1);
+  const finishSign = shape(finishGroup,geo.plane,simple('#ffffff',{map:paint('FINISH','#292624','#f7dab0',260,84),side:T.DoubleSide}),TRACK_FINISH,2.93,-7.16,2.17,.70,1);
   finishSign.rotation.y = Math.PI / 18;
 
+  const turnSign=shape(scene,geo.plane,simple('#ffffff',{map:paint('TURN FOR HOME','#233c31','#ffe2a7',400,112),side:T.DoubleSide}),72,2.93,-7.16,3.34,.94,1);
+  const hurdleGroup=new T.Group();scene.add(hurdleGroup);
+  for(let i=0;i<6;i++){
+    const z=lane(i);
+    block(hurdleGroup,cream,36,.67,z,.16,.17,1.44);
+    block(hurdleGroup,brass,36,.85,z,.18,.12,1.44);
+    for(const side of [-1,1])block(hurdleGroup,cream,36,.42,z+side*.69,.13,.84,.13);
+  }
+  const rainPositions=new Float32Array(240*6),rainGeometry=new T.BufferGeometry();
+  rainGeometry.setAttribute('position',new T.BufferAttribute(rainPositions,3).setUsage(T.DynamicDrawUsage));
+  const rainfall=new T.LineSegments(rainGeometry,new T.LineBasicMaterial({color:'#c2d5d1',transparent:true,opacity:.35}));rainfall.frustumCulled=false;scene.add(rainfall);
+  let weather='';
   const steel=standard('#394b49',{roughness:.55,metalness:.41});
   const gatePaint=standard('#53635a',{roughness:.62,metalness:.27});
   const gateTrim=standard('#c3bfaf',{roughness:.63});
@@ -189,6 +204,20 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   dust.frustumCulled = false;scene.add(dust);
   function pose(frame, live, reduced) {
     const elapsed = frame.time;
+    finishGroup.position.x=frame.roundTrip?-TRACK_FINISH:0;
+    turnSign.visible=Boolean(frame.roundTrip);
+    farMarkers.forEach(marker=>{marker.visible=!frame.roundTrip;});
+    hurdleGroup.visible=frame.type==='hurdle'&&!frame.tiebreak;
+    if(weather!==frame.condition){
+      weather=frame.condition;
+      scene.background.set(weather==='sunny'?'#252730':weather==='rain'?'#263a3e':'#616c67');
+      scene.fog.color.set(weather==='fog'?'#89938a':weather==='rain'?'#40575a':'#3a3839');
+      scene.fog.density=weather==='fog'?.013:weather==='rain'?.006:.003;
+      ground.color.set(weather==='rain'?'#877365':'#e0b294');ground.roughness=weather==='rain'?.48:1;
+      warm.intensity=weather==='sunny'?2.35:1.2;sky.intensity=weather==='fog'?2.4:2.08;
+    }
+    rainfall.visible=weather==='rain'&&!reduced;
+    if(rainfall.visible){for(let i=0;i<240;i++){const n=i*6,x=COURSE_MIN+(i*17.31)%100,y=12-((elapsed*9+i*.71)%12),z=-8+(i*7.37)%16;rainPositions.set([x,y,z,x-.12,y-.65,z],n);}rainGeometry.attributes.position.needsUpdate=true;}
     const open=smooth(clamp((frame.time-GO+.11)/.31));
     for(const {hinge,direction} of gates)hinge.rotation.y=-direction*open*Math.PI*.53;
     horses.forEach((animal,i) => {
@@ -197,17 +226,18 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
       animal.pin.scale.setScalar(frame.follow===i ? .96 : .65);
       const energy = frame.surge[i];
       const tuck = Math.sin(elapsed * 10.4 + i * 1.8);
-      animal.root.position.set(frame.world[i],.015,lane(i));
-      animal.root.rotation.y = Math.sin(elapsed*1.45+i)*.014;
+      animal.root.position.set(frame.world[i],.015+(frame.jumps?.[i]||0),lane(i));
+      animal.root.rotation.y = (frame.directions?.[i]<0?Math.PI:0)+Math.sin(elapsed*1.45+i)*.014;
       animal.jockey.rotation.z = reduced ? 0 : .027*tuck - .10*energy;
       animal.rig.sample(elapsed,frame.progress[i],animal.jockey,Boolean(frame.moving?.[i])&&!reduced);
     });
+    dust.material.opacity=weather==='rain'?.12:.29;
     dust.visible = live && frame.moving?.some(Boolean) && !reduced;
     if(dust.visible) for(let i=0;i<maxDust;i++) {
       const moving=frame.active.filter(id=>frame.moving[id]);
       const id = moving[i%moving.length], seed = i*1.17 + id*.9, life = (elapsed*(1.55+(i%9)*.09)+seed)%1, energy=frame.surge[id];
       const n=i*3;
-      dustPositions[n] = frame.world[id] - .8 - life*(3.55+energy) - (i%5)*.08;
+      dustPositions[n] = frame.world[id] - (frame.directions?.[id]||1)*(.8 + life*(3.55+energy) + (i%5)*.08);
       dustPositions[n+1] = .09 + Math.sin(life*Math.PI)*(.14+(i%11)*.033+energy*.13);
       dustPositions[n+2] = lane(id)+Math.sin(seed*17)*life*.66;
     }

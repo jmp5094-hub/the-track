@@ -94,3 +94,19 @@
 .is-paused .tv-die{animation-play-state:paused}
 .is-paused .tv-moment,.is-paused .tv-die.is-landed{animation:none}
 @media(max-width:760px) and (orientation:portrait){.tv-heading{flex-wrap:wrap}.tv-heading>div:first-child{width:100%}.tv-tools{width:100%;justify-content:flex-start}.tv-tools select{max-width:none}}
+
+.tv-die-slot{display:flex;flex-direction:column;align-items:center;gap:4px}.tv-die-slot>small{font:700 .65rem var(--track-ui);letter-spacing:.08em;text-transform:uppercase;color:#c4cbb7}
+@media(max-width:760px) and (orientation:portrait){.tv-roll-panel:has(.tv-die-slot:nth-child(3)){grid-template-columns:124px minmax(0,1fr)}}
+/* Live broadcasts sit below the site's fixed navigation; exhibitions have their own header. */
+@media (min-width:900px) and (min-aspect-ratio:6/5), (min-width:640px) and (orientation:landscape) and (max-height:600px){
+ .track-app:has(>.track-broadcast){padding-top:64px}
+ .track-app>.track-broadcast{margin-top:0;height:calc(100dvh - 74px)}
+}
+@media (min-width:640px) and (orientation:landscape) and (max-height:600px){
+ .track-app>.track-broadcast .tv-tools{padding-right:40px}
+ .track-race-chat{top:64px;bottom:auto!important;right:8px!important}
+ .track-race-chat>button{width:32px!important;height:32px!important;min-height:32px!important;font-size:14px!important}
+ .track-race-chat>div{top:38px;bottom:auto!important;max-height:calc(100dvh - 112px)!important}
+ .tv-roll-panel:has(.tv-die-slot:nth-child(3)){grid-template-columns:138px minmax(0,1fr)}
+ .tv-roll-panel:has(.tv-die-slot:nth-child(3)) .tv-effect{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+}

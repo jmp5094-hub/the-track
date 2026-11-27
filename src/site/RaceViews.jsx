@@ -13,7 +13,7 @@ export function LobbyView({races,onEnterRace,demoHref='?demo=1',preview=false}){
   const featured=races.find(r=>r.status==='racing')||races.find(r=>r.status==='locked')||races[0];
   return <main className="track-lobby site-lobby">
     <header className="site-lobby-hero">
-      <div><p className="track-kicker">Six horses. Two dice. One winner.</p><h1>Meet you<br/>at the rail.</h1><p>Pick your runner. Watch for its number.<br/>Every matching die moves it one space.</p>
+      <div><p className="track-kicker">Six horses. Every roll. One winner.</p><h1>Meet you<br/>at the rail.</h1><p>Pick your runner. Watch for its number.<br/>Every roll can change the race.</p>
         <div className="site-actions">{featured&&<button className="track-primary" onClick={()=>onEnterRace(featured)}>{featured.status==='racing'?'Watch live':'View next race'} <span aria-hidden="true">↗</span></button>}<a className="track-secondary" href={demoHref}>Watch a demo</a></div>
       </div>
       <div className="site-hero-caption"><span>Automatic races</span><strong>All eyes on the next roll.</strong></div>
@@ -41,7 +41,7 @@ export function RaceEntryView({race,names,typeLabel,description,post,canBet,conf
         <p className="site-field-help">{preview?'Sample field and ticket layout. Explore the race with the demo below.':'Enter an amount beside each horse you want to back.'}</p>
         <div className="site-field-labels"><span>Horse / number</span><span>Your bet</span></div>
         {names.map((name,id)=><div className={'site-entry-runner '+(Number(bets[id])>0?'is-backed':'')} key={id}>
-          <RunnerNumber id={id}/><div><strong>{name}</strong><small>Roll a {id+1} to move</small></div>
+          <RunnerNumber id={id}/><div><strong>{name}</strong><small>{race.type==='magic_dice'?'First die: '+(id+1):'Roll a '+(id+1)+' to move'}</small></div>
           <label className="site-bet-input"><span aria-hidden="true">$</span><input aria-label={`Bet on number ${id+1} ${name}`} type="number" min="0" placeholder="0" value={bets[id]||''} disabled={preview} onChange={e=>onBet(id,e.target.value)}/></label>
           <button className="site-quick-bet" aria-label={Number(bets[id])>0?`Clear bet on ${name}`:`Add 50 on ${name}`} disabled={preview} onClick={()=>onBet(id,bets[id]?'':'50')}>{Number(bets[id])>0?'−':'+50'}</button>
         </div>)}
@@ -51,7 +51,7 @@ export function RaceEntryView({race,names,typeLabel,description,post,canBet,conf
         {overBalance&&<p className="site-error" role="alert">Your stake exceeds the available balance.</p>}
         {confirmed&&<p className="site-confirmed" role="status">Your ticket is confirmed. You can edit it until betting closes.</p>}
         {preview?<><p className="site-preview-note">Design preview · sample amounts.<br/>No bets can be placed here.</p><button className="track-primary" onClick={onWatch}>Watch the demo race ↗</button></>:<><button className="track-primary" onClick={onConfirm} disabled={overBalance||totalBet<=0}>{confirmed?'Update bets':'Confirm bets'}</button><p className="site-ticket-note">The race starts automatically. Stay here to watch, with or without a ticket.</p></>}
-        <div className="site-rules"><span className="site-dice-mark" aria-hidden="true">{[4,5].map(n=><span key={n}>{Array.from({length:9},(_,i)=><i key={i} className={[0,2,6,8,...(n===5?[4]:[])].includes(i)?'is-pip':''}/>)}</span>)}</span><h3>Root for your number.</h3><p>Matching dice move the horses. Watch the whole field as each roll changes the race.</p></div>
+        <div className="site-rules"><span className="site-dice-mark" aria-hidden="true">{[4,5].map(n=><span key={n}>{Array.from({length:9},(_,i)=><i key={i} className={[0,2,6,8,...(n===5?[4]:[])].includes(i)?'is-pip':''}/>)}</span>)}</span><h3>Root for your number.</h3><p>{race.type==='magic_dice'?'The first die picks the horse. The second sets its distance. Race out and back to win.':race.type==='triple_dice'?'Three dice move their matching horses. Repeated numbers move the same horse again.':race.type==='hurdle'?'Matching dice move your horse. At the hurdle, matching doubles are needed to jump.':race.type==='down_back'?'Matching dice move your horse to the far end, then back home to win.':'Matching dice move the horses. Watch the whole field as each roll changes the race.'}</p></div>
       </aside>
     </div>}
   </main>;

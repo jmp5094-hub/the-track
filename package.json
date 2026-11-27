@@ -11,7 +11,9 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "node --test src/broadcast/*.test.mjs"
+    "test": "node --test src/broadcast/*.test.mjs tests/*.test.mjs",
+    "test:finance": "node --test --test-concurrency=1 tests/finance.emulator.mjs tests/scheduler.emulator.mjs",
+    "test:emulators": "firebase emulators:exec --only auth,firestore,functions --project demo-track --config firebase.test.json \"npm run test:finance\""
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

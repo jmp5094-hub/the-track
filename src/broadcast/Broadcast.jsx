@@ -20,7 +20,7 @@ function Dice({value,rolling,revealed,weather,follow}){
 
 export function RaceField({frame,names,follow,onFollow,flat=false}){
   return <div className={'tv-field'+(flat?' is-flat':'')}>
-    <div className="tv-field-axis"><span>Follow a runner</span><span><i>{frame.tiebreak?'Tiebreak start':'Start'}</i><i>{frame.goal} spaces</i><b>Finish</b></span><span>To finish</span></div>
+    <div className="tv-field-axis"><span>Follow a runner</span><span><i>{frame.tiebreak?'Tiebreak start':'Start'}</i><i>{frame.goal} spaces</i><b>{frame.roundTrip?'Home':'Finish'}</b></span><span>To finish</span></div>
     {names.map((name,id)=>{
       const eligible=frame.active.includes(id),left=Math.max(0,frame.goal-frame.exact[id]);
       return <button type="button" key={id} className={'tv-lane'+(follow===id?' is-followed':'')+(frame.moving[id]?' is-advancing':'')+(!eligible?' is-out':'')}
@@ -37,7 +37,7 @@ export function RaceField({frame,names,follow,onFollow,flat=false}){
 export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,names,clock=Date.now,startTime=0,replay=false,
   speedRef,onFinish=()=>{},soundOn=false,onSound=()=>{},getAudioContext,effects={},owners,bets={},
   controlRef,followHorse,onFollow,onFrame,exhibition=false,musicAllowed=true}){
-  const playback=useMemo(()=>buildPlayback(history,interval,spaces,tieSpaces,voice),[history,interval,spaces,tieSpaces]);
+  const playback=useMemo(()=>buildPlayback(history,interval,spaces,tieSpaces,voice,race.type,race.condition),[history,interval,spaces,tieSpaces,race.type,race.condition]);
   const savedKey='track-follow-'+race.id;
   const backed=Object.keys(bets).map(Number).filter(id=>Number(bets[id])>0&&id>=0&&id<6);
   const [localFollow,setLocalFollow]=useState(()=>{
@@ -122,7 +122,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
         }
       }
       const faceTick=frame.rolling?Math.floor(frame.into*15):-1;
-      const dice=frame.rolling?[(faceTick*3+frame.index)%6+1,(faceTick*5+frame.index+2)%6+1]:frame.roll?.dice||frame.lastRoll?.dice||[0,0];
+      const dice=frame.rolling?Array.from({length:race.type==='triple_dice'?3:2},(_,i)=>(faceTick*(3+i*2)+frame.index+i*2)%6+1):frame.roll?.dice||frame.lastRoll?.dice||[0,0];
       const contextLost=container.current?.dataset.contextLost==='true';
       const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.runOut>=.85,frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
       if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost,paused});}
@@ -138,13 +138,14 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       timer=requestAnimationFrame(draw);
     };
     timer=requestAnimationFrame(draw);return()=>cancelAnimationFrame(timer);
-  },[playback,replay,controlRef,speedRef,startTime]);
+  },[playback,replay,controlRef,speedRef,startTime,race.type]);
 
   const frame=display||playback?.sample(controlRef?.current?.time||0);
   const roll=frame?.roll||frame?.lastRoll;
   const rollIndex=frame?.roll?frame.index:frame?.lastIndex;
   const previous=rollIndex>0&&history?.rolls[rollIndex-1]?.phase===roll?.phase?history.rolls[rollIndex-1].positions:[0,0,0,0,0,0];
-  const summary=describeRoll(roll,previous);
+  const summary=describeRoll(roll,previous,race.type);
+  const magic=race.type==='magic_dice'&&!frame?.tiebreak;
   const leaders=frame?.leaders||[];
   const leadLabel=frame?.index<0?'All six at the gate':leaders.length===6?'All six tied':leaders.map(id=>'#'+(id+1)).join(' + ');
   const leaderLeft=frame?frame.goal-Math.max(...frame.active.map(id=>frame.exact[id])):spaces;
@@ -152,7 +153,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
   const flat=viewMode==='board'||viewStatus!=='ready'||frame?.contextLost;
   const moment=raceMoment(frame,follow,race.condition||'sunny');
   return <section className={'track-broadcast'+(replay?' is-replay':'')+(exhibition?' is-exhibition':'')+(frame?.paused?' is-paused':'')+(flat?' is-board':'')} aria-label="Race broadcast">
-    <header className="tv-heading"><div><p>{exhibition?'Exhibition replay':replay?'Replay':frame?.tiebreak?'Tiebreak':'Live at The Track'} · {race.condition==='rain'?'Rain':race.condition==='fog'?'Fog':'Standard'}</p><h1>{race.name}</h1></div>
+    <header className="tv-heading"><div><p>{exhibition?'Exhibition replay':replay?'Replay':frame?.tiebreak?'Tiebreak':'Live at The Track'} · {frame?.formatLabel||race.type} · {race.condition==='rain'?'Rain':race.condition==='fog'?'Fog':'Clear'}</p><h1>{race.name}</h1></div>
       <div className="tv-tools"><select aria-label="Race view" value={viewMode} onChange={e=>{setViewMode(e.target.value);savePreference('track-view',e.target.value);}}><option value="trackside">Trackside 3D</option><option value="steady">Steady 3D</option><option value="board">Board view</option></select>
         <button type="button" aria-pressed={soundOn} onClick={()=>{if(!soundOn)unlock();onSound(!soundOn);}}>{soundOn?'Sound on':'Sound off'}</button>
         <select aria-label="Audio mix" value={audioMix} onChange={e=>{setAudioMix(e.target.value);savePreference('track-race-mix',e.target.value);}}><option value="stadium">Crowd + music</option><option value="trackside">Crowd only</option><option value="caller">Caller only</option></select>
@@ -161,7 +162,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
     <div className="tv-race-layout">
     <div className="tv-situation">
     <div className="tv-focus" aria-live="polite"><div><span>Following</span><strong><b style={{'--silk':SILKS[follow]}}>{follow+1}</b>{names[follow]}</strong><em>{frame?.done&&frame.winner===follow?'Winner':followLeft+' '+(followLeft===1?'space':'spaces')+' to finish'}</em></div>
-      <div><span>{leaders.length>1?'Tied leaders':'Leader'}</span><strong>{leadLabel}</strong><em>{frame?.done?'Across the wire':leaderLeft+' '+(leaderLeft===1?'space':'spaces')+' to finish'}</em></div></div>
+      <div><span>{leaders.length>1?'Tied leaders':'Leader'}</span><strong>{leadLabel}</strong><em>{frame?.done?(frame.historicalResult?'Official result':'Across the wire'):leaderLeft+' '+(leaderLeft===1?'space':'spaces')+' to finish'}</em></div></div>
     <p className="tv-stakes" aria-live="polite">{rootingHint(frame,follow,race.condition||'sunny')}</p>
     </div>
     <div className="tv-video">
@@ -170,12 +171,13 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       {!flat&&<div className="tv-shot-label">{frame?.tiebreak?'Three-space tiebreak':frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
       {!flat&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
       {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>Three-space tiebreak next</span></div>}
-      {!flat&&frame?.done&&frame.runOut>=.85&&<div className="tv-announcement"><span>Across the wire</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
+      {!flat&&frame?.done&&frame.runOut>=.85&&<div className="tv-announcement"><span>{frame.historicalResult?'Official recorded result':'Across the wire'}</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
     </div>
     <div className="tv-sidebar">
-    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><Dice key={id} {...{follow}} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/>)}</div></div>
+    <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><span key={id} className="tv-die-slot">{magic&&<small>{id===0?'Horse':'Spaces'}</small>}<Dice follow={magic&&id===1?-1:follow} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/></span>)}</div></div>
       <div className="tv-roll-copy" aria-live="polite"><p className="tv-call">{frame?.rolling?'Here come the dice…':frame?.cue?.text||(!history?'Loading the race…':frame?.done?names[frame.winner]+' wins.':roll?'The dice have landed.':'Pick your horse. Watch for its number.')}</p><p className="tv-effect">{frame?.rolling&&roll?'Last roll: ':''}{summary}</p></div></div>
     {frame&&!flat&&<RaceField {...{frame,names,follow}} onFollow={choose}/>}
+    {frame?.historicalResult&&<p className="tv-history-note">Archived race: positions are shown as recorded. The official result is unchanged.</p>}
     <div className="tv-ticket">{exhibition?'Exhibition · no wagers or payouts':backed.length?<>Your ticket: {backed.map(id=>'#'+(id+1)+' $'+Number(bets[id]).toFixed(2)).join(' · ')}</>:'Following only · no ticket placed'}{owners?.[follow]?.username?' · Owner: '+owners[follow].username:''}</div>
     </div>
     </div>

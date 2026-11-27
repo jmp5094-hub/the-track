@@ -1,15 +1,10 @@
 import {readFileSync} from 'node:fs';
-import vm from 'node:vm';
+import * as engine from '../../functions/race-engine.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,shotAt,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH,RUN_OUT,RUN_OUT_TIME} from './playback.mjs';
 const fixture=JSON.parse(readFileSync(new URL('./exhibition.json',import.meta.url),'utf8'));
 const voice=JSON.parse(readFileSync(new URL('./voice.json',import.meta.url),'utf8'));
-const source=readFileSync(new URL('../the-track.jsx',import.meta.url),'utf8');
-const rng=source.slice(source.indexOf('function mulberry32('),source.indexOf('const fmt2'));
-const simulator=source.slice(source.indexOf('function simulateRaceWithHistory('),source.indexOf('\nfunction App()'));
-const engine=vm.createContext({TRACK_SPACES:12,TIEBREAK_SPACES:3,HURDLE_CELL:5});
-vm.runInContext(rng+'\n'+simulator,engine);
 const playback=buildPlayback(fixture,3500,12,3,voice);
 const roll=(dice,positions,extra={})=>({dice,positions,phase:'main',...extra});
 
@@ -112,7 +107,7 @@ test('rooting cues use current positions and respect weather',()=>{
   assert.match(rootingHint(frame,3,'rain'),/Rain can cancel a die/);
   assert.doesNotMatch(rootingHint(frame,3,'rain'),/can reach/);
 });
-test('300 seeded weather races retain engine positions or reject inconsistent engine finishes',()=>{
+test('300 archived weather races retain recorded positions and results',()=>{
   for(const condition of ['sunny','rain','fog'])for(let seed=1;seed<=100;seed++){
     const h=JSON.parse(JSON.stringify(engine.simulateRaceWithHistory('standard',condition,seed)));
     const p=buildPlayback(h,3500,12,3,voice);
@@ -128,14 +123,14 @@ test('300 seeded weather races retain engine positions or reject inconsistent en
     p.cues.slice(1).forEach((cue,i)=>assert.ok(p.cues[i].time+p.cues[i].duration<=cue.time+.001,`${condition} ${seed} overlapping ${p.cues[i].key} ${cue.key}`));
   }
 });
-test('existing fog seed 3 uses fallback rather than inventing a winning space',()=>{
+test('archived fog seed 3 shows its recorded result without inventing a winning space',()=>{
   const h=engine.simulateRaceWithHistory('standard','fog',3);
   assert.equal(h.winner,4);assert.equal(h.rolls.at(-1).positions[4],11);
-  assert.equal(buildPlayback(h,3500,12,3,voice),null);
+  const p=buildPlayback(h,3500,12,3,voice);assert.equal(p.sample(p.end+1).historicalResult,true);assert.equal(p.sample(p.end+1).exact[4],11);
 });
-test('invalid histories fail closed to the existing fallback',()=>{
+test('malformed histories fail closed',()=>{
   assert.equal(buildPlayback({winner:0,rolls:[roll([9,2],[12,0,0,0,0,0])]},3500,12,3),null);
-  assert.equal(buildPlayback({winner:0,rolls:[roll([1,2],[1,1,0,0,0,0])]},3500,12,3),null);
+  assert.equal(buildPlayback({winner:0,rolls:[]},3500,12,3),null);
 });
 test('dramatic doubles wait for revealed dice and lead calls wait for the move',()=>{
   const doubleStart=FIRST_ROLL+12*3.5;

@@ -80,3 +80,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible {o
 
 .track-modal>div{border-color:var(--track-line)!important;box-shadow:0 18px 70px #0008}
 .track-modal h2{font-family:var(--track-display)!important;font-size:28px!important;letter-spacing:-.02em!important;text-shadow:none!important;color:var(--track-ink)!important}
+.track-app h2{font-family:var(--track-display)!important;letter-spacing:-.02em!important;color:var(--track-ink)}
+.track-app button:not(.tv-lane){min-height:36px}
+.track-app input,.track-app select{font-size:16px;accent-color:var(--track-brass)}
+.track-app [style*="position: fixed"][style*="inset: 0"]{overscroll-behavior:contain}
+.track-race-unavailable{padding:100px 24px;max-width:900px;margin:auto;color:var(--track-ink)}
+.track-silk-portrait{display:inline-flex;align-items:center;justify-content:center;max-width:100%;flex-shrink:0}
+.track-silk-portrait svg{width:100%;height:100%}
+.tv-history-note{font-size:.8rem;line-height:1.4;color:var(--track-muted);padding:8px;border:1px solid var(--track-line);border-radius:6px}

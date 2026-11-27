@@ -1,3 +1,4 @@
+import {raceDistance,RACE_FORMATS} from '../../functions/race-rules.mjs';
 // Presentation consumes settled engine history. It never rolls dice or changes results.
 export const SILKS = ['#00f5ff','#ff2d55','#ffd700','#97bd88','#bf5fff','#ff8c00'];
 export const PIPS = [[],[4],[0,8],[0,4,8],[0,2,6,8],[0,2,4,6,8],[0,2,3,5,6,8]];
@@ -29,17 +30,22 @@ export function leadersOf(positions,active=SEATS){
 export function worldAt(position,goal=12){
   return TRACK_FINISH-goal*SPACE+position*SPACE-NOSE;
 }
-export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}){
+export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={},type='standard',condition='sunny'){
   const rolls=history?.rolls, winner=history?.winner, cycle=rollInterval/1000;
   if(!Array.isArray(rolls)||!rolls.length||!SEATS.includes(winner)||cycle<MOVE_END)return null;
-  if(!rolls.every(r=>Array.isArray(r.dice)&&r.dice.length===2&&r.dice.every(d=>Number.isInteger(d)&&d>=1&&d<=6)&&
-    Array.isArray(r.positions)&&r.positions.length===6&&r.positions.every(p=>Number.isFinite(p)&&p>=0&&p<=(r.phase==='tiebreak'?tieSpaces:raceSpaces))))return null;
+  if(!rolls.every(r=>Array.isArray(r.dice)&&r.dice.length===(type==='triple_dice'?3:2)&&r.dice.every(d=>Number.isInteger(d)&&d>=1&&d<=6)&&
+    Array.isArray(r.positions)&&r.positions.length===6&&r.positions.every(p=>Number.isFinite(p)&&p>=-12&&p<=24)))return null;
   const tieStart=rolls.findIndex(r=>r.phase==='tiebreak');
   if(tieStart===0)return null;
-  const tieActive=tieStart>0?SEATS.filter(id=>rolls[tieStart-1].positions[id]>=raceSpaces):[];
-  if(tieStart>0&&tieActive.length<2)return null;
-  const finalGoal=tieStart>0?tieSpaces:raceSpaces;
-  if(rolls.at(-1).positions[winner]<finalGoal)return null;
+  const roundTrip=['down_back','magic_dice'].includes(type);
+  const distances=r=>r.positions.map((p,id)=>raceDistance(p,Boolean(r.legDone?.[id]),type,r.phase));
+  const positions=rolls.map(distances);
+  const mainGoal=roundTrip?raceSpaces*2:raceSpaces;
+  const goalAt=index=>tieStart>0&&index>=tieStart?tieSpaces:mainGoal;
+  const tieActive=tieStart>0?(rolls[tieStart].active||SEATS.filter(id=>positions[tieStart-1][id]>=mainGoal||rolls.slice(tieStart).some(r=>r.moves?.some(m=>m.horse===id)))):[];
+  if(tieStart>0&&!tieActive.length)return null;
+  const historicalResult=positions.at(-1)[winner]<goalAt(rolls.length-1)||rolls.some(r=>r.positions.some(p=>p<0||p>(r.phase==='tiebreak'?tieSpaces:raceSpaces)));
+  const primaryKey=roll=>type==='magic_dice'&&roll.phase!=='tiebreak'||roll.dice.length!==2||roll.mudDieIdx!=null||roll.fogDieIdx!=null?null:roll.dice.join('');
   const end=FIRST_ROLL+(rolls.length-1)*cycle+MOVE_END;
   const call=(key,time)=>voice[key]?{key,time,...voice[key]}:null;
   const cues=[call('open',GO+.04)].filter(Boolean);
@@ -47,10 +53,10 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
   rolls.forEach((roll,index)=>{
     const start=FIRST_ROLL+index*cycle;
     const active=index>=tieStart&&tieStart>0?tieActive:SEATS;
-    const primary=call(roll.dice.join(''),start+VOICE);
+    const primary=call(primaryKey(roll),start+VOICE);
     if(primary)cues.push(primary);
-    const leaders=leadersOf(roll.positions,active);
-    const remaining=(index>=tieStart&&tieStart>0?tieSpaces:raceSpaces)-Math.max(...active.map(id=>roll.positions[id]));
+    const leaders=leadersOf(positions[index],active);
+    const remaining=goalAt(index)-Math.max(...active.map(id=>positions[index][id]));
     const beatTime=start+Math.max(MOVE_END,VOICE+(primary?.duration||0)+.08);
     const fits=cue=>cue&&cue.time+cue.duration<start+cycle+VOICE-.08;
     if(index===tieStart-1){
@@ -59,13 +65,13 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     }else if(remaining>0){
       const stretch=!stretchCalled&&remaining<=3?call('stretch',beatTime):null;
       const chance=!chanceCalled&&remaining===1?call('chance',beatTime):null;
-      const lead=leaders.length===1&&(priorLeaders.length>1||!priorLeaders.includes(leaders[0]))&&index>0&&index!==tieStart&&roll.positions[leaders[0]]>previous[leaders[0]]?call('lead'+(leaders[0]+1),beatTime):null;
+      const lead=leaders.length===1&&(priorLeaders.length>1||!priorLeaders.includes(leaders[0]))&&index>0&&index!==tieStart&&positions[index][leaders[0]]>previous[leaders[0]]?call('lead'+(leaders[0]+1),beatTime):null;
       const cue=[stretch,lead,chance].find(fits);
       if(cue){cues.push(cue);if(cue===stretch)stretchCalled=true;if(cue===chance)chanceCalled=true;}
     }
-    previous=roll.positions;priorLeaders=leaders;
+    previous=positions[index];priorLeaders=leaders;
   });
-  const lastCall=voice[rolls.at(-1).dice.join('')];
+  const lastCall=voice[primaryKey(rolls.at(-1))];
   const winAt=Math.max(end+.15,FIRST_ROLL+(rolls.length-1)*cycle+VOICE+(lastCall?.duration||0)+.08);
   const win=call('win'+(winner+1),winAt);if(win)cues.push(win);
   function sample(seconds){
@@ -74,25 +80,30 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     const source=rolls[index];
     const tiebreak=tieStart>0&&index>=tieStart;
     const active=tiebreak?tieActive:SEATS;
-    const goal=tiebreak?tieSpaces:raceSpaces;
-    const previous=index<=0||index===tieStart?GATE:rolls[index-1].positions;
+    const goal=goalAt(index);
+    const previous=index<=0||index===tieStart?GATE:positions[index-1];
     const into=time-FIRST_ROLL-index*cycle;
     const amount=source?clamp((into-MOVE)/(MOVE_END-MOVE)):0;
     const settled=Boolean(source&&into>=MOVE_END-1e-8);
-    const exact=settled?source.positions:previous;
+    const target=positions[index]||previous;
+    const exact=settled?target:previous;
     const progress=previous.map((from,id)=>{
-      const to=source?.positions[id]??from;
+      const to=target[id]??from;
       if(to-from!==2)return mix(from,to,smooth(amount));
       return from+smooth(clamp(amount/.43))+smooth(clamp((amount-.56)/.44));
     });
-    const finishers=source?active.filter(id=>source.positions[id]>=goal):[];
+    const finishers=source?active.filter(id=>target[id]>=goal):[];
     const runOut=finishers.length&&settled?smooth(clamp((into-MOVE_END)/RUN_OUT_TIME)):0;
-    const world=progress.map((p,id)=>worldAt(p,goal)+(finishers.includes(id)?RUN_OUT*runOut:0));
+    const homeFinish=roundTrip&&!tiebreak;
+    const directions=progress.map(p=>homeFinish&&p>=raceSpaces?-1:1);
+    const physical=progress.map(p=>homeFinish?(p<=raceSpaces?p:2*raceSpaces-p):p);
+    const world=physical.map((p,id)=>worldAt(clamp(p,0,homeFinish?raceSpaces:goal),homeFinish?raceSpaces:goal)+(directions[id]<0?2*NOSE:0)+(finishers.includes(id)?RUN_OUT*runOut*directions[id]:0));
+    const jumps=progress.map((p,id)=>type==='hurdle'&&!tiebreak&&previous[id]===5&&target[id]===7?Math.sin(Math.PI*amount)*1.15:0);
     const leaders=leadersOf(exact,active);
-    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&source.positions[id]!==previous[id])||Boolean(finishers.includes(id)&&settled&&runOut<1));
-    const surge=moving.map((yes,id)=>yes?Math.sin(Math.PI*amount)*Math.min(1,Math.abs((source?.positions[id]??0)-previous[id])):0);
+    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&target[id]!==previous[id])||Boolean(finishers.includes(id)&&settled&&runOut<1));
+    const surge=moving.map((yes,id)=>yes?Math.sin(Math.PI*amount)*Math.min(1,Math.abs((target[id]??0)-previous[id])):0);
     const revealed=Boolean(source&&into>=LAND);
-    const nextLeaders=source?leadersOf(source.positions,active):leaders;
+    const nextLeaders=source?leadersOf(target,active):leaders;
     const prior=leadersOf(previous,active);
     const leadChange=revealed&&nextLeaders.length===1&&(prior.length>1||!prior.includes(nextLeaders[0]));
     const atWire=goal-Math.max(...active.map(id=>previous[id]))<=3||goal-Math.max(...active.map(id=>exact[id]))<=3;
@@ -104,19 +115,21 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     return {time,sceneTime:time,index,into,rolling:Boolean(source&&into<LAND),revealed,
       roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,
       active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,runOut,
+      type,condition,roundTrip:homeFinish,directions,jumps,physical,historicalResult,formatLabel:RACE_FORMATS[type],finishX:homeFinish?0:TRACK_FINISH,
       done,winner:done?winner:null,leaderX:Math.max(...active.map(id=>world[id])),
       launched:time>=GO,cue};
   }
   return {sample,cues,end,endHold:Math.max(3.4,winAt-end+(win?.duration||0)+.6),cycle};
 }
-export function describeRoll(roll,previous){
-  if(!roll)return 'Every matching die moves its numbered horse one space.';
-  const prefix=roll.dice.join(' and ')+'.';
+export function describeRoll(roll,previous,type='standard'){
+  if(!roll)return type==='magic_dice'?'First die: horse. Second die: distance. Race out and back.':type==='triple_dice'?'Three dice move their matching horses.':'Every matching die moves its numbered horse one space.';
+  const prefix=type==='magic_dice'&&roll.phase!=='tiebreak'?`Horse #${roll.dice[0]} · ${roll.dice[1]} ${roll.dice[1]===1?'space':'spaces'}.`:roll.dice.join(' and ')+'.';
   const changes=roll.positions.map((p,i)=>({id:i,delta:p-(previous?.[i]??0)})).filter(x=>x.delta!==0);
   const movement=changes.map(({id,delta})=>`#${id+1} ${delta<0?'back':'advances'} ${Math.abs(delta)}${Math.abs(delta)===1?' space':' spaces'}`).join(' · ');
   const effect=roll.mudDieIdx!=null?`Rain cancels die ${roll.mudDieIdx+1} (${roll.dice[roll.mudDieIdx]}). `:
     roll.fogDieIdx!=null?`Fog reverses die ${roll.fogDieIdx+1} (${roll.dice[roll.fogDieIdx]}). `:'';
-  return `${prefix} ${effect}${movement||'No net change in position.'}`;
+  const events=(roll.events||[]).map(e=>`#${e.horse+1} ${e.kind==='jump'?'clears the hurdle':e.kind==='turn'?'turns for home':'needs doubles at the hurdle'}`).join(' · ');
+  return `${prefix} ${effect}${events||movement||'No net change in position.'}`;
 }
 export function rootingHint(frame,follow,condition='sunny'){
   if(!frame)return 'Choose a horse to follow.';
@@ -125,6 +138,9 @@ export function rootingHint(frame,follow,condition='sunny'){
   if(!frame.active.includes(follow))return 'Your horse is out of the tiebreak. Follow one of the remaining runners.';
   const left=frame.goal-frame.exact[follow];
   if(condition!=='sunny'&&!frame.tiebreak)return `Root for ${follow+1}. ${condition==='rain'?'Rain can cancel a die.':'Fog can reverse a die.'}`;
+  if(frame.type==='magic_dice'&&!frame.tiebreak)return `Root for ${follow+1} on the first die. The second die sets the distance. ${left} spaces to home.`;
+  if(frame.type==='hurdle'&&!frame.tiebreak&&frame.exact[follow]===5)return `Double ${follow+1}s clear your hurdle.`;
+  if(frame.type==='triple_dice'&&left===3)return `Triple ${follow+1}s can reach the wire.`;
   if(left<=1){
     const rivals=frame.active.filter(i=>i!==follow&&frame.goal-frame.exact[i]<=2);
     const threat=rivals.find(i=>frame.goal-frame.exact[i]===2);
@@ -139,6 +155,9 @@ export function raceMoment(frame,follow,condition='sunny'){
   if(frame.tiePending)return {kind:'tie',title:'Tied at the wire',detail:'Three-space tiebreak next'};
   if(frame.rolling)return {kind:'rolling',horse:follow,title:`Come on, ${follow+1}`,detail:'The dice are in the air'};
   if(frame.revealed&&frame.roll){
+    if(frame.type==='magic_dice'&&!frame.tiebreak)return {kind:'double',horse:frame.roll.dice[0]-1,title:`#${frame.roll.dice[0]} takes ${frame.roll.dice[1]}`,detail:'First die: horse · Second die: distance'};
+    const event=frame.roll.events?.find(e=>e.kind==='jump'||e.kind==='turn');
+    if(event)return {kind:'lead',horse:event.horse,title:`#${event.horse+1} ${event.kind==='jump'?'clears it':'turns for home'}`,detail:event.kind==='jump'?'Over the hurdle':'The return leg'};
     const double=frame.roll.positions.findIndex((p,id)=>p-frame.previous[id]===2&&frame.roll.dice.every(d=>d===id+1));
     if(double>=0)return {kind:'double',horse:double,title:`Double ${double+1}`,detail:'Two dice. Two spaces.'};
     if(frame.settled&&frame.leadChange)return {kind:'lead',horse:frame.leaders[0],title:`#${frame.leaders[0]+1} takes the lead`,detail:'The race changes here'};
@@ -151,7 +170,7 @@ export function raceMoment(frame,follow,condition='sunny'){
 export function shotAt(frame,aspect,reduced=false){
   const narrow=aspect<1.5;
   if(frame.shot==='wire'&&!frame.steady){
-    const center=TRACK_FINISH-8+4*(frame.runOut||0);
+    const center=frame.roundTrip?8-4*(frame.runOut||0):TRACK_FINISH-8+4*(frame.runOut||0);
     return {from:[center,10,narrow?22:18],at:[center,.5,0],fov:narrow?51:44};
   }
   const xs=frame.active.map(id=>frame.world[id]);
