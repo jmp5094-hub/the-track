@@ -16,7 +16,7 @@ const savePreference=(key,value)=>{try{localStorage.setItem(key,String(value));}
 const commentary={...voice,...extraVoice};
 
 function Dice({value,rolling,revealed,weather,follow}){
-  return <span aria-hidden="true" style={{'--die-silk':SILKS[value-1]||'#f4e3c1'}} className={'tv-die'+(rolling?' is-rolling':'')+(revealed?' is-landed':'')+(!rolling&&value===follow+1?' is-hit':'')+(weather?' '+weather:'')}>
+  return <span aria-hidden="true" style={{'--die-silk':SILKS[value-1]||'#f4e3c1'}} className={'tv-die'+(rolling?' is-rolling':'')+(revealed?' is-landed':'')+(value>0&&!rolling&&value===follow+1?' is-hit':'')+(weather?' '+weather:'')}>
     {Array.from({length:9},(_,i)=><i key={i} className={PIPS[value]?.includes(i)?'is-pip':''}/>)}
     {weather&&<small>{weather==='is-mud'?'×':'−'}</small>}
   </span>;
