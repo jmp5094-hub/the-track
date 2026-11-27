@@ -29,7 +29,7 @@ Production verification exposed an existing seed archive at Firestore's 1 MiB do
 
 ## Verification
 
-`npm test`: 50 passing tests, including 3,250 version-2 and 3,250 archived format/condition simulations. Assertions cover finishes, exact earned spaces, weather, hurdle events, tiebreak eligibility, server/client agreement, preserved recorded winners, camera stability and non-overlapping commentary cues.
+`npm test`: 51 passing tests, including 3,250 version-2 and 3,250 archived format/condition simulations. Assertions cover finishes, exact earned spaces, weather, hurdle events, tiebreak eligibility, server/client agreement, preserved recorded winners, camera stability, non-overlapping commentary cues, and correct return-leg movement captions and doubles highlights.
 
 `npm run test:finance`: 8 passing emulator tests (including nested groups), using separate authenticated clients and a copy of the actual production Firestore rules. Covers competing bids/refunds, overdrafts, ticket editing/retries, proportional multi-user payouts, all 13 private setups and scheduler migration/recovery. Scheduler tests invoke both real handlers against demo-track only, preserve a near-limit legacy archive, verify new seed commitments and later reveals, and confirm that clients cannot read or write private seed documents.
 

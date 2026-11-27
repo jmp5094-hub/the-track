@@ -143,8 +143,9 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
   const frame=display||playback?.sample(controlRef?.current?.time||0);
   const roll=frame?.roll||frame?.lastRoll;
   const rollIndex=frame?.roll?frame.index:frame?.lastIndex;
-  const previous=rollIndex>0&&history?.rolls[rollIndex-1]?.phase===roll?.phase?history.rolls[rollIndex-1].positions:[0,0,0,0,0,0];
-  const summary=describeRoll(roll,previous,race.type);
+  const previousRoll=rollIndex>0&&history?.rolls[rollIndex-1]?.phase===roll?.phase?history.rolls[rollIndex-1]:null;
+  const previous=previousRoll?.positions||[0,0,0,0,0,0];
+  const summary=describeRoll(roll,previous,race.type,previousRoll?.legDone);
   const magic=race.type==='magic_dice'&&!frame?.tiebreak;
   const leaders=frame?.leaders||[];
   const leadLabel=frame?.index<0?'All six at the gate':leaders.length===6?'All six tied':leaders.map(id=>'#'+(id+1)).join(' + ');

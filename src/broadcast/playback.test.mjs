@@ -8,6 +8,21 @@ const voice=JSON.parse(readFileSync(new URL('./voice.json',import.meta.url),'utf
 const playback=buildPlayback(fixture,3500,12,3,voice);
 const roll=(dice,positions,extra={})=>({dice,positions,phase:'main',...extra});
 
+test('return-leg captions and doubles follow progress toward home, including fog reversals',()=>{
+  const legs=[true,false,false,false,true,false],previous=[6,0,0,0,10,0];
+  const fog=roll([5,1],[7,0,0,0,9,0],{legDone:legs,fogDieIdx:1});
+  const text=describeRoll(fog,previous,'down_back',legs);
+  assert.match(text,/Fog reverses die 2 \(1\)/);
+  assert.match(text,/#1 back 1 space/);
+  assert.match(text,/#5 advances 1 space/);
+  const doubled=roll([1,1],[4,0,0,0,10,0],{legDone:legs});
+  assert.match(describeRoll(doubled,previous,'down_back',legs),/#1 advances 2 spaces/);
+  const moment=raceMoment({revealed:true,roll:doubled,type:'down_back',previous:[18,0,0,0,14,0]},0);
+  assert.equal(moment.kind,'double');assert.equal(moment.title,'Double 1');
+  const magic=roll([1,3],[3,0,0,0,10,0],{legDone:legs});
+  assert.match(describeRoll(magic,previous,'magic_dice',legs),/#1 advances 3 spaces/);
+});
+
 test('announcer calls finish before the next call and fit the recorded reel',()=>{
   for(const cue of Object.values(voice)){
     assert.ok(cue.offset>=0&&cue.duration>0);

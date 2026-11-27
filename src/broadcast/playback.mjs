@@ -121,10 +121,10 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
   }
   return {sample,cues,end,endHold:Math.max(3.4,winAt-end+(win?.duration||0)+.6),cycle};
 }
-export function describeRoll(roll,previous,type='standard'){
+export function describeRoll(roll,previous,type='standard',previousLegDone=[]){
   if(!roll)return type==='magic_dice'?'First die: horse. Second die: distance. Race out and back.':type==='triple_dice'?'Three dice move their matching horses.':'Every matching die moves its numbered horse one space.';
   const prefix=type==='magic_dice'&&roll.phase!=='tiebreak'?`Horse #${roll.dice[0]} · ${roll.dice[1]} ${roll.dice[1]===1?'space':'spaces'}.`:roll.dice.join(' and ')+'.';
-  const changes=roll.positions.map((p,i)=>({id:i,delta:p-(previous?.[i]??0)})).filter(x=>x.delta!==0);
+  const changes=roll.positions.map((p,i)=>({id:i,delta:raceDistance(p,roll.legDone?.[i],type,roll.phase)-raceDistance(previous?.[i]??0,previousLegDone[i],type,roll.phase)})).filter(x=>x.delta!==0);
   const movement=changes.map(({id,delta})=>`#${id+1} ${delta<0?'back':'advances'} ${Math.abs(delta)}${Math.abs(delta)===1?' space':' spaces'}`).join(' · ');
   const effect=roll.mudDieIdx!=null?`Rain cancels die ${roll.mudDieIdx+1} (${roll.dice[roll.mudDieIdx]}). `:
     roll.fogDieIdx!=null?`Fog reverses die ${roll.fogDieIdx+1} (${roll.dice[roll.fogDieIdx]}). `:'';
@@ -158,7 +158,7 @@ export function raceMoment(frame,follow,condition='sunny'){
     if(frame.type==='magic_dice'&&!frame.tiebreak)return {kind:'double',horse:frame.roll.dice[0]-1,title:`#${frame.roll.dice[0]} takes ${frame.roll.dice[1]}`,detail:'First die: horse · Second die: distance'};
     const event=frame.roll.events?.find(e=>e.kind==='jump'||e.kind==='turn');
     if(event)return {kind:'lead',horse:event.horse,title:`#${event.horse+1} ${event.kind==='jump'?'clears it':'turns for home'}`,detail:event.kind==='jump'?'Over the hurdle':'The return leg'};
-    const double=frame.roll.positions.findIndex((p,id)=>p-frame.previous[id]===2&&frame.roll.dice.every(d=>d===id+1));
+    const double=frame.roll.positions.findIndex((p,id)=>raceDistance(p,frame.roll.legDone?.[id],frame.type,frame.roll.phase)-frame.previous[id]===2&&frame.roll.dice.every(d=>d===id+1));
     if(double>=0)return {kind:'double',horse:double,title:`Double ${double+1}`,detail:'Two dice. Two spaces.'};
     if(frame.settled&&frame.leadChange)return {kind:'lead',horse:frame.leaders[0],title:`#${frame.leaders[0]+1} takes the lead`,detail:'The race changes here'};
   }
