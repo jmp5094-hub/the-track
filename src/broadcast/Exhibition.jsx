@@ -18,17 +18,18 @@ export default function Exhibition(){
   const playback=useMemo(()=>buildPlayback(history,3500,12,3,{},setup.type,setup.condition),[history,setup]);
   const control=useRef({time:-INTRO_SECONDS,paused:true,speed:1,version:0});
   const [follow,setFollow]=useState(3),[paused,setPaused]=useState(true),[finished,setFinished]=useState(false),[speed,setSpeed]=useState(1);
+  const [begun,setBegun]=useState(false);
   const [sound,setSound]=useState(()=>localStorage.getItem('track-demo-sound')==='true');
   const finish=useCallback(()=>{control.current.paused=true;setPaused(true);setFinished(true);},[]);
-  const go=(time=-INTRO_SECONDS,play=true)=>{control.current.time=time;control.current.version++;control.current.paused=!play;setPaused(!play);setFinished(false);};
-  const toggle=()=>{if(finished){go();return;}control.current.paused=!control.current.paused;setPaused(control.current.paused);};
+  const go=(time=-INTRO_SECONDS,play=true)=>{control.current.time=time;control.current.version++;control.current.paused=!play;setBegun(play||time>-INTRO_SECONDS);setPaused(!play);setFinished(false);};
+  const toggle=()=>{if(finished){go();return;}setBegun(true);control.current.paused=!control.current.paused;setPaused(control.current.paused);};
   const keyMoment=history.rolls.findIndex(r=>r.events.some(e=>e.kind==='jump'||e.kind==='turn'));
   return <main className="track-exhibition">
     <nav className="exhibition-nav"><a href="?demo=1" aria-label="The Track exhibition"><span className="track-mark" aria-hidden="true"><i/><i/><i/></span> THE TRACK <small>DEMO</small></a><a href="/">Enter The Track</a></nav>
     <div className="exhibition-intro"><p>Pick a runner below. Watch for its number.</p><span>All races roll automatically · no account needed</span></div>
     <div className="exhibition-controls" aria-label="Exhibition playback">
       <select aria-label="Race setup" value={setup.id} onChange={e=>{go(-INTRO_SECONDS,false);setSetup(setups.find(s=>s.id===e.target.value));}}>{setups.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select>
-      <button className="exhibition-play" type="button" onClick={toggle}>{finished?'Replay race':paused?(control.current.time>0?'Resume race':'Watch demo race'):'Pause race'}</button>
+      <button className="exhibition-play" type="button" onClick={toggle}>{finished?'Replay race':paused?(begun?'Resume race':'Watch demo race'):'Pause race'}</button>
       <button type="button" onClick={()=>go(FIRST_ROLL+Math.max(0,history.rolls.length-4)*3.5-.05)}>Closing stretch</button>
       {keyMoment>=0&&<button type="button" onClick={()=>go(FIRST_ROLL+keyMoment*3.5-.05)}>{setup.type==='hurdle'?'First jump':'First turn'}</button>}
       <button type="button" onClick={()=>go(-INTRO_SECONDS,false)}>Restart</button>
