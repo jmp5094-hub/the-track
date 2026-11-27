@@ -318,6 +318,27 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
 
 const TOPUP_THRESHOLD = 30;
 
+// Keep the legacy seed archive intact. New seeds each get their own private
+// document, so a growing race history cannot hit Firestore's 1 MiB limit.
+const seedRef = id => db.doc(`private/raceSeeds/races/${id}`);
+async function loadRaceSeeds(races, legacySeeds) {
+  const seeds = {...legacySeeds};
+  const missing = [...new Set(races.filter(r => !r.revealedSeed && !seeds[r.id]).map(r => r.id))];
+  if (missing.length) {
+    const docs = await db.getAll(...missing.map(seedRef));
+    for (const doc of docs) if (doc.exists) seeds[doc.id] = doc.data().seed;
+  }
+  return seeds;
+}
+async function saveNewRaceSeeds(seeds, persistedIds) {
+  const fresh = Object.entries(seeds).filter(([id]) => !persistedIds.has(id));
+  for (let offset = 0; offset < fresh.length; offset += 400) {
+    const batch = db.batch();
+    for (const [id, seed] of fresh.slice(offset, offset + 400)) batch.create(seedRef(id), {seed});
+    await batch.commit();
+  }
+}
+
 // ─── MAIN CRON FUNCTION ───────────────────────────────────────────────────────
 // Runs every minute — manages schedule and pre-computes race roll histories
 exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB" }, async () => {
@@ -332,7 +353,8 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
 
   let schedule      = schedSnap.exists   ? schedSnap.data().races   : null;
   let auctionSched  = auctionSnap.exists ? auctionSnap.data().races : null;
-  const seedsDoc    = seedsSnap.exists   ? seedsSnap.data()         : {};
+  const seedsDoc = await loadRaceSeeds([...(schedule || []), ...(auctionSched || [])], seedsSnap.exists ? seedsSnap.data() : {});
+  const persistedSeedIds = new Set(Object.keys(seedsDoc));
 
   // Count unfinished future races
   const futureCount = (races) => !races ? 0 :
@@ -369,6 +391,9 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
     auctionSched = topUpSchedule(trimOld(auctionSched), generateAuctionSchedule);
     console.log("Topped up auction schedule, now:", auctionSched.length, "races");
   }
+
+  // Persist commitments before publishing their races, including on retries.
+  await saveNewRaceSeeds(seedsDoc, persistedSeedIds);
 
   // ── 2. Pre-compute roll histories for races starting in the next 2 minutes ──
   const allRaces = [...schedule, ...auctionSched];
@@ -462,7 +487,6 @@ exports.raceScheduler = onSchedule({ schedule:"every 1 minutes", memory:"512MiB"
   await Promise.all([
     db.doc("global/schedule").set({ races: finalSchedule, generatedAt: now }),
     db.doc("global/auctionSchedule").set({ races: finalAuction, generatedAt: now }),
-    db.doc("private/raceSeeds").set(seedsDoc),
   ]);
 
   return null;
@@ -478,7 +502,8 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
   ]);
   let schedule     = schedSnap.exists   ? schedSnap.data().races : null;
   let auctionSched = auctionSnap.exists ? auctionSnap.data().races : null;
-  const seedsDoc   = seedsSnapH.exists  ? seedsSnapH.data()       : {};
+  const seedsDoc = await loadRaceSeeds([...(schedule || []), ...(auctionSched || [])], seedsSnapH.exists ? seedsSnapH.data() : {});
+  const persistedSeedIds = new Set(Object.keys(seedsDoc));
 
   const futureCountH = (races) => !races ? 0 :
     races.filter(r => r.status !== "finished" && r.startTime > now).length;
@@ -506,10 +531,11 @@ exports.raceSchedulerHttp = onRequest({ memory:"512MiB" }, async (req, res) => {
     auctionSched = topUpH(trimOldH(auctionSched), generateAuctionSchedule);
   }
 
+  await saveNewRaceSeeds(seedsDoc, persistedSeedIds);
+
   await Promise.all([
     db.doc("global/schedule").set({ races: schedule, generatedAt: now }),
     db.doc("global/auctionSchedule").set({ races: auctionSched, generatedAt: now }),
-    db.doc("private/raceSeeds").set(seedsDoc),
   ]);
 
   // Pre-compute rolls for next 3 minutes

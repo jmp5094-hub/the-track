@@ -26,6 +26,12 @@ test('isolated Firestore: bank, competing bids, ticket edits, every private form
   const reset=async()=>Promise.all([alice,bob,carol].map(u=>put('users',u.uid,{username:u.username,balance:1000})));
   try{
     await reset();
+    await t.test('race seed documents stay private to the backend',async()=>{
+      const id=prefix+'-private-seed';
+      await adminDb.doc('private/raceSeeds/races/'+id).set({seed:'server-only-seed'});
+      await assert.rejects(()=>getDoc(doc(clients[0].db,'private/raceSeeds/races/'+id)),e=>e.code==='permission-denied');
+      await assert.rejects(()=>setDoc(doc(clients[0].db,'private/raceSeeds/races/'+id),{seed:'changed'}),e=>e.code==='permission-denied');
+    });
     await t.test('bank writes ledger and balance together, retries once, and rejects overdrafts',async()=>{
       await Promise.all([store.bankTransfer(alice,'deposit',100,'deposit-1'),store.bankTransfer(alice,'deposit',100,'deposit-1')]);
       assert.equal((await get('users',alice.uid)).balance,1100);assert.equal((await get('bank',alice.uid)).txs.length,1);

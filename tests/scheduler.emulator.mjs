@@ -1,6 +1,7 @@
 import {createRequire} from 'node:module';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {simulateRaceWithHistory} from '../functions/race-engine.mjs';
 import {validConditions} from '../functions/race-rules.mjs';
 
@@ -9,7 +10,7 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
   process.env.FIREBASE_CONFIG=JSON.stringify({projectId:'demo-track'});
   process.env.FIRESTORE_EMULATOR_HOST='127.0.0.1:8080';
   const require=createRequire(import.meta.url),admin=require('../functions/node_modules/firebase-admin');
-  const {raceScheduler}=require('../functions/index.js'),db=admin.firestore();
+  const {raceScheduler,raceSchedulerHttp}=require('../functions/index.js'),db=admin.firestore();
   const now=Date.now(),base={name:'Scheduler QA',condition:'fog',type:'down_back',engineVersion:2,seed:1,status:'upcoming'};
   let long=simulateRaceWithHistory(base.type,base.condition,base.seed,2);
   while(long.rolls.length<90){base.seed++;long=simulateRaceWithHistory(base.type,base.condition,base.seed,2);}
@@ -19,7 +20,9 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
   const overdue={...base,id:'scheduler-missed-start',startTime:now-60000};
   const finished={...base,id:'scheduler-finished',startTime:now-900000};
   const original={...simulateRaceWithHistory('standard','sunny',19,1),visualFinishAt:now+50000,computedAt:now};
+  const legacyArchive={archived:'x'.repeat(1040000),[finished.id]:'12345678901234567890123456789012'};
   try{
+    await db.doc('private/raceSeeds').set(legacyArchive);
     await db.doc('global/schedule').set({races:[ongoing,legacy,recorded,overdue,finished]});
     await db.doc('global/auctionSchedule').set({races:[]});
     await db.doc('raceRolls/'+ongoing.id).set({...long,visualFinishAt:ongoing.startTime+1300+long.rolls.length*3500,computedAt:now});
@@ -30,12 +33,34 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
     const auctions=(await db.doc('global/auctionSchedule').get()).data().races;
     assert.notEqual(schedule.find(r=>r.id===ongoing.id).status,'finished');
     assert.equal(schedule.find(r=>r.id===finished.id).status,'finished');
+    assert.equal(schedule.find(r=>r.id===finished.id).revealedSeed,legacyArchive[finished.id]);
+    assert.deepEqual((await db.doc('private/raceSeeds').get()).data(),legacyArchive);
     assert.deepEqual((await db.doc('raceRolls/'+recorded.id).get()).data(),original);
     const old=(await db.doc('raceRolls/'+legacy.id).get()).data();
     assert.equal(old.engineVersion,1);assert.deepEqual(old.rolls,simulateRaceWithHistory(legacy.type,legacy.condition,legacy.seed,1).rolls);
     assert.equal((await db.doc('raceRolls/'+overdue.id).get()).data().engineVersion,2);
     const generated=[...schedule.filter(r=>!r.id.startsWith('scheduler-')),...auctions];
     assert.equal(generated.length,128);assert.equal(new Set(auctions.map(r=>r.type)).size,5);
-    for(const r of generated){assert.equal(r.engineVersion,2);assert.ok(validConditions(r.type).includes(r.condition));assert.equal(r.horses.length,6);assert.equal(r.seedHash.length,64);}
+    const savedSeeds=await db.getAll(...generated.map(r=>db.doc('private/raceSeeds/races/'+r.id)));
+    for(let i=0;i<generated.length;i++){
+      const r=generated[i],seed=savedSeeds[i].data().seed;
+      assert.equal(r.engineVersion,2);assert.ok(validConditions(r.type).includes(r.condition));assert.equal(r.horses.length,6);
+      assert.equal(createHash('sha256').update(seed).digest('hex'),r.seedHash);
+    }
+    const newlyFinished={...generated[0],startTime:now-900000};
+    await db.doc('global/schedule').set({races:schedule.map(r=>r.id===newlyFinished.id?newlyFinished:r)});
+    await db.doc('raceRolls/'+newlyFinished.id).set({...long,visualFinishAt:now-60000,computedAt:now});
+    await raceScheduler.run({});
+    assert.equal((await db.doc('global/schedule').get()).data().races.find(r=>r.id===newlyFinished.id).revealedSeed,savedSeeds[0].data().seed);
+    // The manual recovery handler must use the same bounded storage path.
+    await db.doc('global/schedule').set({races:[]});
+    await db.doc('global/auctionSchedule').set({races:[]});
+    let response;
+    await raceSchedulerHttp({}, {json:value=>{response=value;}});
+    assert.equal(response.ok,true);
+    const httpRaces=(await db.doc('global/schedule').get()).data().races;
+    assert.equal(httpRaces.length,64);
+    assert.equal((await db.doc('private/raceSeeds/races/'+httpRaces[0].id).get()).exists,true);
+    assert.deepEqual((await db.doc('private/raceSeeds').get()).data(),legacyArchive);
   }finally{await admin.app().delete();}
 });
