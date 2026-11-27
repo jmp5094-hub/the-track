@@ -1,4 +1,4 @@
-import {makeSeededDie,simulateV2} from './race-rules.mjs';
+import {makeSeededDie,simulateV2,simulateV3} from './race-rules.mjs';
 const TRACK_SPACES=12,TIEBREAK_SPACES=3,HURDLE_CELL=5;
 // Frozen version 1 for already scheduled races and historical verification.
 function simulateLegacy(raceType, condition, seed) {
@@ -123,4 +123,4 @@ function simulateLegacy(raceType, condition, seed) {
 
   return { winner: winner ?? 0, rolls: rollHistory };
 }
-export function simulateRaceWithHistory(type,condition,seed,version=1){return version>=2?simulateV2(type,condition,seed):simulateLegacy(type,condition,seed);}
+export function simulateRaceWithHistory(type,condition,seed,version=1){return version>=3?simulateV3(type,condition,seed):version>=2?simulateV2(type,condition,seed):simulateLegacy(type,condition,seed);}

@@ -27,7 +27,7 @@ export function RaceField({frame,names,follow,onFollow,flat=false}){
         aria-pressed={follow===id} aria-label={`Follow #${id+1} ${name}, ${eligible?left+' spaces to finish':'out of tiebreak'}${frame.leaders.includes(id)?', leading':''}`}
         onClick={()=>onFollow(id)}>
         <span className="tv-runner"><b style={{'--silk':SILKS[id]}}>{id+1}</b><span title={name}>{name}</span></span>
-        <span className="tv-lane-track" style={{'--spaces':frame.goal}} aria-hidden="true"><i className="tv-token" style={{left:(Math.min(frame.goal,frame.progress[id])/frame.goal*100)+'%','--silk':SILKS[id]}}>{id+1}</i></span>
+        <span className="tv-lane-track" style={{'--spaces':frame.goal+1,'--wire':(frame.goal/(frame.goal+1)*100)+'%'}} aria-hidden="true"><i className="tv-token" style={{left:((Math.min(frame.goal,frame.progress[id])+.5)/(frame.goal+1)*100)+'%','--silk':SILKS[id]}}>{id+1}</i></span>
         <span className="tv-distance">{!eligible?'Out':frame.done&&frame.winner===id?'Winner':left+' left'}</span>
       </button>;
     })}
@@ -109,7 +109,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       if(frame.revealed&&frame.index!==lastMove){lastMove=frame.index;if(withEffects&&frame.into<LAND+.18)playRaceEffect(ctx,'land');}
       const step=frame.into>=MOVE&&frame.into<MOVE_END?frame.index:-1;
       if(step>=0&&step!==lastStep&&frame.moving.some(Boolean)){lastStep=step;if(withEffects){const moving=frame.active.filter(id=>frame.moving[id]);audio.current.mix?.effect('hooves',{duration:MOVE_END-frame.into,speed,pan:moving.length===1?(moving[0]-2.5)*.13:0});}}
-      if(frame.done&&!atWire){atWire=true;if(withEffects&&elapsed<playback.end+.25){audio.current.mix?.effect('roar',{speed});audio.current.mix?.effect('hooves',{duration:.8,speed,level:.65});}}
+      if(frame.done&&!atWire){atWire=true;if(withEffects&&elapsed<playback.end+.25){audio.current.mix?.effect('roar',{speed});}}
       if(frame.leadChange&&frame.settled&&frame.index!==lastCrowd){lastCrowd=frame.index;if(withEffects&&!frame.done&&frame.into<MOVE_END+.1)audio.current.mix?.effect('roar',{duration:1.15,level:.36,speed});}
       const cue=frame.cue,cueTag=cue?cue.key+'@'+cue.time:'';
       if(cue&&cueTag!==lastCue){
@@ -124,7 +124,7 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
       const faceTick=frame.rolling?Math.floor(frame.into*15):-1;
       const dice=frame.rolling?Array.from({length:race.type==='triple_dice'?3:2},(_,i)=>(faceTick*(3+i*2)+frame.index+i*2)%6+1):frame.roll?.dice||frame.lastRoll?.dice||[0,0];
       const contextLost=container.current?.dataset.contextLost==='true';
-      const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.runOut>=.85,frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
+      const ui=[frame.index,faceTick,frame.revealed,frame.exact.join(','),frame.progress.map(p=>p.toFixed(1)).join(','),frame.done,frame.shot,cueTag,frame.follow,contextLost,paused].join('|');
       if(ui!==lastPaint){lastPaint=ui;setDisplay({...frame,dice,contextLost,paused});}
       if(timestamp>=nextDraw){
         try{view.current?.draw(frame);}catch{setViewStatus('fallback');view.current?.dispose();view.current=null;}
@@ -169,10 +169,10 @@ export function Broadcast({race,history,interval=3500,spaces=12,tieSpaces=3,name
     <div className="tv-video">
       <div ref={container} className="tv-viewport" aria-hidden="true"/>
       {frame&&flat&&<div className="tv-board-scene"><span>{viewStatus==='loading'&&viewMode!=='board'?'Preparing trackside view':'The course'} · {frame.goal} fixed spaces</span><RaceField {...{frame,names,follow}} onFollow={choose} flat/></div>}
-      {!flat&&<div className="tv-shot-label">{frame?.tiebreak?'Three-space tiebreak':frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
+      {!flat&&<div className="tv-shot-label">{frame?.tiebreak?`${frame.tieSpaces}-space tiebreak`:frame?.shot==='wire'?'At the wire':frame?.shot==='contest'?'The lead changes':frame?.shot==='gate'?'At the gate':'Trackside'}</div>}
       {!flat&&!frame?.done&&!frame?.tiePending&&<div key={frame?.index+':'+moment.kind} className={'tv-moment is-'+moment.kind} style={{'--moment-silk':SILKS[moment.horse]||'#e4c48b'}}><span>{moment.detail}</span><strong>{moment.title}</strong></div>}
-      {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>Three-space tiebreak next</span></div>}
-      {!flat&&frame?.done&&frame.runOut>=.85&&<div className="tv-announcement"><span>{frame.historicalResult?'Official recorded result':'Across the wire'}</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
+      {!flat&&frame?.tiePending&&<div className="tv-announcement">Tied at the wire <b>{frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}</b><span>{frame.tieSpaces}-space tiebreak next</span></div>}
+      {!flat&&frame?.done&&<div className="tv-announcement"><span>{frame.historicalResult?'Official recorded result':'Across the wire'}</span><b>#{frame.winner+1} {names[frame.winner]}</b><span>Wins on {frame.roll.dice.join(' and ')}</span></div>}
     </div>
     <div className="tv-sidebar">
     <div className="tv-roll-panel"><div className="tv-dice" role="img" aria-label={frame?.rolling?'Dice rolling':roll?'Dice '+roll.dice.join(' and '):'Dice ready'}><span>Roll {Math.max(0,(frame?.index??-1)+1)}</span><div>{(frame?.dice||[0,0]).map((value,id)=><span key={id} className="tv-die-slot">{magic&&<small>{id===0?'Horse':'Spaces'}</small>}<Dice follow={magic&&id===1?-1:follow} value={value} rolling={frame?.rolling} revealed={frame?.revealed} weather={!frame?.rolling&&roll?.mudDieIdx===id?'is-mud':!frame?.rolling&&roll?.fogDieIdx===id?'is-fog':null}/></span>)}</div></div>

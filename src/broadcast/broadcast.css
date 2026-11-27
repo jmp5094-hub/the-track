@@ -35,7 +35,7 @@
 .tv-lane.is-followed{background:#e2c89514}.tv-lane.is-out{opacity:.4}
 .tv-runner{display:flex;align-items:center;gap:8px;min-width:0;font-size:.87rem}.tv-runner>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tv-runner>b{min-width:21px;height:21px;font-size:.8rem}
 .tv-lane-track{position:relative;height:20px;border-left:1px solid #66735c;background:repeating-linear-gradient(to right,transparent 0,transparent calc(100% / var(--spaces) - 1px),#61725c calc(100% / var(--spaces) - 1px),#61725c calc(100% / var(--spaces))),#344732}
-.tv-lane-track:after{content:'';position:absolute;right:-2px;top:-3px;bottom:-3px;width:4px;background:repeating-linear-gradient(to bottom,#f3e8cd 0,#f3e8cd 4px,#122017 4px,#122017 8px)}
+.tv-lane-track:after{content:'';position:absolute;left:calc(var(--wire) - 2px);top:-3px;bottom:-3px;width:4px;background:repeating-linear-gradient(to bottom,#f3e8cd 0,#f3e8cd 4px,#122017 4px,#122017 8px)}
 .tv-token{position:absolute;top:1px;transform:translateX(-50%);display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--silk);color:#162119;font:800 11px var(--track-ui);z-index:1}
 .tv-lane.is-followed .tv-token{outline:2px solid #fff2d2;outline-offset:2px;border-radius:3px}.tv-lane.is-followed .tv-runner>b{outline:1px solid #f4dfad;outline-offset:2px}
 .tv-distance{text-align:right;font-size:.87rem;font-variant-numeric:tabular-nums;white-space:nowrap}

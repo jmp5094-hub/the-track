@@ -11,15 +11,17 @@ export function SiteBrand(){
 export function LobbyView({races,onEnterRace,demoHref='?demo=1',preview=false,auction=false,onRegularLobby}){
   const groups=auction?[['Auction live',['auction']],['At the start',['locked']],['Racing now',['racing']],['Upcoming auctions',['upcoming']]]:[['Live now',['racing','locked']],['Betting open',['betting']],['Up next',['upcoming']]];
   const featured=(auction&&races.find(r=>r.status==='auction'))||races.find(r=>r.status==='racing')||races.find(r=>r.status==='locked')||races[0];
+  const live=races.find(r=>r.status==='racing');
+  const joinable=races.some(r=>r.status==='betting')?'betting':'upcoming';
   return <main className="track-lobby site-lobby">
     <header className="site-lobby-hero">
       <div><p className="track-kicker">{auction?'Auction races · Six horses. One owner each.':'Six horses. Every roll. One winner.'}</p><h1>{auction?<>Your horse.<br/>Your moment.</>:<>Meet you<br/>at the rail.</>}</h1><p>{auction?<>Bid for your runner. Back your winner.<br/>Then follow every roll to the wire.</>:<>Pick your runner. Watch for its number.<br/>Every roll can change the race.</>}</p>
-        <div className="site-actions">{featured&&<button className="track-primary" onClick={()=>onEnterRace(featured)}>{featured.status==='auction'?'Join live auction':featured.status==='racing'?'Watch live':featured.status==='locked'?'Watch the start':auction?'View next auction':'View next race'} <span aria-hidden="true">↗</span></button>}{auction&&onRegularLobby?<button className="track-secondary" onClick={onRegularLobby}>Regular race card</button>:<a className="track-secondary" href={demoHref}>Watch a demo</a>}</div>
+        <div className="site-actions">{auction?featured&&<button className="track-primary" onClick={()=>onEnterRace(featured)}>{featured.status==='auction'?'Join live auction':featured.status==='racing'?'Watch live':featured.status==='locked'?'Watch the start':'View next auction'}</button>:<><a className="track-primary" href={races.some(r=>r.status===joinable)?'#joinable-races':'#race-card'}>Find your next race</a>{live&&<button className="site-text-action" onClick={()=>onEnterRace(live)}>Watch live</button>}</>}{auction&&onRegularLobby?<button className="track-secondary" onClick={onRegularLobby}>Regular race card</button>:<a className="site-text-action" href={demoHref}>Watch a demo</a>}</div>
       </div>
       <div className="site-hero-caption"><span>{auction?'The auction ring':'Automatic races'}</span><strong>{auction?'Win the bid. Feel the race.':'All eyes on the next roll.'}</strong></div>
     </header>
-    <div className="site-card-heading"><div><p className="track-kicker">{preview?'Sample race card':'Today at The Track'}</p><h2>{auction?'The auction card':'The race card'}</h2></div><p>{auction?'Six 30-second lots. A $5 opening bid. Automatic races.':'Races start automatically at post time.'}</p></div>
-    {groups.map(([title,statuses])=>{const list=races.filter(r=>statuses.includes(r.status));return list.length>0&&<section className="site-race-section" key={title} aria-label={title}>
+    <div className="site-card-heading" id="race-card"><div><p className="track-kicker">{preview?'Sample race card':'Today at The Track'}</p><h2>{auction?'The auction card':'The race card'}</h2></div><p>{auction?'Six 30-second lots. A $5 opening bid. Automatic races.':'Races start automatically at post time.'}</p></div>
+    {groups.map(([title,statuses])=>{const list=races.filter(r=>statuses.includes(r.status));return list.length>0&&<section className="site-race-section" id={!auction&&statuses.includes(joinable)?'joinable-races':undefined} key={title} aria-label={title}>
       <h3><span className={'site-status-dot '+(statuses.includes('racing')||statuses.includes('auction')?'is-live':'')}/>{title}<span>{list.length}</span></h3>
       <div>{list.map(race=><button className="site-race-row" key={race.id} onClick={()=>onEnterRace(race)}>
         <span className="site-post"><small>{race.status==='racing'?'ON TRACK':auction?'RACE TIME':'POST TIME'}</small><strong>{race.post}</strong></span>

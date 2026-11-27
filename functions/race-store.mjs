@@ -1,5 +1,5 @@
 import {simulateRaceWithHistory} from './race-engine.mjs';
-import {privateSeed} from './race-rules.mjs';
+import {privateSeed,ENGINE_VERSION} from './race-rules.mjs';
 
 export const money=value=>Math.round(Number(value)*100)/100;
 export function cleanTicket(input) {
@@ -112,7 +112,7 @@ export function createRaceStore({ref,transact},{clock=Date.now}={}) {
       const pr=ref('global','privateRaces'),ur=ref('users',user.uid),br=ref('bets',user.uid),hr=ref('history',user.uid);
       const [ps,us,bs,hs]=await Promise.all([tx.get(pr),tx.get(ur),tx.get(br),tx.get(hr)]);
       const all=data(ps).races||{},u=data(us),b=data(bs),h=data(hs);let race=all[code],balance=u.balance;
-      if(action==='create'){if(race)throw Error('Race code already exists');race={...payload,seed:privateSeed(code),engineVersion:2,members:{[user.username]:{uid:user.uid,bets:{},confirmed:false,joinedAt:clock()}}};}
+      if(action==='create'){if(race)throw Error('Race code already exists');race={...payload,seed:privateSeed(code),engineVersion:ENGINE_VERSION,members:{[user.username]:{uid:user.uid,bets:{},confirmed:false,joinedAt:clock()}}};}
       else {
         if(!race)throw Error('Race not found');race={...race,members:{...race.members}};
         if(action==='join'){if(race.started||race.finished)throw Error('This race has started');race.members[user.username]??={uid:user.uid,bets:{},confirmed:false,joinedAt:clock()};}

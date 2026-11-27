@@ -1,6 +1,7 @@
 // Versioned race rules shared by scheduled races, private races and the browser.
-// Existing races keep their recorded history/version; version 2 is for new races.
-export const ENGINE_VERSION = 2;
+// Existing races keep their recorded history/version. Version 3 earns a final space beyond the wire.
+export const ENGINE_VERSION = 3;
+export const courseRules = (version=2) => ({spaces:version>=3?13:12,tieSpaces:version>=3?4:3,turnSpace:12,homeSpace:version>=3?-1:0,roundTripGoal:version>=3?25:24});
 export const RACE_FORMATS = Object.freeze({standard:'Standard',down_back:'Down & Back',hurdle:'Hurdles',magic_dice:'Magic Dice',triple_dice:'Triple Dice'});
 export const validConditions = type => type === 'magic_dice' ? ['sunny'] : ['sunny','rain','fog'];
 export function makeSeededDie(seed) {
@@ -10,7 +11,10 @@ export function privateSeed(code) { return Array.from(code).reduce((seed,c)=>Mat
 export function raceDistance(position,returning,type,phase='main') {
   return phase !== 'tiebreak' && ['down_back','magic_dice'].includes(type) && returning ? 24-position : position;
 }
-export function simulateV2(type,condition='sunny',seed=0) {
+export function simulateV2(type,condition='sunny',seed=0) { return simulateVersion(type,condition,seed,2); }
+export function simulateV3(type,condition='sunny',seed=0) { return simulateVersion(type,condition,seed,3); }
+function simulateVersion(type,condition,seed,version) {
+  const {spaces,tieSpaces,turnSpace,homeSpace}=courseRules(version);
   if(!RACE_FORMATS[type] || !validConditions(type).includes(condition)) throw new Error('Unsupported race format or condition');
   const die=makeSeededDie(seed),positions=Array(6).fill(0),legDone=Array(6).fill(false),rolls=[];
   const returning=['down_back','magic_dice'].includes(type);
@@ -28,28 +32,28 @@ export function simulateV2(type,condition='sunny',seed=0) {
     const events=[],crossingOrder=[];
     for(const {horse,steps} of moves) {
       const from=positions[horse];
-      if(phase==='tiebreak') {positions[horse]=Math.min(3,from+steps);if(from<3&&positions[horse]>=3)crossingOrder.push(horse);}
+      if(phase==='tiebreak') {positions[horse]=Math.min(tieSpaces,from+steps);if(from<tieSpaces&&positions[horse]>=tieSpaces)crossingOrder.push(horse);}
       else if(returning) {
         if(!legDone[horse]) {
           const dest=Math.max(0,from+steps);
-          if(dest>=12){legDone[horse]=true;positions[horse]=Math.max(0,24-dest);events.push({horse,kind:'turn'});}
+          if(dest>=turnSpace){legDone[horse]=true;positions[horse]=Math.max(homeSpace,2*turnSpace-dest);events.push({horse,kind:'turn'});}
           else positions[horse]=dest;
-        } else positions[horse]=Math.min(12,Math.max(0,from-steps));
+        } else positions[horse]=Math.min(turnSpace,Math.max(homeSpace,from-steps));
       } else if(type==='hurdle') {
         if(steps<0) positions[horse]=Math.max(0,from+steps);
         else if(from===5) {
           if(isDoubles){positions[horse]=7;events.push({horse,kind:'jump'});}
           else events.push({horse,kind:'blocked'});
-        } else positions[horse]=from<5&&from+steps>=5?5:Math.min(12,from+steps);
-      } else positions[horse]=Math.max(0,Math.min(12,from+steps));
+        } else positions[horse]=from<5&&from+steps>=5?5:Math.min(spaces,from+steps);
+      } else positions[horse]=Math.max(0,Math.min(spaces,from+steps));
     }
     // Evaluate once after all dice, so a fog reversal cannot produce a false winner.
-    const finishers=active.filter(id=>phase==='tiebreak'?positions[id]>=3:returning?legDone[id]&&positions[id]===0:positions[id]>=12);
+    const finishers=active.filter(id=>phase==='tiebreak'?positions[id]>=tieSpaces:returning?legDone[id]&&positions[id]===homeSpace:positions[id]>=spaces);
     rolls.push({dice,isDoubles,moves,mudDieIdx,fogDieIdx,positions:[...positions],legDone:[...legDone],phase,active:[...active],events});
     if(finishers.length===1 || (phase==='tiebreak'&&finishers.length>0)) {
       // Preserve the documented sudden-death tiebreak: first matching die wins a simultaneous finish.
       const winner=phase==='tiebreak'?crossingOrder[0]:finishers[0];
-      return {winner,rolls,engineVersion:ENGINE_VERSION};
+      return {winner,rolls,engineVersion:version};
     }
     if(finishers.length>1){phase='tiebreak';active=finishers;positions.fill(0);legDone.fill(false);}
   }

@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import * as engine from '../../functions/race-engine.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,shotAt,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH,RUN_OUT,RUN_OUT_TIME} from './playback.mjs';
+import {buildPlayback,worldAt,rootingHint,raceMoment,describeRoll,shotAt,FIRST_ROLL,LAND,MOVE,MOVE_END,NOSE,TRACK_FINISH} from './playback.mjs';
 const fixture=JSON.parse(readFileSync(new URL('./exhibition.json',import.meta.url),'utf8'));
 const voice=JSON.parse(readFileSync(new URL('./voice.json',import.meta.url),'utf8'));
 const playback=buildPlayback(fixture,3500,12,3,voice);
@@ -52,8 +52,8 @@ test('horses earning zero spaces stay at the same course coordinate',()=>{
     }
   }
 });
-test('every earned space has a fixed coordinate until the finish run-out',()=>{
-  for(let t=0;t<playback.end;t+=.071){const f=playback.sample(t);f.world.forEach((x,id)=>assert.equal(x,worldAt(f.progress[id],f.goal)));}
+test('every earned space has a fixed coordinate through and after the finish',()=>{
+  for(let t=0;t<playback.end+4;t+=.071){const f=playback.sample(t);f.world.forEach((x,id)=>assert.equal(x,worldAt(f.progress[id],f.goal)));}
 });
 test('doubles have a full first-space beat before the second move',()=>{
   const start=FIRST_ROLL+12*3.5;
@@ -61,22 +61,23 @@ test('doubles have a full first-space beat before the second move',()=>{
   for(const p of [.45,.5,.55])assert.equal(playback.sample(start+MOVE+p*(MOVE_END-MOVE)).progress[3],before+1);
   assert.equal(playback.sample(start+MOVE_END+.001).progress[3],before+2);
 });
-test('the winner is revealed when the winning move reaches the physical wire',()=>{
-  const before=playback.sample(playback.end-.02),at=playback.sample(playback.end+.001);
+test('the winning roll crosses the wire and settles in the final cell',()=>{
+  const before=playback.sample(playback.end-MOVE_END+MOVE),at=playback.sample(playback.end+.001);
   assert.equal(before.winner,null);assert.equal(before.done,false);assert.ok(before.world[fixture.winner]+NOSE<TRACK_FINISH);
   assert.equal(at.winner,fixture.winner);assert.equal(at.exact[fixture.winner],12);
   assert.ok(at.world[fixture.winner]+NOSE>TRACK_FINISH);
 });
-test('finishers cross completely while scores and non-finishers stay fixed',()=>{
-  const halfway=playback.sample(playback.end+RUN_OUT_TIME/2),after=playback.sample(playback.end+RUN_OUT_TIME+.01);
-  assert.equal(halfway.moving[fixture.winner],true);
+test('finishers stop in the earned cell with no automatic run-out',()=>{
+  const halfway=playback.sample(playback.end+.4),after=playback.sample(playback.end+4);
+  assert.equal(halfway.moving[fixture.winner],false);
   assert.equal(after.moving[fixture.winner],false);
   assert.ok(after.world[fixture.winner]-2>TRACK_FINISH,'even the rear of the horse clears the line');
-  assert.equal(after.world[fixture.winner],worldAt(12)+RUN_OUT);
+  assert.equal(after.world[fixture.winner],worldAt(12));
+  assert.deepEqual(halfway.world,after.world);
   assert.deepEqual(after.exact,fixture.rolls.at(-1).positions);
   assert.deepEqual(after.progress,fixture.rolls.at(-1).positions);
   for(let id=0;id<6;id++)if(id!==fixture.winner)assert.equal(after.world[id],worldAt(after.exact[id]));
-  assert.deepEqual(playback.sample(playback.end+RUN_OUT_TIME+.01),after,'replay/late join remains deterministic');
+  assert.deepEqual(playback.sample(playback.end+4),after,'replay/late join remains deterministic');
 });
 test('a late join or replay sample has the same revealed dice and settled positions',()=>{
   fixture.rolls.forEach((r,i)=>{
@@ -101,20 +102,18 @@ test('tied finishers are introduced then reset to the three-space tiebreak',()=>
   assert.equal(tied.tiePending,true);assert.deepEqual(tied.leaders,[0,1]);assert.equal(tied.winner,null);
   assert.deepEqual(restart.active,[0,1]);assert.equal(restart.goal,3);assert.deepEqual(restart.exact,[0,0,0,0,0,0]);
   assert.ok(tied.world[0]+NOSE>TRACK_FINISH);assert.equal(tied.world[0],tied.world[1]);
-  assert.ok(p.sample(p.end+RUN_OUT_TIME).world[1]-2>TRACK_FINISH);
+  assert.ok(p.sample(p.end).world[1]-2>TRACK_FINISH);
 });
 test('the wire camera follows remaining spaces before the final playback percentage',()=>{
   const frame=playback.sample(FIRST_ROLL+16*3.5+.1);
   assert.equal(frame.shot,'wire');assert.ok(frame.time/playback.end<.75);assert.equal(frame.winner,null);
 });
-test('home stretch camera holds its position across rolls until a horse actually finishes',()=>{
+test('home stretch camera stays fixed across rolls and the winning move',()=>{
   const reference=shotAt(playback.sample(FIRST_ROLL+16*3.5+.1),1.8);
-  for(let t=FIRST_ROLL+16*3.5;t<playback.end;t+=.043){
+  for(let t=FIRST_ROLL+16*3.5;t<playback.end+4;t+=.043){
     const frame=playback.sample(t);
-    assert.equal(frame.runOut,0,'ordinary settled rolls never trigger a finish pan');
     assert.deepEqual(shotAt(frame,1.8),reference);
   }
-  assert.ok(shotAt(playback.sample(playback.end+RUN_OUT_TIME),1.8).at[0]>reference.at[0]);
 });
 test('rooting cues use current positions and respect weather',()=>{
   const frame=playback.sample(FIRST_ROLL+20*3.5+2.7);

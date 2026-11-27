@@ -1,4 +1,6 @@
 .site-lobby,.site-page{color:var(--track-ink);font-size:16px;line-height:1.45}
+.site-actions .site-text-action{display:inline-flex;align-items:center;min-height:44px;padding:10px 4px;border:0;background:none;color:var(--track-ink);font:inherit;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+.site-race-section,.site-card-heading{scroll-margin-top:88px}
 .site-page{width:min(100% - 48px,1240px);margin:auto;padding:88px 0 56px}
 .site-page h1,.site-lobby h1{font:500 clamp(2.7rem,5.5vw,5.5rem)/.98 var(--track-display);letter-spacing:-.04em;margin:12px 0 20px;text-wrap:balance}
 .site-page h2,.site-lobby h2{font:500 clamp(1.7rem,2.7vw,2.4rem)/1.08 var(--track-display);letter-spacing:-.025em;margin:0}
@@ -8,6 +10,7 @@
 .track-secondary:hover{background:#304638;border-color:var(--track-brass)}
 .site-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .site-actions .track-primary{gap:32px}
+.site-actions a.track-primary{text-decoration:none}
 .site-lobby-hero{min-height:420px;display:flex;align-items:end;justify-content:space-between;gap:30px;padding:clamp(26px,4vw,60px);border:1px solid var(--track-line);border-radius:12px;background:linear-gradient(90deg,#14271ff5 0%,#14271fd9 30%,#14271f22 75%),url('/broadcast/trackside.webp') 60% 54%/cover}
 .site-lobby-hero>div:first-child>p:not(.track-kicker){font-size:18px;color:#dddcc8;line-height:1.6}
 .site-hero-caption{text-align:right;text-shadow:0 2px 14px #000;display:grid;gap:6px;max-width:230px}

@@ -2,7 +2,7 @@ import {getFunctions,connectFunctionsEmulator} from 'firebase/functions';
 import {RunnerSilk} from './site/RunnerSilk';
 import {createRaceStore} from './data/race-store.mjs';
 import {simulateRaceWithHistory} from '../functions/race-engine.mjs';
-import {privateSeed} from '../functions/race-rules.mjs';
+import {privateSeed,ENGINE_VERSION} from '../functions/race-rules.mjs';
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Broadcast } from "./broadcast/Broadcast";
 import { buildPlayback } from "./broadcast/playback.mjs";
@@ -191,7 +191,7 @@ const horseCoatIndex = (race, horseId) => {
 
 const RACE_TYPES = {
   standard:    { label:"Standard",     icon:"🏇", color:"#e5b678", dice:2, desc:"2 dice per roll — each die moves a horse. Doubles = bonus move!" },
-  down_back:   { label:"Down & Back",  icon:"🔄", color:"#adbba2", dice:2, desc:"Race out 12 spaces, then race back home. First to return wins!" },
+  down_back:   { label:"Down & Back",  icon:"🔄", color:"#adbba2", dice:2, desc:"Race to the turn, then roll across the home line into the final space." },
   hurdle:      { label:"Hurdles",      icon:"🚧", color:"#b77d58", dice:2, desc:"One hurdle in the center — you're blocked until you roll doubles to jump over!" },
   magic_dice:  { label:"Magic Dice",   icon:"✨", color:"#97bd88", dice:2, desc:"Die 1 picks the horse, Die 2 picks the spaces. Race out and back — first home wins!" },
   triple_dice: { label:"Triple Dice",  icon:"🎲", color:"#d48d80", dice:3, desc:"3 dice rolled each turn — 3 horses move simultaneously. Pure chaos!" },
@@ -1920,7 +1920,7 @@ function PrivateRacesPanel({ user, onClose, onLaunchPrivateRace }) {
     const condition = raceType==="magic_dice" ? "sunny" : selCond;
     const race={
       code:newCode, name:raceName.trim(), hostUsername:user.username,
-      raceType, horses, coats, condition, seed:privateSeed(newCode), engineVersion:2, created:Date.now(),
+      raceType, horses, coats, condition, seed:privateSeed(newCode), engineVersion:ENGINE_VERSION, created:Date.now(),
       started:false, startedAt:null, finished:false, winner:null,
       members:{ [user.username]:{ bets:{}, confirmed:false, joinedAt:Date.now() } }
     };
@@ -4555,7 +4555,7 @@ function UnifiedRaceScreen({ race, user, bets, auctionOwners, onRaceEnd, isRepla
   const [musicAllowed,setMusicAllowed] = useState(getMusicEnabled);
   const names = HORSES.map((_, id) => horseName(race,id));
   const startTime = isReplay ? 0 : race.startTime + (race.isAuction ? 30000 : 0);
-  const history = useMemo(() => isReplay ? {rolls:replayRolls,winner:replayWinner} : saved,[isReplay,replayRolls,replayWinner,saved]);
+  const history = useMemo(() => isReplay ? {rolls:replayRolls,winner:replayWinner,engineVersion:race.engineVersion||1} : saved,[isReplay,replayRolls,replayWinner,race.engineVersion,saved]);
 
   useEffect(() => {
     if (isReplay) return;
@@ -4811,6 +4811,7 @@ function RaceReplayScreen({ race, onClose }) {
   const [rolls,    setRolls]    = useState(null);
   const [unavailable,setUnavailable] = useState(false);
   const [winner,   setWinner]   = useState(null);
+  const [replayVersion,setReplayVersion] = useState(race.engineVersion||1);
   const [speed,    setSpeed]    = useState(1);
   const [finished, setFinished] = useState(false);
   const speedRef = useRef(1);
@@ -4821,7 +4822,7 @@ function RaceReplayScreen({ race, onClose }) {
     fbGetRaceRoll(race.id).then(rd=>{
       if(!active)return;
       const result=rd||(Number.isFinite(race.seed)?simulateRaceWithHistory(race.type,race.condition||'sunny',race.seed,race.engineVersion):null);
-      if(result?.rolls?.length){setRolls(result.rolls);setWinner(result.winner);}
+      if(result?.rolls?.length){setRolls(result.rolls);setWinner(result.winner);setReplayVersion(result.engineVersion??race.engineVersion??1);}
       else setUnavailable(true);
     }).catch(()=>{if(active)setUnavailable(true);});
     return()=>{active=false;};
@@ -4862,7 +4863,7 @@ function RaceReplayScreen({ race, onClose }) {
       {rolls && (
         <div style={{flex:1,overflowY:"auto",marginTop:0}}>
           <RaceScreen
-            race={{...race, startTime: Date.now() + 1200, nowMs: Date.now()}}
+            race={{...race,engineVersion:replayVersion, startTime: Date.now() + 1200, nowMs: Date.now()}}
             bets={{}} totalPot={0}
             onRaceEnd={()=>setFinished(true)}
             user={null} chatMsgs={[]} setChatMsgs={()=>{}} chatOpen={false}
@@ -4971,7 +4972,7 @@ function HowItWorksPanel({ onClose }) {
     if(tab === "basics") return (
       <div>
         <Section icon="🏁" title="HOW A RACE WORKS">
-          <Row label="Track length" value="12 spaces; Down & Back and Magic Dice return home for 24 total"/>
+          <Row label="Track length" value="New races: 13 spaces; Down & Back and Magic Dice: 12 out, 13 home. The final space is beyond the finish line."/>
           <Row label="Race interval" value="Races fire every 1–5 minutes"/>
           <Row label="Betting window" value="Closes 30 seconds before regular races; at the end of an auction"/>
           <Row label="Race duration" value="~3–5 minutes depending on dice rolls"/>

@@ -44,7 +44,7 @@ test('scheduler preserves recorded races, recovers missed starts, and waits for 
     const savedSeeds=await db.getAll(...generated.map(r=>db.doc('private/raceSeeds/races/'+r.id)));
     for(let i=0;i<generated.length;i++){
       const r=generated[i],seed=savedSeeds[i].data().seed;
-      assert.equal(r.engineVersion,2);assert.ok(validConditions(r.type).includes(r.condition));assert.equal(r.horses.length,6);
+      assert.equal(r.engineVersion,3);assert.ok(validConditions(r.type).includes(r.condition));assert.equal(r.horses.length,6);
       assert.equal(createHash('sha256').update(seed).digest('hex'),r.seedHash);
     }
     const newlyFinished={...generated[0],startTime:now-900000};

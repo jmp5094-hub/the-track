@@ -44,16 +44,19 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const floor = standard('#514139',{roughness:.94});
   // The board never drifts: one line per logical space, six fixed lanes.
   const chalk=standard('#e4d9bd',{transparent:true,opacity:.55,roughness:1});
-  for(let i=0;i<=6;i++)block(scene,chalk,36,.025,(i-3)*1.56,72,.025,.035);
+  for(let i=0;i<=6;i++)block(scene,chalk,39,.025,(i-3)*1.56,78,.025,.035);
+  const homeCells=new T.Group();scene.add(homeCells);
+  for(let i=0;i<=6;i++)block(homeCells,chalk,-6,.025,(i-3)*1.56,12,.025,.035);
+  for(const x of [-12,-6])block(homeCells,chalk,x,.03,0,.12,.026,9.4);
   const farMarkers=[];
-  for(let step=0;step<=12;step++){
+  for(let step=0;step<=13;step++){
     block(scene,chalk,step*SPACE,.03,0,step>=9?.12:.07,.026,9.4);
-    if(step>0&&step<12){
-      const label=shape(scene,geo.plane,simple('#ffffff',{map:paint(String(step),'#3a352a','#f5e7c8',96,96),transparent:false}),step*SPACE,.05,5.65,1.15,1.15,1);
+    if(step>0&&step<13){
+      const label=shape(scene,geo.plane,simple('#ffffff',{map:paint(String(step),'#3a352a','#f5e7c8',96,96),transparent:false}),step*SPACE-SPACE/2,.05,5.65,1.15,1.15,1);
       label.rotation.x=-Math.PI/2;
     }
-    if(step>=9&&step<12){
-      farMarkers.push(shape(scene,geo.plane,simple('#ffffff',{map:paint((12-step)+' TO GO','#233c31','#ffe2a7',280,112),side:T.DoubleSide}),step*SPACE,1.15,-6.25,2.35,.94,1));
+    if(step>=10&&step<13){
+      farMarkers.push(shape(scene,geo.plane,simple('#ffffff',{map:paint((13-step)+' TO GO','#233c31','#ffe2a7',280,112),side:T.DoubleSide}),step*SPACE-SPACE/2,1.15,-6.25,2.35,.94,1));
     }
   }
   for (const side of [-1,1]) {
@@ -113,7 +116,7 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const finishSign = shape(finishGroup,geo.plane,simple('#ffffff',{map:paint('FINISH','#292624','#f7dab0',260,84),side:T.DoubleSide}),TRACK_FINISH,2.93,-7.16,2.17,.70,1);
   finishSign.rotation.y = Math.PI / 18;
 
-  const turnSign=shape(scene,geo.plane,simple('#ffffff',{map:paint('TURN FOR HOME','#233c31','#ffe2a7',400,112),side:T.DoubleSide}),72,2.93,-7.16,3.34,.94,1);
+  const turnSign=shape(scene,geo.plane,simple('#ffffff',{map:paint('TURN FOR HOME','#233c31','#ffe2a7',400,112),side:T.DoubleSide}),69,2.93,-7.16,3.34,.94,1);
   const hurdleGroup=new T.Group();scene.add(hurdleGroup);
   for(let i=0;i<6;i++){
     const z=lane(i);
@@ -129,23 +132,23 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   const gatePaint=standard('#53635a',{roughness:.62,metalness:.27});
   const gateTrim=standard('#c3bfaf',{roughness:.63});
   const doorX=LEADER_START+1.60;
-  const gates=[];
+  const gates=[],gateGroup=new T.Group();scene.add(gateGroup);
   // Open canopy keeps all six horses visible from the elevated landscape camera.
-  block(scene,steel,doorX,2.47,0,.13,.18,9.6);
+  block(gateGroup,steel,doorX,2.47,0,.13,.18,9.6);
   for(let i=0;i<=6;i++){
     const z=(i-3)*1.56;
-    block(scene,steel,doorX,1.20,z,.11,2.45,.11);
-    block(scene,steel,doorX-2.02,1.22,z,.095,2.45,.115);
-    block(scene,gatePaint,doorX-1.02,.65,z,2.03,.089,.072);
-    block(scene,gatePaint,doorX-1.02,1.22,z,2.03,.085,.077);
-    block(scene,steel,doorX-1.02,2.43,z,2.06,.09,.086);
+    block(gateGroup,steel,doorX,1.20,z,.11,2.45,.11);
+    block(gateGroup,steel,doorX-2.02,1.22,z,.095,2.45,.115);
+    block(gateGroup,gatePaint,doorX-1.02,.65,z,2.03,.089,.072);
+    block(gateGroup,gatePaint,doorX-1.02,1.22,z,2.03,.085,.077);
+    block(gateGroup,steel,doorX-1.02,2.43,z,2.06,.09,.086);
   }
   for(let i=0;i<6;i++) {
     const z=lane(i);
-    const gateNumber=shape(scene,geo.plane,simple('#ffffff',{map:paint(String(i+1),'#2a3836','#f0e7d3',96,84),side:T.DoubleSide}),doorX+.08,2.58,z,.38,.31,1);
+    const gateNumber=shape(gateGroup,geo.plane,simple('#ffffff',{map:paint(String(i+1),'#2a3836','#f0e7d3',96,84),side:T.DoubleSide}),doorX+.08,2.58,z,.38,.31,1);
     gateNumber.rotation.y=Math.PI/2;
     for(const direction of [-1,1]) {
-      const hinge=new T.Group();hinge.position.set(doorX,0,z+direction*.73);scene.add(hinge);
+      const hinge=new T.Group();hinge.position.set(doorX,0,z+direction*.73);gateGroup.add(hinge);
       const local=-direction;
       block(hinge,steel,0,.47,local*.35,.07,.061,.71);
       block(hinge,gateTrim,0,1.39,local*.35,.056,.067,.71);
@@ -204,7 +207,10 @@ export function buildArena(T, scene, { dirtCanvas, letterCanvas, shadowCanvas, h
   dust.frustumCulled = false;scene.add(dust);
   function pose(frame, live, reduced) {
     const elapsed = frame.time;
-    finishGroup.position.x=frame.roundTrip?-TRACK_FINISH:0;
+    finishGroup.position.x=frame.finishX-TRACK_FINISH;
+    gateGroup.position.x=frame.startX-LEADER_START;
+    gateGroup.visible=!frame.roundTrip||frame.shot!=='wire';
+    homeCells.visible=Boolean(frame.roundTrip);
     turnSign.visible=Boolean(frame.roundTrip);
     farMarkers.forEach(marker=>{marker.visible=!frame.roundTrip;});
     hurdleGroup.visible=frame.type==='hurdle'&&!frame.tiebreak;

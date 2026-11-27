@@ -6,7 +6,7 @@ import {getFirestore,connectFirestoreEmulator,doc,setDoc,getDoc,terminate} from 
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRaceStore} from '../src/data/race-store.mjs';
-import {simulateV2,RACE_FORMATS,validConditions,privateSeed} from '../functions/race-rules.mjs';
+import {simulateV2,simulateV3,RACE_FORMATS,validConditions,privateSeed} from '../functions/race-rules.mjs';
 
 test('isolated Firestore: bank, competing bids, ticket edits, every private format and idempotent payouts',async t=>{
   process.env.FIRESTORE_EMULATOR_HOST='127.0.0.1:8080';
@@ -83,12 +83,12 @@ test('isolated Firestore: bank, competing bids, ticket edits, every private form
     await t.test('all 13 private format/condition combinations share a start, debit bets and pay only once',async()=>{
       for(const type of Object.keys(RACE_FORMATS))for(const condition of validConditions(type)){
         await reset();const code=prefix+'-'+type+'-'+condition;
-        const result=simulateV2(type,condition,privateSeed(code));
+        const result=simulateV3(type,condition,privateSeed(code));
         await store.privateRace(alice,code,'create',{code,name:'Private QA',hostUsername:alice.username,raceType:type,condition,started:false,finished:false});
         await store.privateRace(bob,code,'join');await store.privateRace(alice,code,'confirm',{[result.winner]:10});await store.privateRace(bob,code,'confirm',{[result.winner]:30});
         assert.equal((await get('users',alice.uid)).balance,990);
         await assert.rejects(()=>store.privateRace(bob,code,'start'),/host/);
-        const {race}=await store.privateRace(alice,code,'start');assert.equal(race.condition,condition);assert.equal(race.seed,privateSeed(code));
+        const {race}=await store.privateRace(alice,code,'start');assert.equal(race.engineVersion,3);assert.equal(race.condition,condition);assert.equal(race.seed,privateSeed(code));
         await assert.rejects(()=>store.privateRace(bob,code,'confirm',{0:5}),/closed/);
         await assert.rejects(()=>store.privateRace(alice,code,'settle'),/running/);
         now=race.startedAt+30000+1300+result.rolls.length*3500+100;

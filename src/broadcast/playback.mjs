@@ -1,11 +1,11 @@
-import {raceDistance,RACE_FORMATS} from '../../functions/race-rules.mjs';
+import {raceDistance,RACE_FORMATS,courseRules} from '../../functions/race-rules.mjs';
 // Presentation consumes settled engine history. It never rolls dice or changes results.
 export const SILKS = ['#00f5ff','#ff2d55','#ffd700','#97bd88','#bf5fff','#ff8c00'];
 export const PIPS = [[],[4],[0,8],[0,4,8],[0,2,6,8],[0,2,4,6,8],[0,2,3,5,6,8]];
 export const SPACE = 6;
 export const NOSE = 1.56;
 export const TRACK_FINISH = 72;
-export const LEADER_START = -NOSE;
+export const LEADER_START = -SPACE/2;
 export const COURSE_MIN = -12;
 export const COURSE_MAX = 88;
 export const GO = .6;
@@ -14,9 +14,7 @@ export const LAND = .64;
 export const VOICE = .76;
 export const MOVE = 1.38;
 export const MOVE_END = 2.52;
-// Scoring ends at the wire. Finishers then run out beyond it without earning spaces.
-export const RUN_OUT = 6;
-export const RUN_OUT_TIME = .8;
+// The final cell is beyond the wire. All translation is earned by recorded dice.
 const SEATS = [0,1,2,3,4,5];
 const GATE = [0,0,0,0,0,0];
 export const clamp=(n,lo=0,hi=1)=>Math.max(lo,Math.min(hi,n));
@@ -28,7 +26,7 @@ export function leadersOf(positions,active=SEATS){
   return active.filter(id=>positions[id]===best);
 }
 export function worldAt(position,goal=12){
-  return TRACK_FINISH-goal*SPACE+position*SPACE-NOSE;
+  return TRACK_FINISH-goal*SPACE+position*SPACE+SPACE/2;
 }
 export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={},type='standard',condition='sunny'){
   const rolls=history?.rolls, winner=history?.winner, cycle=rollInterval/1000;
@@ -38,13 +36,15 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
   const tieStart=rolls.findIndex(r=>r.phase==='tiebreak');
   if(tieStart===0)return null;
   const roundTrip=['down_back','magic_dice'].includes(type);
+  const rules=courseRules(history.engineVersion),homeSpace=rules.homeSpace;
+  if(history.engineVersion>=3){raceSpaces=roundTrip?rules.turnSpace:rules.spaces;tieSpaces=rules.tieSpaces;}
   const distances=r=>r.positions.map((p,id)=>raceDistance(p,Boolean(r.legDone?.[id]),type,r.phase));
   const positions=rolls.map(distances);
-  const mainGoal=roundTrip?raceSpaces*2:raceSpaces;
+  const mainGoal=roundTrip?raceSpaces*2-homeSpace:raceSpaces;
   const goalAt=index=>tieStart>0&&index>=tieStart?tieSpaces:mainGoal;
   const tieActive=tieStart>0?(rolls[tieStart].active||SEATS.filter(id=>positions[tieStart-1][id]>=mainGoal||rolls.slice(tieStart).some(r=>r.moves?.some(m=>m.horse===id)))):[];
   if(tieStart>0&&!tieActive.length)return null;
-  const historicalResult=positions.at(-1)[winner]<goalAt(rolls.length-1)||rolls.some(r=>r.positions.some(p=>p<0||p>(r.phase==='tiebreak'?tieSpaces:raceSpaces)));
+  const historicalResult=positions.at(-1)[winner]<goalAt(rolls.length-1)||rolls.some(r=>r.positions.some(p=>p<(roundTrip&&r.phase!=='tiebreak'?homeSpace:0)||p>(r.phase==='tiebreak'?tieSpaces:raceSpaces)));
   const primaryKey=roll=>type==='magic_dice'&&roll.phase!=='tiebreak'||roll.dice.length!==2||roll.mudDieIdx!=null||roll.fogDieIdx!=null?null:roll.dice.join('');
   const end=FIRST_ROLL+(rolls.length-1)*cycle+MOVE_END;
   const call=(key,time)=>voice[key]?{key,time,...voice[key]}:null;
@@ -92,15 +92,13 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
       if(to-from!==2)return mix(from,to,smooth(amount));
       return from+smooth(clamp(amount/.43))+smooth(clamp((amount-.56)/.44));
     });
-    const finishers=source?active.filter(id=>target[id]>=goal):[];
-    const runOut=finishers.length&&settled?smooth(clamp((into-MOVE_END)/RUN_OUT_TIME)):0;
     const homeFinish=roundTrip&&!tiebreak;
     const directions=progress.map(p=>homeFinish&&p>=raceSpaces?-1:1);
     const physical=progress.map(p=>homeFinish?(p<=raceSpaces?p:2*raceSpaces-p):p);
-    const world=physical.map((p,id)=>worldAt(clamp(p,0,homeFinish?raceSpaces:goal),homeFinish?raceSpaces:goal)+(directions[id]<0?2*NOSE:0)+(finishers.includes(id)?RUN_OUT*runOut*directions[id]:0));
+    const world=physical.map(p=>homeFinish?clamp(p,homeSpace,raceSpaces)*SPACE-SPACE/2:worldAt(clamp(p,0,goal),goal));
     const jumps=progress.map((p,id)=>type==='hurdle'&&!tiebreak&&previous[id]===5&&target[id]===7?Math.sin(Math.PI*amount)*1.15:0);
     const leaders=leadersOf(exact,active);
-    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&target[id]!==previous[id])||Boolean(finishers.includes(id)&&settled&&runOut<1));
+    const moving=progress.map((p,id)=>Boolean(source&&into>=MOVE&&into<MOVE_END&&target[id]!==previous[id]));
     const surge=moving.map((yes,id)=>yes?Math.sin(Math.PI*amount)*Math.min(1,Math.abs((target[id]??0)-previous[id])):0);
     const revealed=Boolean(source&&into>=LAND);
     const nextLeaders=source?leadersOf(target,active):leaders;
@@ -114,8 +112,8 @@ export function buildPlayback(history,rollInterval,raceSpaces,tieSpaces,voice={}
     const cue=cues.findLast(c=>c.time<=time&&time<c.time+c.duration);
     return {time,sceneTime:time,index,into,rolling:Boolean(source&&into<LAND),revealed,
       roll:revealed?source:null,lastRoll,lastIndex,previous,exact,progress,world,surge,moving,
-      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,runOut,
-      type,condition,roundTrip:homeFinish,directions,jumps,physical,historicalResult,formatLabel:RACE_FORMATS[type],finishX:homeFinish?0:TRACK_FINISH,
+      active,leaders,goal,tiebreak,tiePending,tieActive,shot,leadChange,settled,tieSpaces,
+      type,condition,roundTrip:homeFinish,directions,jumps,physical,historicalResult,formatLabel:RACE_FORMATS[type],finishX:homeFinish?homeSpace*SPACE:TRACK_FINISH,startX:homeFinish?-SPACE/2:worldAt(0,goal),
       done,winner:done?winner:null,leaderX:Math.max(...active.map(id=>world[id])),
       launched:time>=GO,cue};
   }
@@ -134,7 +132,7 @@ export function describeRoll(roll,previous,type='standard',previousLegDone=[]){
 export function rootingHint(frame,follow,condition='sunny'){
   if(!frame)return 'Choose a horse to follow.';
   if(frame.done)return frame.winner===follow?'Your horse crossed first.':`#${frame.winner+1} crossed first. You followed #${follow+1}.`;
-  if(frame.tiePending)return `Tied at the wire: ${frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}. Three-space tiebreak next.`;
+  if(frame.tiePending)return `Tied at the wire: ${frame.tieActive.map(i=>'#'+(i+1)).join(' + ')}. ${frame.tieSpaces}-space tiebreak next.`;
   if(!frame.active.includes(follow))return 'Your horse is out of the tiebreak. Follow one of the remaining runners.';
   const left=frame.goal-frame.exact[follow];
   if(condition!=='sunny'&&!frame.tiebreak)return `Root for ${follow+1}. ${condition==='rain'?'Rain can cancel a die.':'Fog can reverse a die.'}`;
@@ -152,7 +150,7 @@ export function rootingHint(frame,follow,condition='sunny'){
 export function raceMoment(frame,follow,condition='sunny'){
   if(!frame)return {kind:'ready',title:'Pick your runner',detail:'Every matching die moves one space.'};
   if(frame.done)return {kind:'winner',horse:frame.winner,title:`#${frame.winner+1} takes it`,detail:'Across the wire'};
-  if(frame.tiePending)return {kind:'tie',title:'Tied at the wire',detail:'Three-space tiebreak next'};
+  if(frame.tiePending)return {kind:'tie',title:'Tied at the wire',detail:`${frame.tieSpaces}-space tiebreak next`};
   if(frame.rolling)return {kind:'rolling',horse:follow,title:`Come on, ${follow+1}`,detail:'The dice are in the air'};
   if(frame.revealed&&frame.roll){
     if(frame.type==='magic_dice'&&!frame.tiebreak)return {kind:'double',horse:frame.roll.dice[0]-1,title:`#${frame.roll.dice[0]} takes ${frame.roll.dice[1]}`,detail:'First die: horse · Second die: distance'};
@@ -170,7 +168,7 @@ export function raceMoment(frame,follow,condition='sunny'){
 export function shotAt(frame,aspect,reduced=false){
   const narrow=aspect<1.5;
   if(frame.shot==='wire'&&!frame.steady){
-    const center=frame.roundTrip?8-4*(frame.runOut||0):TRACK_FINISH-8+4*(frame.runOut||0);
+    const center=frame.finishX+(frame.roundTrip?7:-7);
     return {from:[center,10,narrow?22:18],at:[center,.5,0],fov:narrow?51:44};
   }
   const xs=frame.active.map(id=>frame.world[id]);

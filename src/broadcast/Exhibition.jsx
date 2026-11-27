@@ -2,7 +2,7 @@ import {useCallback,useMemo,useRef,useState} from 'react';
 import {Broadcast} from './Broadcast';
 import {getRaceAudioContext} from './race-sound';
 import {FIRST_ROLL,buildPlayback} from './playback.mjs';
-import {simulateV2,RACE_FORMATS,validConditions} from '../../functions/race-rules.mjs';
+import {simulateV3,RACE_FORMATS,validConditions} from '../../functions/race-rules.mjs';
 import '../track-theme.css';
 import './exhibition.css';
 
@@ -12,7 +12,7 @@ export default function Exhibition(){
   const params=new URLSearchParams(location.search);
   const [setup,setSetup]=useState(()=>setups.find(s=>s.type===params.get('type')&&s.condition===(params.get('condition')||'sunny'))||setups[0]);
   const seed=Number(params.get('seed')||33);
-  const history=useMemo(()=>simulateV2(setup.type,setup.condition,Number.isFinite(seed)?seed:33),[setup,seed]);
+  const history=useMemo(()=>simulateV3(setup.type,setup.condition,Number.isFinite(seed)?seed:33),[setup,seed]);
   const race=useMemo(()=>({id:'exhibition-'+setup.id+'-'+seed,name:'The Brass Cup',...setup}),[setup,seed]);
   const playback=useMemo(()=>buildPlayback(history,3500,12,3,{},setup.type,setup.condition),[history,setup]);
   const control=useRef({time:0,paused:true,speed:1,version:0});

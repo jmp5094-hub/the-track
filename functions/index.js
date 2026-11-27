@@ -1,4 +1,5 @@
 const {simulateRaceWithHistory} = require('./race-engine.mjs');
+const {ENGINE_VERSION} = require('./race-rules.mjs');
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest, onCall, HttpsError }  = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -285,7 +286,7 @@ function generateSchedule(startCursor, seedsDoc) {
     seedsDoc[raceId] = seedHex;
     races.push({
       id: raceId, name: generateRaceName(raceId), type, condition,
-      startTime: cursor, status: "upcoming", seedHash, seed: seedInt, engineVersion: 2,
+      startTime: cursor, status: "upcoming", seedHash, seed: seedInt, engineVersion: ENGINE_VERSION,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
     cursor += (1 + Math.floor(Math.random() * 3)) * 60 * 1000;
@@ -308,7 +309,7 @@ function generateAuctionSchedule(startCursor, seedsDoc) {
     races.push({
       id: raceId, name: generateRaceName(raceId), type, condition,
       startTime: cursor, status: "upcoming", isAuction: true, horseOrder,
-      seedHash, seed: seedInt, engineVersion: 2,
+      seedHash, seed: seedInt, engineVersion: ENGINE_VERSION,
       horses: pickHorseNames(raceId), coats: pickHorseCoats(raceId),
     });
     cursor += (1 + Math.floor(Math.random() * 3)) * 60 * 1000;
